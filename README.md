@@ -6,4 +6,4 @@ I also added a 3 day forecast, well today and the next two days with the high an
 Although to get it to run on boot youll have to do a crontab -e and do @reboot sleep 60 && sudo ./its-a-plane.py
 I also made it excutable but you may have to run this line as well
 chmod +x ./its-a-plane.py
-I'm on reddit under this name if you have any questions.
+I'm on reddit under this name if you have any questions. youll have to fill out the config file though
