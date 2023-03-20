@@ -103,11 +103,10 @@ class Overhead:
                 # Grab and store details
                 try:
                     details = self._api.get_flight_details(flight.id)
-                    
 
                     # Get plane type
                     try:
-                        plane = details["aircraft"]["model"]["text"]
+                        plane = details["aircraft"]["model"]["code"]
                     except (KeyError, TypeError):
                         plane = ""
 
@@ -149,21 +148,21 @@ class Overhead:
 
                     owner_iata = flight.airline_iata or "N/A"
                         
+                    # Set altitude to 0 to get "flat" distace
+                    flight.altitude = 593.83202
                     data.append(
                         {
                             "airline": airline,
                             "plane": plane,
                             "origin": origin,
-                            "owner_iata":owner_iata ,
+                            "owner_iata":owner_iata,
                             "owner_icao": owner_icao,
                             "destination": destination,
                             "vertical_speed": flight.vertical_speed,
-                            "altitude": flight.altitude,
                             "callsign": callsign,
+                            "distance": distance_from_flight_to_home(flight) / 1.609
                         }
                     )
-                    
-                   
                     break
 
                 except (KeyError, AttributeError):
