@@ -56,7 +56,13 @@ class DaysForecastScene(object):
                 if forecast is not None:
                     offset = 0
                     for i in range(3):
-                        temp = tuple([forecast["list"][i*8 + j]["main"]["temp"] for j in range(7)])
+                        temp = tuple([
+                            forecast["list"][j]["main"]["temp"]
+                            for j in range(24)
+                            if (
+                            datetime.fromtimestamp(forecast["list"][j]["dt"])
+                            ).day == current_day.day + i
+                        ])
 
                         # Draw day
                         _ = graphics.DrawText(

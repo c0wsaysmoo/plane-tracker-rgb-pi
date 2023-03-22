@@ -23,7 +23,7 @@ class PlaneDetailsScene(object):
         if len(self._data) == 0:
             return
 
-        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["direction"]}{self._data[self._data_index]["distance"]:.2f} Miles'
+        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f} Miles {self._data[self._data_index]["direction"]}'
 
         # Draw background
         self.draw_square(
