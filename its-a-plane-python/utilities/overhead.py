@@ -60,6 +60,34 @@ def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     except AttributeError:
         # on error say it's far away
         return 1e6
+        
+def plane_bearing(HOME_LOCATION, flight):
+  # Convert latitude and longitude to radians
+  lat1 = math.radians(lat1)
+  long1 = math.radians(long1)
+  lat2 = math.radians(lat2)
+  long2 = math.radians(long2)
+
+  # Calculate the bearing
+  bearing = math.atan2(
+      math.sin(long2 - long1) * math.cos(lat2),
+      math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(long2 - long1)
+  )
+
+  # Convert the bearing to degrees
+  bearing = math.degrees(bearing)
+
+  # Make sure the bearing is positive
+  bearing = (bearing + 360) % 360
+  
+def degrees_to_cardinal(d):
+    '''
+    note: this is highly approximate...
+    '''
+    dirs = ["N", "NE",  "E",  "SE", 
+            "S",  "SW", , "W",  "NW",]
+    ix = int((bearing + 22.5)/45)
+    return dirs[ix % 8]
 
 
 class Overhead:
@@ -161,6 +189,7 @@ class Overhead:
                             "vertical_speed": flight.vertical_speed,
                             "callsign": callsign,
                             "distance": distance_from_flight_to_home(flight) / 1.609
+                            "direction": dirs
                         }
                     )
                     break
