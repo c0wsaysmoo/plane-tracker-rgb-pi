@@ -7,8 +7,8 @@ from rgbmatrix import graphics
 
 # Setup
 DATE_COLOUR = colours.PINK_DARKER
-DATE_FONT = fonts.small
-DATE_POSITION = (40, 12)
+DATE_FONT = fonts.extrasmall
+DATE_POSITION = (41, 11)
 
 
 class DateScene(object):
@@ -26,7 +26,7 @@ class DateScene(object):
             # If there's no data to display
             # then draw the date
             now = datetime.now()
-            current_date = now.strftime("%m-%d")
+            current_date = now.strftime("%b %-d")
 
             # Only draw if date needs updated
             if self._last_date != current_date:

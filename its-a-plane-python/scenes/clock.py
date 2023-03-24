@@ -26,7 +26,7 @@ class ClockScene(object):
             # If there's no data to display
             # then draw a clock
             now = datetime.now()
-            current_time = now.strftime("%I:%M")
+            current_time = now.strftime("%l:%M")
 
             # Only draw if time needs updated
             if self._last_time != current_time:

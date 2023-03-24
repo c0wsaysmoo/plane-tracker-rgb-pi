@@ -55,15 +55,8 @@ class DaysForecastScene(object):
                 
                 if forecast is not None:
                     offset = 0
-                    for i in range(3):
-                        temp = tuple([
-                            forecast["list"][j]["main"]["temp"]
-                            for j in range(24)
-                            if (
-                            datetime.fromtimestamp(forecast["list"][j]["dt"])
-                            ).day == current_day.day + i
-                        ])
-
+                    for forecastday in forecast["forecastday"]: 
+                        
                         # Draw day
                         _ = graphics.DrawText(
                             self.canvas,
@@ -71,12 +64,13 @@ class DaysForecastScene(object):
                             offset+5,
                             DAY_POSITION,
                             DAY_COLOUR,
-                            (current_day + timedelta(i)).strftime("%a"),
+                            datetime.fromisoformat(forecastday["date"]).strftime("%a")
                         )
+                        #print(forecastday)
 
                         # Draw the icon
-                        icon = forecast["list"][i*8]["weather"][0]["icon"]
-                        image = Image.open(f"icons/{icon[:-1]}.png")
+                        icon = forecastday["day"]["condition"]["icon"].split("/")[-1].split(".")[0]
+                        image = Image.open(f"icons/{icon}.png")
 
                         # Make image fit our screen.
                         image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
@@ -89,7 +83,7 @@ class DaysForecastScene(object):
                             offset+11,
                             TEMP_POSITION,
                             MIN_T_COLOUR,
-                            f"{min(temp):.0f}"
+                            f"{forecastday['day']['mintemp_f']:.0f}"
                         )
                         # Draw max temperature
                         _ = graphics.DrawText(
@@ -98,6 +92,6 @@ class DaysForecastScene(object):
                             offset+2,
                             TEMP_POSITION,
                             MAX_T_COLOUR,
-                            f"{max(temp):.0f}"
+                            f"{forecastday['day']['maxtemp_f']:.0f}"
                         )
                         offset += 22
