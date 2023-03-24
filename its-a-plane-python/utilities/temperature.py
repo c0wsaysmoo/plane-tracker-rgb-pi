@@ -3,19 +3,15 @@ import json
 
 # Attempt to load config data
 try:
-    from config import OPENWEATHER_API_KEY
-
-except (ModuleNotFoundError, NameError, ImportError):
-    # If there's no config data
-    OPENWEATHER_API_KEY = None
-
-try:
+    from config import WHEATHER_API_API_KEY
     from config import TEMPERATURE_UNITS
+    from config import FORECAST_DAYS
 
 except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
+    WHEATHER_API_API_KEY = None
     TEMPERATURE_UNITS = "metric"
-
+    FORECAST_DAYS = "3"
 
 if TEMPERATURE_UNITS == "metric":
     TEMPERATURE_MIN = 0
@@ -30,77 +26,48 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
 from config import TEMPERATURE_LOCATION
 
 # Weather API
-WEATHER_API_URL = "https://taps-aff.co.uk/api/"
-OPENWEATHER_API_URL = "https://api.openweathermap.org/data/2.5/"
+WEATHER_API_URL = "http://api.weatherapi.com/v1"
 
 
 
 def grab_temperature():
-    if OPENWEATHER_API_KEY:
-        return grab_temp_openweather()
-    else:
-        return grab_temp_taps()
-
-
-
-def grab_temp_taps():
-    current_temp = None
-
-    try:
-        request = urllib.request.Request(WEATHER_API_URL + TEMPERATURE_LOCATION)
-        raw_data = urllib.request.urlopen(request).read()
-        content = json.loads(raw_data.decode("utf-8"))
-        current_temp = content["temp_c"]
-
-    except:
-        pass
-
-    if TEMPERATURE_UNITS == "imperial":
-        current_temp = (current_temp * (9.0 / 5.0)) + 32
-
-    return current_temp
-
-
-def grab_temp_openweather():
     current_temp = None
 
     try:
         request = urllib.request.Request(
-            OPENWEATHER_API_URL
-            + "weather?q="
+            WEATHER_API_URL
+            + "/current.json"
+            + "?q="
             + TEMPERATURE_LOCATION
-            + "&appid="
-            + OPENWEATHER_API_KEY
-            + "&units="
-            + TEMPERATURE_UNITS
+            + "&key="
+            + WHEATHER_API_API_KEY
         )
         raw_data = urllib.request.urlopen(request).read()
-        content = json.loads(raw_data.decode("utf-8"))
-        current_temp = content["main"]["temp"]
+        current_temp = json.loads(raw_data.decode("utf-8"))["current"]["temp_f"]
 
     except:
         pass
 
     return current_temp
-
 
 def grab_forecast():
-    content = None
+    forecast = None
 
     try:
         request = urllib.request.Request(
-            OPENWEATHER_API_URL
-            + "forecast?q="
+            WEATHER_API_URL
+            + "/forecast.json"
+            + "?q="
             + TEMPERATURE_LOCATION
-            + "&appid="
-            + OPENWEATHER_API_KEY
-            + "&units="
-            + TEMPERATURE_UNITS
+            + "&days="
+            + FORECAST_DAYS
+            + "&key="
+            + WHEATHER_API_API_KEY
         )
         raw_data = urllib.request.urlopen(request).read()
-        content = json.loads(raw_data.decode("utf-8"))
+        forecast = json.loads(raw_data.decode("utf-8"))["forecast"]
 
     except:
         pass
 
-    return content
+    return forecast
