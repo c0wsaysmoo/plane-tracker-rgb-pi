@@ -18,12 +18,12 @@ from rgbmatrix import graphics
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
 
 
-def callsigns_match(flights_a, flights_b):
-    get_callsigns = lambda flights: [f["callsign"] for f in flights]
-    callsigns_a = set(get_callsigns(flights_a))
-    callsigns_b = set(get_callsigns(flights_b))
+def flight_updated(flights_a, flights_b):
+    get_callsigns = lambda flights: [(f["callsign"], f["direction"]) for f in flights]
+    updatable_a = set(get_callsigns(flights_a))
+    updatable_b = set(get_callsigns(flights_b))
 
-    return callsigns_a == callsigns_b
+    return updatable_a == updatable_b
 
 
 try:
@@ -111,7 +111,7 @@ class Display(
             # See if this matches the data already on the screen
             # This test only checks if it's 2 lists with the same
             # callsigns, regardless or order
-            data_is_different = not callsigns_match(self._data, new_data)
+            data_is_different = not flight_updated(self._data, new_data)
 
             if data_is_different:
                 self._data_index = 0
