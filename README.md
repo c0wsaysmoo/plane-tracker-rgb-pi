@@ -1,6 +1,6 @@
 # planefinal
 Hello.
-So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat)
+So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
 I just added and changed his layout to include scrolling of the full airline name instead of code ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. Also now displays the distance and direction from your location to the airplane.
 I also added a 3 day forecast, well today and the next two days with the high and low temp. 
 You'll have to make it executable by running chmod +x /home/path/its-a-plane-python/its-a-plane.py
