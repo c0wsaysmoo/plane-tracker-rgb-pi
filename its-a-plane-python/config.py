@@ -19,3 +19,4 @@ JOURNEY_CODE_SELECTED = "xxx" # the airport code of where you live
 JOURNEY_BLANK_FILLER = " ? "
 HAT_PWM_ENABLED = True
 FORECAST_DAYS = "3"
+TIMEZONE = "utf0"
