@@ -23,13 +23,13 @@ class FlightLogoScene:
             colours.BLACK,
         )
 
-        iata = self._data[self._data_index]["owner_iata"]
-        if iata in ("", "N/A"):
-            iata = DEFAULT_IMAGE
+        icao = self._data[self._data_index]["owner_icao"]
+        if icao in ("", "N/A"):
+            icao = DEFAULT_IMAGE
 
         # Open the file
         try:
-            image = Image.open(f"logos/{iata}.png")
+            image = Image.open(f"logos/{icao}.png")
         except FileNotFoundError:
             image = Image.open(f"logos/{DEFAULT_IMAGE}.png")
 
