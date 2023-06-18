@@ -1,3 +1,4 @@
+from datetime import datetime
 from rgbmatrix import graphics
 from utilities.animator import Animator
 from setup import colours, fonts, frames
@@ -6,7 +7,7 @@ from utilities.temperature import grab_temperature, TEMPERATURE_MIN, TEMPERATURE
 
 
 # Scene Setup
-TEMPERATURE_REFRESH_SECONDS = 60
+TEMPERATURE_REFRESH_SECONDS = 600
 TEMPERATURE_FONT = fonts.small
 TEMPERATURE_FONT_HEIGHT = 6
 TEMPERATURE_POSITION = (42, TEMPERATURE_FONT_HEIGHT)
@@ -19,6 +20,7 @@ class TemperatureScene(object):
         super().__init__()
         self._last_temperature = None
         self._last_temperature_str = None
+        self._last_updated = None
 
     def colour_gradient(self, colour_A, colour_B, ratio):
         return graphics.Color(
@@ -31,10 +33,14 @@ class TemperatureScene(object):
     def temperature(self, count):
 
         if len(self._data):
+            self._last_updated = None
             # Ensure redraw when there's new data
             return
 
-        if not (count % TEMPERATURE_REFRESH_SECONDS):
+        seconds_since_update = (datetime.now() - self._last_updated).seconds if self._last_updated is not None else 0
+
+        if not (seconds_since_update % TEMPERATURE_REFRESH_SECONDS):
+            self._last_updated = datetime.now()
             self.current_temperature = grab_temperature()
 
         if self._last_temperature_str is not None:
