@@ -9,7 +9,7 @@ from rgbmatrix import graphics
 
 # Setup
 DAY_COLOUR = colours.GREY
-MIN_T_COLOUR = colours.BLUE
+MIN_T_COLOUR = colours.BLUE_MEDIUM
 MAX_T_COLOUR = colours.ORANGE
 TEXT_FONT = fonts.extrasmall
 FONT_HEIGHT = 5
@@ -25,23 +25,23 @@ TEMP_POSITION = DISTANCE_FROM_TOP
 class DaysForecastScene(object):
     def __init__(self):
         super().__init__()
-        self._last_day = None
+        self._last_hour = None
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
         if len(self._data):
             # Ensure redraw when there's new data
-            self._last_day = None
+            self._last_hour = None
 
         else:
             # If there's no data to display
             # then draw the day
-            current_day = datetime.now()
+            current_hour = datetime.now().hour
 
             # Only draw if time needs updated
-            if self._last_day != current_day.day:
+            if self._last_hour != current_hour:
                 # Clear space if last day is different from current
-                if not self._last_day is None:
+                if not self._last_hour is None:
                     self.draw_square(
                         0,
                         DISTANCE_FROM_TOP - FORECAST_SIZE,
@@ -49,7 +49,7 @@ class DaysForecastScene(object):
                         FORECAST_SIZE,
                         colours.BLACK,
                     )
-                self._last_day = current_day.day
+                self._last_hour = current_hour
 
                 forecast = grab_forecast()
                 
