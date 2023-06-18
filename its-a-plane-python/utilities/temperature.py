@@ -43,7 +43,7 @@ def grab_temperature():
             + WHEATHER_API_API_KEY
         )
         raw_data = urllib.request.urlopen(request).read()
-        current_temp = json.loads(raw_data.decode(TIMEZONE))["current"]["temp_f"]
+        current_temp = json.loads(raw_data.decode("utf-8"))["current"]["temp_f"]
 
     except:
         pass
@@ -65,7 +65,7 @@ def grab_forecast():
             + WHEATHER_API_API_KEY
         )
         raw_data = urllib.request.urlopen(request).read()
-        forecast = json.loads(raw_data.decode(TIMEZONE))["forecast"]
+        forecast = json.loads(raw_data.decode("utf-8"))["forecast"]
 
     except:
         pass
