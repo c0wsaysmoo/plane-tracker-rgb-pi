@@ -17,9 +17,11 @@ cd its-a-plane-python
 You'll have to make it executable by running chmod +x /home/path/its-a-plane-python/its-a-plane.py
 Although to get it to run on boot youll have to do a crontab -e and do @reboot sleep 60 && sudo ./its-a-plane.py
 
-This also assumes the bridge is soldered on the bonnet https://learn.adafruit.com/assets/5772 if that's not the case youll have to be FALSE under "HAT_PWM_ENABLED" in the config file
+This also assumes the bridge is soldered on the bonnet https://learn.adafruit.com/assets/5772 if that's not the case youll have to be False under "HAT_PWM_ENABLED" in the config file
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
+
+You'll want to edit the timezones in the temperature.py in utilities from "utf-8" to whatever timezone you're in 
 
 I'm on reddit under this name if you have any questions or let me know if you make this. youll have to fill out the config file though
 ![PXL_20230323_000203495](https://user-images.githubusercontent.com/127139588/227799263-05bafba3-a847-4832-8635-f495ca50358b.jpg)
