@@ -18,7 +18,7 @@ if TEMPERATURE_UNITS == "metric":
     TEMPERATURE_MAX = 25
 elif TEMPERATURE_UNITS == "imperial":
     TEMPERATURE_MIN = 32
-    TEMPERATURE_MAX = 77
+    TEMPERATURE_MAX = 90
 
 if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
     TEMPERATURE_UNITS = "metric"
