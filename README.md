@@ -23,6 +23,13 @@ When you use git to pull these files you'll have to move everything into a folde
 
 You'll need to fill out the config file
 
+
+If you want to add a power button, you'll need to solder onto the bonnet pins on the GND/SCL then
+
+git clone https://github.com/Howchoo/pi-power-button.git
+
+./pi-power-button/script/install
+
 I'm on reddit under this name if you have any questions or let me know if you make this. youll have to fill out the config file though
 ![PXL_20230323_000203495](https://user-images.githubusercontent.com/127139588/227799263-05bafba3-a847-4832-8635-f495ca50358b.jpg)
 ![PXL_20230323_000207446](https://user-images.githubusercontent.com/127139588/227799264-3d6b1132-a177-4c56-ae65-a33387daacf2.jpg)
