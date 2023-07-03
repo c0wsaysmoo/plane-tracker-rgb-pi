@@ -23,6 +23,8 @@ When you use git to pull these files you'll have to move everything into a folde
 
 You'll need to fill out the config file
 
+FYI the logos are going to be a little blurry, again they are 16x16 pixels so you can only do so much and since most were batch shrunk they haven't been touched up. If youd like to touch them up and add them that would be great OR add ones that are missing. Just save the new logo as XXX.png and 16x16 size and put it into the logo folder. I have most of the ones around me but your milage may vary. 
+
 
 If you want to add a power button, you'll need to solder onto the bonnet pins on the GND/SCL then
 
