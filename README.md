@@ -1,6 +1,6 @@
 # planefinal
 
-heads up. this weekend I'm planning on uploading a weather change to a provider that i find to be a lot more accurate. just making sure everything works before i push it.
+So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. 
 
 Hello.
 So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
@@ -11,6 +11,8 @@ once you get the pi going and ssh into it you'll
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
 sudo apt install python3-pip
+
+sudo pip3 install pytz requests
 
 sudo pip3 install FlightRadarAPI
 
