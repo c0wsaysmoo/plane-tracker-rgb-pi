@@ -1,15 +1,16 @@
-import urllib.request
-import json
+from datetime import datetime, timedelta
+import requests as r
+import pytz
 
 # Attempt to load config data
 try:
-    from config import WHEATHER_API_API_KEY
+    from config import TOMORROW_API_KEY
     from config import TEMPERATURE_UNITS
     from config import FORECAST_DAYS
 
 except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
-    WHEATHER_API_API_KEY = None
+    TOMORROW_API_KEY = None
     TEMPERATURE_UNITS = "metric"
     FORECAST_DAYS = "3"
 
@@ -26,48 +27,55 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
 from config import TEMPERATURE_LOCATION
 
 # Weather API
-WEATHER_API_URL = "http://api.weatherapi.com/v1"
-
-
+TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
 
 def grab_temperature():
     current_temp = None
-
+    request = r.get(
+        f"{TOMORROW_API_URL}/weather/realtime",
+        params={
+            "location": TEMPERATURE_LOCATION,
+            "units": TEMPERATURE_UNITS,
+            "apikey": TOMORROW_API_KEY
+        }
+    )
     try:
-        request = urllib.request.Request(
-            WEATHER_API_URL
-            + "/current.json"
-            + "?q="
-            + TEMPERATURE_LOCATION
-            + "&key="
-            + WHEATHER_API_API_KEY
-        )
-        raw_data = urllib.request.urlopen(request).read()
-        current_temp = json.loads(raw_data.decode("utf-8"))["current"]["temp_f"]
-
-    except:
-        pass
-
+        current_temp = request.json()["data"]["values"]["temperature"]
+    except Exception as e:
+        print(f"An error... {e}")
     return current_temp
 
 def grab_forecast():
+    # Get the current time
+    current_time = datetime.now()
+    # Add 6 hours to the current time
+    dt = current_time + timedelta(hours=6)
     forecast = None
-
+    resp = r.post(
+        f"{TOMORROW_API_URL}/timelines",
+        headers={
+            "Accept-Encoding": "gzip",
+            "accept": "application/json",
+            "content-type": "application/json"
+        },
+        params={"apikey": TOMORROW_API_KEY}, 
+        json={
+            "location": TEMPERATURE_LOCATION,
+            "units": TEMPERATURE_UNITS,
+            "fields": [
+                "temperatureMin",
+                "temperatureMax",
+                "weatherCodeDay"
+            ],
+            "timesteps": [
+                "1d"
+            ],
+            "startTime": dt.isoformat(),
+            "endTime": (dt+timedelta(days=int(FORECAST_DAYS))).isoformat()
+        }
+    )    
     try:
-        request = urllib.request.Request(
-            WEATHER_API_URL
-            + "/forecast.json"
-            + "?q="
-            + TEMPERATURE_LOCATION
-            + "&days="
-            + FORECAST_DAYS
-            + "&key="
-            + WHEATHER_API_API_KEY
-        )
-        raw_data = urllib.request.urlopen(request).read()
-        forecast = json.loads(raw_data.decode("utf-8"))["forecast"]
-
-    except:
-        pass
-
+        forecast = resp.json()["data"]["timelines"][0]["intervals"]
+    except Exception as e:
+        print(f"An error... {e}")
     return forecast
