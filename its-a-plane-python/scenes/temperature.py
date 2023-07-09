@@ -21,6 +21,8 @@ class TemperatureScene(object):
         self._last_temperature = None
         self._last_temperature_str = None
         self._last_updated = None
+        self._cached_temp = None
+        self._redraw_temp = True
 
     def colour_gradient(self, colour_A, colour_B, ratio):
         return graphics.Color(
@@ -31,52 +33,52 @@ class TemperatureScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def temperature(self, count):
-
+        # Ensure redraw when there's new data
         if len(self._data):
-            self._last_updated = None
-            # Ensure redraw when there's new data
+            self._redraw_temp = True
             return
 
         seconds_since_update = (datetime.now() - self._last_updated).seconds if self._last_updated is not None else 0
-
-        if not (seconds_since_update % TEMPERATURE_REFRESH_SECONDS):
-            self._last_updated = datetime.now()
-            self.current_temperature = grab_temperature()
-
-        if self._last_temperature_str is not None:
-            # Undraw old temperature
-            _ = graphics.DrawText(
-                self.canvas,
-                TEMPERATURE_FONT,
-                TEMPERATURE_POSITION[0],
-                TEMPERATURE_POSITION[1],
-                colours.BLACK,
-                self._last_temperature_str,
-            )
-
-        if self.current_temperature:
-            temp_str = f"{round(self.current_temperature)}°".rjust(4, " ")
-
-            if self.current_temperature > TEMPERATURE_MAX:
-                ratio = 1
-            elif self.current_temperature > TEMPERATURE_MIN:
-                ratio = (self.current_temperature - TEMPERATURE_MIN) / TEMPERATURE_MAX
+        if not (seconds_since_update % TEMPERATURE_REFRESH_SECONDS) or self._redraw_temp:
+            if self._cached_temp is not None and self._redraw_temp:
+                current_temperature = self._cached_temp
             else:
-                ratio = 0
+                self._cached_temp = current_temperature = grab_temperature()
+                self._last_updated = datetime.now()
+            
+            # Undraw old temperature
+            if self._last_temperature_str is not None:
+                _ = graphics.DrawText(
+                    self.canvas,
+                    TEMPERATURE_FONT,
+                    TEMPERATURE_POSITION[0],
+                    TEMPERATURE_POSITION[1],
+                    colours.BLACK,
+                    self._last_temperature_str,
+                )
 
-            temp_colour = self.colour_gradient(
-                TEMPERATURE_MIN_COLOUR, TEMPERATURE_MAX_COLOUR, ratio
-            )
+            if current_temperature is not None:
+                self._last_temperature_str = f"{round(current_temperature)}°".rjust(4, " ")
+                self._last_temperature = current_temperature
+                self._redraw_temp = False
 
-            # Draw temperature
-            _ = graphics.DrawText(
-                self.canvas,
-                TEMPERATURE_FONT,
-                TEMPERATURE_POSITION[0],
-                TEMPERATURE_POSITION[1],
-                temp_colour,
-                temp_str,
-            )
+                if current_temperature > TEMPERATURE_MAX:
+                    ratio = 1
+                elif current_temperature > TEMPERATURE_MIN:
+                    ratio = (current_temperature - TEMPERATURE_MIN) / TEMPERATURE_MAX
+                else:
+                    ratio = 0
 
-            self._last_temperature = self.current_temperature
-            self._last_temperature_str = temp_str
+                temp_colour = self.colour_gradient(
+                    TEMPERATURE_MIN_COLOUR, TEMPERATURE_MAX_COLOUR, ratio
+                )
+
+                # Draw temperature
+                _ = graphics.DrawText(
+                    self.canvas,
+                    TEMPERATURE_FONT,
+                    TEMPERATURE_POSITION[0],
+                    TEMPERATURE_POSITION[1],
+                    temp_colour,
+                    self._last_temperature_str,
+                )
