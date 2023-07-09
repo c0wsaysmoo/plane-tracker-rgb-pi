@@ -25,73 +25,87 @@ TEMP_POSITION = DISTANCE_FROM_TOP
 class DaysForecastScene(object):
     def __init__(self):
         super().__init__()
+        self._redraw_forecast = True
         self._last_hour = None
+        self._cached_forecast = None
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
+        # Ensure redraw when there's new data
         if len(self._data):
-            # Ensure redraw when there's new data
-            self._last_hour = None
+            self._redraw_forecast = True
+            return
 
-        else:
-            # If there's no data to display
-            # then draw the day
-            current_hour = datetime.now().hour
+        # If there's no data to display
+        # then draw the day
+        current_hour = datetime.now().hour
 
-            # Only draw if time needs updated
-            if self._last_hour != current_hour:
-                # Clear space if last day is different from current
-                if not self._last_hour is None:
-                    self.draw_square(
-                        0,
-                        DISTANCE_FROM_TOP - FORECAST_SIZE,
-                        screen.WIDTH,
-                        FORECAST_SIZE,
-                        colours.BLACK,
-                    )
-                self._last_hour = current_hour
+        # Only draw if time needs updated
+        if self._last_hour != current_hour or self._redraw_forecast:
+            # Clear space if last day is different from current
+            if self._last_hour is not None:
+                self.draw_square(
+                    0,
+                    DISTANCE_FROM_TOP - FORECAST_SIZE,
+                    screen.WIDTH,
+                    FORECAST_SIZE,
+                    colours.BLACK,
+                )
+            self._last_hour = current_hour
 
+            if self._cached_forecast is not None and self._redraw_forecast:
+                forecast = self._cached_forecast
+            else:
                 forecast = grab_forecast()
-                
-                if forecast is not None:
-                    offset = 0
-                    for forecastday in forecast["forecastday"]: 
-                        
-                        # Draw day
-                        _ = graphics.DrawText(
-                            self.canvas,
-                            TEXT_FONT,
-                            offset+5,
-                            DAY_POSITION,
-                            DAY_COLOUR,
-                            datetime.fromisoformat(forecastday["date"]).strftime("%a")
-                        )
-                        #print(forecastday)
+                self._cached_forecast = forecast
 
-                        # Draw the icon
-                        icon = forecastday["day"]["condition"]["icon"].split("/")[-1].split(".")[0]
-                        image = Image.open(f"icons/{icon}.png")
+            if forecast is not None:
+                self._redraw_forecast = False
+                offset = 0
+                for day in forecast:
+                    # Clear previous temperature values
+                    self.draw_square(
+                        offset + 2,
+                        TEMP_POSITION - FONT_HEIGHT,
+                        offset + 22,
+                        TEMP_POSITION + FONT_HEIGHT,
+                        colours.BLACK
+                    )
 
-                        # Make image fit our screen.
-                        image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
-                        self.matrix.SetImage(image.convert('RGB'), offset+5, ICON_POSITION)
+                    # Draw day
+                    _ = graphics.DrawText(
+                        self.canvas,
+                        TEXT_FONT,
+                        offset + 5,
+                        DAY_POSITION,
+                        DAY_COLOUR,
+                        datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
+                    )
 
-                        # Draw min temperature
-                        _ = graphics.DrawText(
-                            self.canvas,
-                            TEXT_FONT,
-                            offset+11,
-                            TEMP_POSITION,
-                            MIN_T_COLOUR,
-                            f"{forecastday['day']['mintemp_f']:.0f}"
-                        )
-                        # Draw max temperature
-                        _ = graphics.DrawText(
-                            self.canvas,
-                            TEXT_FONT,
-                            offset+2,
-                            TEMP_POSITION,
-                            MAX_T_COLOUR,
-                            f"{forecastday['day']['maxtemp_f']:.0f}"
-                        )
-                        offset += 22
+                    # Draw the icon
+                    icon = day["values"]["weatherCodeDay"]
+                    image = Image.open(f"icons/{icon}.png")
+
+                    # Make image fit our screen.
+                    image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
+                    self.matrix.SetImage(image.convert('RGB'), offset + 5, ICON_POSITION)
+
+                    # Draw min temperature
+                    _ = graphics.DrawText(
+                        self.canvas,
+                        TEXT_FONT,
+                        offset + 11,
+                        TEMP_POSITION,
+                        MIN_T_COLOUR,
+                        f"{day['values']['temperatureMin']:.0f}"
+                    )
+                    # Draw max temperature
+                    _ = graphics.DrawText(
+                        self.canvas,
+                        TEXT_FONT,
+                        offset + 2,
+                        TEMP_POSITION,
+                        MAX_T_COLOUR,
+                        f"{day['values']['temperatureMax']:.0f}"
+                    )
+                    offset += 22
