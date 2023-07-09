@@ -9,7 +9,7 @@ LOCATION_HOME = [
     xx.xxx, # Longitude (deg)
     6371.xxx # Altitude (6371+home altitude km)
 ]
-TEMPERATURE_LOCATION = "xx.xxx,xx,xxx" #lat,long of your place usually the same as LOCATION_HOME
+TEMPERATURE_LOCATION = "xx.xxx,xx.xxx" #lat,long of your place usually the same as LOCATION_HOME
 WHEATHER_API_API_KEY = "xxxxxxx" # Get an API key from https://www.tomorrow.io/
 TEMPERATURE_UNITS = "imperial"
 MIN_ALTITUDE = 2600 #feet
