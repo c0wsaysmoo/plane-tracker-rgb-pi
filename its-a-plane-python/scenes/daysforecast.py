@@ -83,7 +83,7 @@ class DaysForecastScene(object):
                     )
 
                     # Draw the icon
-                    icon = day["values"]["weatherCodeDay"]
+                    icon = day["values"]["weatherCode"]
                     image = Image.open(f"icons/{icon}.png")
 
                     # Make image fit our screen.
