@@ -7,7 +7,7 @@ ZONE_HOME = {
 LOCATION_HOME = [
     xx.xxx, # Latitude (deg)
     xx.xxx, # Longitude (deg)
-    6371.xxx # Altitude (6371+home altitude km)
+    6371.xxx # Altitude (6371+home altitude km ie if you live 100m above sealevel it would be 6371.1)
 ]
 TEMPERATURE_LOCATION = "xx.xxx,xx.xxx" #lat,long of your place usually the same as 
 TOMORROW_API_KEY = "xxxxxxx" # Get an API key from https://www.tomorrow.io/
