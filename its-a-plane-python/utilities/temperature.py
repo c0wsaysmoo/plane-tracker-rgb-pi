@@ -65,7 +65,7 @@ def grab_forecast():
             "fields": [
                 "temperatureMin",
                 "temperatureMax",
-                "weatherCodeDay"
+                "weatherCode"
             ],
             "timesteps": [
                 "1d"
