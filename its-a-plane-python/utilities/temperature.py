@@ -16,7 +16,7 @@ except (ModuleNotFoundError, NameError, ImportError):
 
 if TEMPERATURE_UNITS == "metric":
     TEMPERATURE_MIN = 0
-    TEMPERATURE_MAX = 25
+    TEMPERATURE_MAX = 40
 elif TEMPERATURE_UNITS == "imperial":
     TEMPERATURE_MIN = 32
     TEMPERATURE_MAX = 100
