@@ -4,8 +4,9 @@ So changed the source of the weather since it was constantly off to Tomorrow.IO 
 
 Hello.
 So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
-I just added and changed his layout to include scrolling of the full airline name instead of code ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. Also now displays the distance and direction from your location to the airplane.
+I just added and changed his layout to include scrolling of the full airline name instead of callsign ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. The logo is tied to the ICAO code where the airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. Also now displays the distance and direction from your location to the airplane and wil update as the plane flies through the box.
 I also added a 3 day forecast, well today and the next two days with the high and low temp.
+
 once you get the pi going and ssh into it you'll
 
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
@@ -26,7 +27,7 @@ This also assumes the bridge is soldered on the bonnet https://learn.adafruit.co
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
 
-You'll need to fill out the config file
+You'll need to fill out the config file. I use https://www.latlong.net/ to find lat and long
 
 If you want to change the clock to 24hr you'll need to edit the clock.py in scene and change line 29 from ("%l:%M") to ("%H:%M")
 
