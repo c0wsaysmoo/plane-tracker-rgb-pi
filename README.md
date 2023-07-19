@@ -2,6 +2,8 @@
 
 So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first.
 
+hmm there seems to be an issue with mine that it'll crash after running for about a week straight. a simple reboot fixes it, but I cant tell if its just mine or everyone. so can you let me know if it happens to you? 
+
 Hello.
 So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
 I just added and changed his layout to include scrolling of the full airline name instead of callsign ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. The logo is tied to the ICAO code where the airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. Also now displays the distance and direction from your location to the airplane and wil update as the plane flies through the box.
