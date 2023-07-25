@@ -103,6 +103,6 @@ if forecast_data is not None:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
         weather_code_day = interval["values"]["weatherCodeDay"]
-        #print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
+        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
 else:
     print("Failed to retrieve forecast.")
