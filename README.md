@@ -7,7 +7,11 @@ So the basis of this project came from https://github.com/ColinWaddell/its-a-pla
 I just added and changed his layout to include scrolling of the full airline name instead of callsign ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. The logo is tied to the ICAO code where the airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. Also now displays the distance and direction from your location to the airplane and wil update as the plane flies through the box.
 I also added a 3 day forecast, well today and the next two days with the high and low temp.
 
-once you get the pi going and ssh into it you'll
+once you get the pi going
+
+https://linuxconfig.org/enabling-ssh-on-raspberry-pi-a-comprehensive-guide
+
+ssh into it and at the command prompt 
 
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
