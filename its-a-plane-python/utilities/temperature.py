@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import requests as r
 import pytz
+import time
 
 # Attempt to load config data
 try:
@@ -16,7 +17,7 @@ except (ModuleNotFoundError, NameError, ImportError):
 
 if TEMPERATURE_UNITS == "metric":
     TEMPERATURE_MIN = 0
-    TEMPERATURE_MAX = 40
+    TEMPERATURE_MAX = 25
 elif TEMPERATURE_UNITS == "imperial":
     TEMPERATURE_MIN = 32
     TEMPERATURE_MAX = 100
@@ -29,20 +30,28 @@ from config import TEMPERATURE_LOCATION
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
 
-def grab_temperature():
+def grab_temperature(retries=3, delay=1):
     current_temp = None
-    request = r.get(
-        f"{TOMORROW_API_URL}/weather/realtime",
-        params={
-            "location": TEMPERATURE_LOCATION,
-            "units": TEMPERATURE_UNITS,
-            "apikey": TOMORROW_API_KEY
-        }
-    )
-    try:
-        current_temp = request.json()["data"]["values"]["temperature"]
-    except Exception as e:
-        print(f"An error... {e}")
+
+    for attempt in range(retries):
+        try:
+            request = r.get(
+                f"{TOMORROW_API_URL}/weather/realtime",
+                params={
+                    "location": TEMPERATURE_LOCATION,
+                    "units": TEMPERATURE_UNITS,
+                    "apikey": TOMORROW_API_KEY
+                }
+            )
+            request.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+            current_temp = request.json()["data"]["values"]["temperature"]
+            break  # If successful, exit the loop and return the temperature
+        except r.exceptions.RequestException as e:
+            print(f"Attempt {attempt + 1} failed. Error: {e}")
+            if attempt < retries - 1:
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+
     return current_temp
 
 def grab_forecast():
@@ -65,7 +74,7 @@ def grab_forecast():
             "fields": [
                 "temperatureMin",
                 "temperatureMax",
-                "weatherCode"
+                "weatherCodeDay"
             ],
             "timesteps": [
                 "1d"
@@ -79,3 +88,21 @@ def grab_forecast():
     except Exception as e:
         print(f"An error... {e}")
     return forecast
+
+# Example usage
+temperature = grab_temperature(retries=3, delay=2)
+if temperature is not None:
+    print(f"Current temperature: {temperature} \u00b0C")  # Or \u00b0F based on TEMPERATURE_UNITS
+else:
+    print("Failed to retrieve temperature.")
+
+forecast_data = grab_forecast()
+if forecast_data is not None:
+    print("Weather forecast:")
+    for interval in forecast_data:
+        temperature_min = interval["values"]["temperatureMin"]
+        temperature_max = interval["values"]["temperatureMax"]
+        weather_code_day = interval["values"]["weatherCodeDay"]
+        #print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
+else:
+    print("Failed to retrieve forecast.")
