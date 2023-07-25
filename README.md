@@ -1,8 +1,6 @@
 # planefinal
 
-So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first. Also again if you find a ICAO code that I don't have let me know so I can add it for others.
-
-hmm there seems to be an issue with mine that it'll crash after running for about a week straight. a simple reboot fixes it, but I cant tell if its just mine or everyone. so can you let me know if it happens to you? 
+So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first. Also again if you find a ICAO code that I don't have let me know so I can add it for others. The connection timeout errors should be fixed now, also updated some of the weathe icons.
 
 Hello.
 So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
