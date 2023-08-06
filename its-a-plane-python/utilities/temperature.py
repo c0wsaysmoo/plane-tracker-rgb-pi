@@ -50,7 +50,7 @@ def grab_temperature_and_humidity(retries=3, delay=1):
 
 def grab_forecast():
     # Get the current time
-    current_time = datetime.now()
+    current_time = datetime.utcnow()
     # Add 6 hours to the current time
     dt = current_time + timedelta(hours=6)
     forecast = None
