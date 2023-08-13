@@ -70,7 +70,7 @@ class JourneyScene(object):
         
         # Set colors based on departure and arrival delays
         if departure_delay_minutes <= 20:
-            origin_color = colours.GREEN
+            origin_color = colours.LIMEGREEN
         elif 0 < departure_delay_minutes <= 40:
             origin_color = colours.YELLOW
         elif 30 < departure_delay_minutes <= 60:
@@ -79,7 +79,7 @@ class JourneyScene(object):
             origin_color = colours.RED
         
         if arrival_delay_minutes <= 0:
-            destination_color = colours.GREEN
+            destination_color = colours.LIMEGREEN
         elif 0 < arrival_delay_minutes <= 30:
             destination_color = colours.YELLOW
         elif 30 < arrival_delay_minutes <= 60:
