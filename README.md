@@ -1,6 +1,6 @@
 # planefinal
 
-Haha well I changed it again. Now the current temperature reflects the current humidity based on a gradient from white to blue, blue being 100% humid and white being 0%. 
+Can't help myself and I changed it again. The Origin/destination airport code now is color based. If the plane took off within 15 minutes of scheduled departure its green, 15-45min is yellow, 45-60 is orange, more than hour is red. Arrival is 0 or early is green, 1-30 minutes is yellow, 31-60 is orange, and hour or more is red. Now the current temperature reflects the current humidity based on a gradient from white to blue, blue being 100% humid and white being 0%.
 
 So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first. Also again if you find a ICAO code that I don't have let me know so I can add it for others. The connection timeout errors should be fixed now, also updated some of the weathe icons.
 
@@ -47,8 +47,10 @@ git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
 
 I'm on reddit under this name if you have any questions or let me know if you make this. youll have to fill out the config file though
-![PXL_20230323_000203495](https://user-images.githubusercontent.com/127139588/227799263-05bafba3-a847-4832-8635-f495ca50358b.jpg)
-![PXL_20230323_000207446](https://user-images.githubusercontent.com/127139588/227799264-3d6b1132-a177-4c56-ae65-a33387daacf2.jpg)
-![PXL_20230323_003309032](https://user-images.githubusercontent.com/127139588/227799265-e80bd531-704b-440d-8b6f-0e2a6b373294.jpg)
+
+![PXL_20230813_181336664](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4578076f-61c9-45cd-b8f6-3fbda4461e0e)
+![PXL_20230813_180324239](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/40d73504-a369-40b8-94b6-c13fb73816dd)
+![PXL_20230813_180224460](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/1e19cec5-1937-4dae-ba94-de75091ade59)
+
 
 
