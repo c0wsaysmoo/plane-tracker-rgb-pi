@@ -131,6 +131,11 @@ class Overhead:
                 # Grab and store details
                 try:
                     details = self._api.get_flight_details(flight.id)
+                    
+                    # Print either the raw data or what its currently pulling
+                    #print("Raw API Response:", details)
+                    #print("Got a new plane!")
+    
 
                     # Get plane type
                     try:
@@ -164,6 +169,19 @@ class Overhead:
                         airline = details["airline"]["name"]
                     except (KeyError, TypeError):
                         airline = ""
+                        
+                    # Get departure and arrival times
+                    try:
+                        time_scheduled_departure = details["time"]["scheduled"]["departure"]
+                        time_scheduled_arrival = details["time"]["scheduled"]["arrival"]
+                        time_real_departure = details["time"]["real"]["departure"]
+                        time_estimated_arrival = details["time"]["estimated"]["arrival"]
+                    except (KeyError, TypeError):
+                        time_scheduled_departure = None
+                        time_scheduled_arrival = None
+                        time_real_departure = None
+                        time_estimated_arrival = None
+                        
 
                     # Get owner icao
                     try:
@@ -186,12 +204,21 @@ class Overhead:
                             "owner_iata":owner_iata,
                             "owner_icao": owner_icao,
                             "destination": destination,
+                            "time_scheduled_departure": time_scheduled_departure,
+                            "time_scheduled_arrival": time_scheduled_arrival,
+                            "time_real_departure": time_real_departure,
+                            "time_estimated_arrival": time_estimated_arrival,
                             "vertical_speed": flight.vertical_speed,
                             "callsign": callsign,
                             "distance": distance_from_flight_to_home(flight) / 1.609,
                             "direction": degrees_to_cardinal(plane_bearing(flight)),
                         }
                     )
+                    
+                    print("Got data:")
+                    for k,v in data[-1].items():
+                        print(k, "=", v)
+                    print()
                     break
 
                 except (KeyError, AttributeError):
