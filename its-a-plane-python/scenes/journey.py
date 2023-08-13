@@ -1,6 +1,5 @@
 from utilities.animator import Animator
 from setup import colours, fonts
-
 from rgbmatrix import graphics
 
 # Attempt to load config data
@@ -25,9 +24,7 @@ JOURNEY_WIDTH = 48
 JOURNEY_SPACING = 5
 JOURNEY_FONT = fonts.regularplus
 JOURNEY_FONT_SELECTED = fonts.regularplus_bold
-JOURNEY_COLOUR = colours.YELLOW
-
-ARROW_COLOUR = colours.ORANGE
+ARROW_COLOUR = colours.GREY
 
 # Element Positions
 ARROW_POINT_POSITION = (41, 8)
@@ -45,10 +42,52 @@ class JourneyScene(object):
         if len(self._data) == 0:
             return
 
+        # Grab Airport codes
         origin = self._data[self._data_index]["origin"]
         destination = self._data[self._data_index]["destination"]
-
-        # Draw background
+        
+        # Additional time-related data
+        time_scheduled_departure = self._data[self._data_index]["time_scheduled_departure"]
+        time_real_departure = self._data[self._data_index]["time_real_departure"]
+        time_scheduled_arrival = self._data[self._data_index]["time_scheduled_arrival"]
+        time_estimated_arrival = self._data[self._data_index]["time_estimated_arrival"]
+        
+        # Calculate departure and arrival delays in minutes
+        departure_delay_minutes = (
+            (time_real_departure - time_scheduled_departure) / 60
+            if time_real_departure is not None and time_scheduled_departure is not None
+            else 0
+        )
+        arrival_delay_minutes = (
+            (time_estimated_arrival - time_scheduled_arrival) / 60
+            if time_estimated_arrival is not None and time_scheduled_arrival is not None
+            else 0
+        )
+        
+        # Print time differences for debugging
+        #print("Departure Delay (minutes):", departure_delay_minutes)
+        #print("Arrival Delay (minutes):", arrival_delay_minutes)
+        
+        # Set colors based on departure and arrival delays
+        if departure_delay_minutes <= 15:
+            origin_color = colours.GREEN
+        elif 0 < departure_delay_minutes <= 45:
+            origin_color = colours.YELLOW
+        elif 30 < departure_delay_minutes <= 60:
+            origin_color = colours.ORANGE
+        else:
+            origin_color = colours.RED
+        
+        if arrival_delay_minutes <= 0:
+            destination_color = colours.GREEN
+        elif 0 < arrival_delay_minutes <= 30:
+            destination_color = colours.YELLOW
+        elif 30 < arrival_delay_minutes <= 60:
+            destination_color = colours.ORANGE
+        else:
+            destination_color = colours.RED
+        
+        # Draw background with the chosen color
         self.draw_square(
             JOURNEY_POSITION[0],
             JOURNEY_POSITION[1],
@@ -57,17 +96,17 @@ class JourneyScene(object):
             colours.BLACK,
         )
 
-        # Draw origin
+        # Draw origin with the chosen color
         text_length = graphics.DrawText(
             self.canvas,
             JOURNEY_FONT_SELECTED if origin == JOURNEY_CODE_SELECTED else JOURNEY_FONT,
             JOURNEY_POSITION[0],
             JOURNEY_HEIGHT,
-            JOURNEY_COLOUR,
+            origin_color,
             origin if origin else JOURNEY_BLANK_FILLER,
         )
 
-        # Draw destination
+        # Draw destination with the chosen color
         _ = graphics.DrawText(
             self.canvas,
             JOURNEY_FONT_SELECTED
@@ -75,7 +114,7 @@ class JourneyScene(object):
             else JOURNEY_FONT,
             JOURNEY_POSITION[0] + text_length + JOURNEY_SPACING,
             JOURNEY_HEIGHT,
-            JOURNEY_COLOUR,
+            destination_color,
             destination if destination else JOURNEY_BLANK_FILLER,
         )
 
