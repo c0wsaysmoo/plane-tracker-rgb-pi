@@ -15,7 +15,7 @@ RETRIES = 3
 RATE_LIMIT_DELAY = 1
 MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000  # feet
-EARTH_RADIUS_KM = 6371
+EARTH_RADIUS_M = 3958.8  # Earth's radius in miles
 BLANK_FIELDS = ["", "N/A", "NONE"]
 
 try:
@@ -28,7 +28,7 @@ try:
 except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
     ZONE_DEFAULT = {"tl_y": 62.61, "tl_x": -13.07, "br_y": 49.71, "br_x": 3.46}
-    LOCATION_DEFAULT = [51.509865, -0.118092, EARTH_RADIUS_KM]
+    LOCATION_DEFAULT = [51.509865, -0.118092, EARTH_RADIUS_M]
 
 
 def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
@@ -40,15 +40,14 @@ def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
             alt * math.cos(DEG2RAD * lat) * math.cos(DEG2RAD * long),
         ]
 
-    def feet_to_meters_plus_earth(altitude_ft):
-        altitude_km = 0.0003048 * altitude_ft
-        return altitude_km + EARTH_RADIUS_KM
+    def feet_to_miles_plus_earth(altitude_ft):
+        return (altitude_ft) / 5280 + EARTH_RADIUS_M
 
     try:
         (x0, y0, z0) = polar_to_cartesian(
             flight.latitude,
             flight.longitude,
-            feet_to_meters_plus_earth(flight.altitude),
+            feet_to_miles_plus_earth(flight.altitude),
         )
 
         (x1, y1, z1) = polar_to_cartesian(*home)
@@ -215,10 +214,10 @@ class Overhead:
                         }
                     )
                     
-                    print("Got data:")
-                    for k,v in data[-1].items():
-                        print(k, "=", v)
-                    print()
+                    #print("Got data:")
+                    #for k,v in data[-1].items():
+                        #print(k, "=", v)
+                    #print()
                     break
 
                 except (KeyError, AttributeError):
