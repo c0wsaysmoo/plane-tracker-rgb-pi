@@ -1,5 +1,4 @@
 from rgbmatrix import graphics
-
 from utilities.animator import Animator
 from setup import colours, fonts, screen
 
@@ -8,6 +7,8 @@ PLANE_DETAILS_COLOUR = colours.PINK
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
+
+from config import DISTANCE_UNITS
 
 
 class PlaneDetailsScene(object):
@@ -22,8 +23,21 @@ class PlaneDetailsScene(object):
         # Guard against no data
         if len(self._data) == 0:
             return
+            
+        distance = self._data[self._data_index]["distance"]
+        direction = self._data[self._data_index]["direction"]
 
-        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f} Miles {self._data[self._data_index]["direction"]}'
+        # Convert distance to either miles or kilometers based on UNITS configuration
+        if DISTANCE_UNITS == "imperial":
+            distance_units = "Miles"
+        elif DISTANCE_UNITS == "metric":
+            distance *= 1.609  # Convert distance to kilometers
+            distance_units = "KM"
+        else:
+            distance_units = "Units"
+
+        # Construct the plane details string
+        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f} {distance_units} {self._data[self._data_index]["direction"]}'
 
         # Draw background
         self.draw_square(
