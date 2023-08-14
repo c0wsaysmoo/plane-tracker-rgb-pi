@@ -3,6 +3,8 @@ from threading import Thread, Lock
 from time import sleep
 import math
 
+from config import DISTANCE_UNITS
+
 try:
     # Attempt to load config data
     from config import MIN_ALTITUDE
@@ -50,11 +52,19 @@ def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
             feet_to_miles_plus_earth(flight.altitude),
         )
 
-        (x1, y1, z1) = polar_to_cartesian(*home)
+        (x1, y1, z1) = polar_to_cartesian(
+            home[0],
+            home[1],
+            feet_to_miles_plus_earth(home[2]),
+        )
 
-        dist = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+        dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
 
-        return dist
+        if DISTANCE_UNITS == "metric":
+            dist_km = dist_miles * 1.609  # Convert miles to kilometers
+            return dist_km
+        else:
+            return dist_miles
 
     except AttributeError:
         # on error say it's far away
@@ -209,7 +219,7 @@ class Overhead:
                             "time_estimated_arrival": time_estimated_arrival,
                             "vertical_speed": flight.vertical_speed,
                             "callsign": callsign,
-                            "distance": distance_from_flight_to_home(flight) / 1.609,
+                            "distance": distance_from_flight_to_home(flight),
                             "direction": degrees_to_cardinal(plane_bearing(flight)),
                         }
                     )
