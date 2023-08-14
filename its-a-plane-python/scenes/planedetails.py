@@ -31,13 +31,15 @@ class PlaneDetailsScene(object):
         if DISTANCE_UNITS == "imperial":
             distance_units = "Miles"
         elif DISTANCE_UNITS == "metric":
-            distance *= 1.609  # Convert distance to kilometers
             distance_units = "KM"
         else:
             distance_units = "Units"
 
         # Construct the plane details string
         plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f} {distance_units} {self._data[self._data_index]["direction"]}'
+        
+        # Print plane details to terminal for debugging
+        #print(plane)
 
         # Draw background
         self.draw_square(
