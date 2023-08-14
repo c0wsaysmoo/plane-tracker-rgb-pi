@@ -1,5 +1,7 @@
 # planefinal
 
+Quick update, now you can choose the distance in either Km or Miles
+
 Can't help myself and I changed it again. The Origin/destination airport code now is color based. If the plane took off within 20 minutes of scheduled departure its green, 20-40min is yellow, 40-60 is orange, more than hour is red. Arrival is 0 or early is green, 1-30 minutes is yellow, 31-60 is orange, and hour or more is red. Now the current temperature reflects the current humidity based on a gradient from white to blue, blue being 100% humid and white being 0%.
 
 So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first. Also again if you find a ICAO code that I don't have let me know so I can add it for others. The connection timeout errors should be fixed now, also updated some of the weathe icons.
