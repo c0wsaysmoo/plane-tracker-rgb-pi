@@ -26,17 +26,19 @@ class PlaneDetailsScene(object):
             
         distance = self._data[self._data_index]["distance"]
         direction = self._data[self._data_index]["direction"]
+        distance_origin = int(self._data[self._data_index]["distance_origin"])
+        distance_destination = int(self._data[self._data_index]["distance_destination"])
 
         # Convert distance to either miles or kilometers based on UNITS configuration
         if DISTANCE_UNITS == "imperial":
-            distance_units = "Miles"
+            distance_units = "mi"
         elif DISTANCE_UNITS == "metric":
             distance_units = "KM"
         else:
             distance_units = "Units"
 
         # Construct the plane details string
-        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f} {distance_units} {self._data[self._data_index]["direction"]}'
+        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f}{distance_units} {self._data[self._data_index]["direction"]}'
         
         # Print plane details to terminal for debugging
         #print(plane)
