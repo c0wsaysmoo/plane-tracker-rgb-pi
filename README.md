@@ -1,15 +1,7 @@
 # planefinal
-
-Quick update, now you can choose the distance in either Km or Miles
-
-Can't help myself and I changed it again. The Origin/destination airport code now is color based. If the plane took off within 20 minutes of scheduled departure its green, 20-40min is yellow, 40-60 is orange, more than hour is red. Arrival is 0 or early is green, 1-30 minutes is yellow, 31-60 is orange, and hour or more is red. Now the current temperature reflects the current humidity based on a gradient from white to blue, blue being 100% humid and white being 0%.
-
-So changed the source of the weather since it was constantly off to Tomorrow.IO in order to do that had to make other adjustments. Now it'll only pull the current temp every 10 minutes, and update the forecast at every hour. also if you are already using this you'll need to get pyzt. as always if you have any issues I'll do my best to help but I don't think I can do much. Please read the entire README first. Also again if you find a ICAO code that I don't have let me know so I can add it for others. The connection timeout errors should be fixed now, also updated some of the weathe icons.
-
 Hello.
-So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work
-I just added and changed his layout to include scrolling of the full airline name instead of callsign ie Airline Name 1234 instead of aln1234 and added the matching logo in the corner. If there is no logo than it defaults to a blank plane. The logo is tied to the ICAO code where the airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. Also now displays the distance and direction from your location to the airplane and wil update as the plane flies through the box.
-I also added a 3 day forecast, well today and the next two days with the high and low temp.
+So the basis of this project came from https://github.com/ColinWaddell/its-a-plane-python and his instructions are way better than mine. Mine is running on a Pi3A+ with adafruit bonnet (not hat) https://www.adafruit.com/product/3211 and a 64x32 rgb panel https://www.adafruit.com/product/2278 although any should work.
+This will pull the logo from my database that matches the ICAO code. If there is no logo than it defaults to a blank plane. The airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. The airport codes are color coordinated to reflect the scheduled departure and arrival and actual and estimated. If the plane took off 0-20 from scheduled departure its green, 20-40 minutes is yellow, 40-60 minutes is orange, and over an hour is red. With the arrival if its estimated on time or early its green, 0-30 min late is yellow, 30-60 min late is orange, and hour plus is red. It now tells you the flights current distance from the origin airport and the distance left to the destination airport. It'll tell you the current distance and direction the plane is from your house as well and the distances and direction update the plane goes by. This has a 3 day forecast and the current temperature reflects the current humidity based on a white-blue gradient of 0% humid being white and 100% humid being blue. Since the logos are from my own collection I obviously don't have them all so if you find any missing add them or let me know so I can add them for others. IE a plane goes by and it says an airline but gives a blank plane picture. In the config file youll need the altitude of your house in feet. You can also choose to display the temperature to C or F and the distances in mi or KM in the config file. I don't foresee many more updates do this, but who knows?
 
 once you get the pi going
 
@@ -53,6 +45,7 @@ I'm on reddit under this name if you have any questions or let me know if you ma
 ![PXL_20230813_181336664](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4578076f-61c9-45cd-b8f6-3fbda4461e0e)
 ![PXL_20230813_180324239](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/40d73504-a369-40b8-94b6-c13fb73816dd)
 ![PXL_20230813_180224460](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/1e19cec5-1937-4dae-ba94-de75091ade59)
+![PXL_20230819_190424332](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/aff9d3dc-eeb1-40b3-963a-d243fb5db403)
 
 
 
