@@ -31,10 +31,8 @@ except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
     ZONE_DEFAULT = {"tl_y": 62.61, "tl_x": -13.07, "br_y": 49.71, "br_x": 3.46}
     LOCATION_DEFAULT = [51.509865, -0.118092, EARTH_RADIUS_M]
-
-
-def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
-    def polar_to_cartesian(lat, long, alt):
+    
+def polar_to_cartesian(lat, long, alt):
         DEG2RAD = math.pi / 180
         return [
             alt * math.cos(DEG2RAD * lat) * math.sin(DEG2RAD * long),
@@ -42,14 +40,15 @@ def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
             alt * math.cos(DEG2RAD * lat) * math.cos(DEG2RAD * long),
         ]
 
-    def feet_to_miles_plus_earth(altitude_ft):
-        return (altitude_ft) / 5280 + EARTH_RADIUS_M
+def feet_to_miles_plus_earth(altitude_ft):
+        return ((altitude_ft) / 5280) + EARTH_RADIUS_M
 
+def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     try:
         (x0, y0, z0) = polar_to_cartesian(
             flight.latitude,
             flight.longitude,
-            feet_to_miles_plus_earth(flight.altitude),
+            feet_to_miles_plus_earth(home[2]),
         )
 
         (x1, y1, z1) = polar_to_cartesian(
@@ -69,7 +68,7 @@ def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     except AttributeError:
         # on error say it's far away
         return 1e6
-        
+               
 def plane_bearing(flight, home=LOCATION_DEFAULT):
   # Convert latitude and longitude to radians
   lat1 = math.radians(home[0])
@@ -98,6 +97,69 @@ def degrees_to_cardinal(d):
     ix = int((d + 22.5)/45)
     return dirs[ix % 8]
 
+def distance_from_flight_to_origin(flight, origin_latitude, origin_longitude, origin_altitude):
+    if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
+        try:
+            #print("Flight Data: latitude =", flight.latitude, "longitude =", flight.longitude, "altitude =", flight.altitude)
+            #print("Origin data: latitude =", origin_latitude, "longitude =", origin_longitude, "altitude =", origin_altitude)
+
+            (x1, y1, z1) = polar_to_cartesian(
+                flight.latitude,
+                flight.longitude,
+                feet_to_miles_plus_earth(flight.altitude),
+            )
+
+            (x0, y0, z0) = polar_to_cartesian(
+                origin_latitude,
+                origin_longitude,
+                feet_to_miles_plus_earth(origin_altitude),
+            )
+
+            dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+
+            if DISTANCE_UNITS == "metric":
+                dist_km = dist_miles * 1.609  # Convert miles to kilometers
+                return dist_km
+            else:
+                return dist_miles
+        except Exception as e:
+            print("Error:", e)
+            return None
+    else:
+        print("Flight data is missing required attributes: latitude, longitude, or altitude")
+        return None
+
+def distance_from_flight_to_destination(flight, destination_latitude, destination_longitude, destination_altitude):
+    if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
+        try:
+            #print("Flight Data: latitude =", flight.latitude, "longitude =", flight.longitude, "altitude =", flight.altitude)
+            #print("destination data: latitude =", destination_latitude, "longitude =", destination_longitude, "altitude =", destination_altitude)
+            (x1, y1, z1) = polar_to_cartesian(
+                flight.latitude,
+                flight.longitude,
+                feet_to_miles_plus_earth(flight.altitude),
+            )
+
+            (x0, y0, z0) = polar_to_cartesian(
+                destination_latitude,
+                destination_longitude,
+                feet_to_miles_plus_earth(destination_altitude),
+            )
+
+            dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+
+            if DISTANCE_UNITS == "metric":
+                dist_km = dist_miles * 1.609  # Convert miles to kilometers
+                return dist_km
+            else:
+                return dist_miles
+        except Exception as e:
+            print("Error:", e)
+            return None
+    else:
+        print("Flight data is missing required attributes: latitude, longitude, or altitude")
+        return None
+
 
 class Overhead:
     def __init__(self):
@@ -106,6 +168,7 @@ class Overhead:
         self._data = []
         self._new_data = False
         self._processing = False
+        
 
     def grab_data(self):
         Thread(target=self._grab_data).start()
@@ -191,6 +254,46 @@ class Overhead:
                         time_real_departure = None
                         time_estimated_arrival = None
                         
+                    # Extract origin airport coordinates
+                    origin_latitude = None
+                    origin_longitude = None
+                    origin_altitude = None
+                    if details['airport']['origin'] is not None:
+                        origin_latitude = details['airport']['origin']['position']['latitude']
+                        origin_longitude = details['airport']['origin']['position']['longitude']
+                        origin_altitude = details['airport']['origin']['position']['altitude']
+                        #print("Origin Coordinates:", origin_latitude, origin_longitude, origin_altitude)
+
+                    # Extract destination airport coordinates
+                    destination_latitude = None
+                    destination_longitude = None
+                    destination_altitude = None
+                    if details['airport']['destination'] is not None:
+                        destination_latitude = details['airport']['destination']['position']['latitude']
+                        destination_longitude = details['airport']['destination']['position']['longitude']
+                        destination_altitude = details['airport']['destination']['position']['altitude']
+                        #print("Destination Coordinates:", destination_latitude, destination_longitude, destination_altitude)
+
+                    # Calculate distances using modified functions
+                    distance_origin = 0
+                    distance_destination = 0
+
+                    if origin_latitude is not None:
+                        distance_origin = distance_from_flight_to_origin(
+                            flight,
+                            origin_latitude,
+                            origin_longitude,
+                            origin_altitude
+                        )
+
+                    if destination_latitude is not None:
+                        distance_destination = distance_from_flight_to_destination(
+                            flight,
+                            destination_latitude,
+                            destination_longitude,
+                            destination_altitude
+                        )
+                        
 
                     # Get owner icao
                     try:
@@ -203,8 +306,6 @@ class Overhead:
 
                     owner_iata = flight.airline_iata or "N/A"
                         
-                    # Set altitude to 0 to get "flat" distace
-                    flight.altitude = 593.83202
                     data.append(
                         {
                             "airline": airline,
@@ -219,6 +320,8 @@ class Overhead:
                             "time_estimated_arrival": time_estimated_arrival,
                             "vertical_speed": flight.vertical_speed,
                             "callsign": callsign,
+                            "distance_origin": distance_origin,
+                            "distance_destination": distance_destination,
                             "distance": distance_from_flight_to_home(flight),
                             "direction": degrees_to_cardinal(plane_bearing(flight)),
                         }
