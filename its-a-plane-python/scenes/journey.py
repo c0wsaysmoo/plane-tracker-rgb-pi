@@ -1,6 +1,7 @@
 from utilities.animator import Animator
 from setup import colours, fonts
 from rgbmatrix import graphics
+from config import DISTANCE_UNITS
 
 # Attempt to load config data
 try:
@@ -19,15 +20,19 @@ except (ModuleNotFoundError, NameError, ImportError):
 
 # Setup
 JOURNEY_POSITION = (17, 0)
-JOURNEY_HEIGHT = 13
+JOURNEY_HEIGHT = 10
 JOURNEY_WIDTH = 48
 JOURNEY_SPACING = 5
 JOURNEY_FONT = fonts.regularplus
 JOURNEY_FONT_SELECTED = fonts.regularplus_bold
 ARROW_COLOUR = colours.GREY
+DISTANCE_COLOUR = colours.GREY
+DISTANCE_POSITION = (17, 16)
+DISTANCE_WIDTH = 48
+DISTANCE_FONT = fonts.extrasmall
 
 # Element Positions
-ARROW_POINT_POSITION = (41, 8)
+ARROW_POINT_POSITION = (41, 5)
 ARROW_WIDTH = 3
 ARROW_HEIGHT = 6
 
@@ -41,6 +46,22 @@ class JourneyScene(object):
         # Guard against no data
         if len(self._data) == 0:
             return
+            
+        # Retrieve distance values from the Overhead scene and round to the nearest integer
+        distance_origin = int(self._data[self._data_index]["distance_origin"])
+        distance_destination = int(self._data[self._data_index]["distance_destination"])
+
+        # Convert distance to either miles or kilometers based on UNITS configuration
+        if DISTANCE_UNITS == "imperial":
+            distance_units = "mi"
+        elif DISTANCE_UNITS == "metric":
+            distance_units = "KM"
+        else:
+            distance_units = "Units"
+
+        # Format distance text
+        distance_origin_text = f'{self._data[self._data_index]["distance_origin"]:.0f}{distance_units}'
+        distance_destination_text = f'{self._data[self._data_index]["distance_destination"]:.0f}{distance_units}'
 
         # Grab Airport codes
         origin = self._data[self._data_index]["origin"]
@@ -116,6 +137,40 @@ class JourneyScene(object):
             JOURNEY_HEIGHT,
             destination_color,
             destination if destination else JOURNEY_BLANK_FILLER,
+        )
+        # Calculate the center of the available area
+        center_x = (16 + 64) // 2
+
+        # Calculate the width of each half
+        half_width = (64 - 16) // 2
+
+        # Calculate the width of the text using the font's character width (including space)
+        font_character_width = 4
+        distance_origin_text_width = len(distance_origin_text) * font_character_width
+        distance_destination_text_width = len(distance_destination_text) * font_character_width
+
+        # Calculate the adjusted positions for drawing the text
+        distance_origin_x = center_x - half_width + (half_width - distance_origin_text_width) // 2
+        distance_destination_x = center_x + (half_width - distance_destination_text_width) // 2
+
+        # Draw the distance_origin_text at the adjusted position on the left
+        _ = graphics.DrawText(
+            self.canvas,
+            DISTANCE_FONT,
+            distance_origin_x,
+            DISTANCE_POSITION[1],  # Keep the same vertical position
+            DISTANCE_COLOUR,
+            distance_origin_text,
+        )
+
+        # Draw the distance_destination_text at the adjusted position on the right
+        _ = graphics.DrawText(
+            self.canvas,
+            DISTANCE_FONT,
+            distance_destination_x,
+            DISTANCE_POSITION[1],  # Keep the same vertical position
+            DISTANCE_COLOUR,
+            distance_destination_text,
         )
 
     @Animator.KeyFrame.add(0)
