@@ -27,7 +27,7 @@ This also assumes the bridge is soldered on the bonnet https://learn.adafruit.co
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
 
-You'll need to fill out the config file. I use https://www.latlong.net/ to find lat and long
+You'll need to fill out the config file.
 
 If you want to change the clock to 24hr you'll need to edit the clock.py in scene and change line 29 from ("%l:%M") to ("%H:%M")
 
