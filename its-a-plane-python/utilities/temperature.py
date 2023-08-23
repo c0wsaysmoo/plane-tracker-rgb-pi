@@ -68,7 +68,7 @@ def grab_forecast():
             "fields": [
                 "temperatureMin",
                 "temperatureMax",
-                "weatherCodeDay"
+                "weatherCode"
             ],
             "timesteps": [
                 "1d"
@@ -101,7 +101,7 @@ if forecast_data is not None:
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCodeDay"]
+        weather_code_day = interval["values"]["weatherCode"]
         print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
 else:
     print("Failed to retrieve forecast.")
