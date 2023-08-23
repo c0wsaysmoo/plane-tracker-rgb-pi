@@ -43,11 +43,9 @@ git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
-
-![PXL_20230813_181336664](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4578076f-61c9-45cd-b8f6-3fbda4461e0e)
-![PXL_20230813_180324239](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/40d73504-a369-40b8-94b6-c13fb73816dd)
-![PXL_20230813_180224460](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/1e19cec5-1937-4dae-ba94-de75091ade59)
 ![PXL_20230819_190424332](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/aff9d3dc-eeb1-40b3-963a-d243fb5db403)
+![PXL_20230813_181336664](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4578076f-61c9-45cd-b8f6-3fbda4461e0e)
+
 
 
 
