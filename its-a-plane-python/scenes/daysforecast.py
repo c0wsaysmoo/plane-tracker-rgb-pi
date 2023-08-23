@@ -46,9 +46,9 @@ class DaysForecastScene(object):
             if self._last_hour is not None:
                 self.draw_square(
                     0,
-                    DISTANCE_FROM_TOP - FORECAST_SIZE,
-                    screen.WIDTH,
-                    FORECAST_SIZE,
+                    12,  # Start from the bottom of the screen (32 - 20)
+                    64,  # Width of the area
+                    32,  # Height of the area
                     colours.BLACK,
                 )
             self._last_hour = current_hour
@@ -61,51 +61,79 @@ class DaysForecastScene(object):
 
             if forecast is not None:
                 self._redraw_forecast = False
-                offset = 0
+                offset = 1
+                space_width = screen.WIDTH // 3  # Calculate the width of each third of the screen
+
                 for day in forecast:
-                    # Clear previous temperature values
-                    self.draw_square(
-                        offset + 2,
-                        TEMP_POSITION - FONT_HEIGHT,
-                        offset + 22,
-                        TEMP_POSITION + FONT_HEIGHT,
-                        colours.BLACK
-                    )
+                    # Extract day_name and icon
+                    day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
+                    icon = day["values"]["weatherCodeDay"]
+
+                    # Calculate the maximum width between min and max temperature text
+                    min_temp = f"{day['values']['temperatureMin']:.0f}"
+                    max_temp = f"{day['values']['temperatureMax']:.0f}"
+                    
+                    # Calculate temperature width for min and max temperatures
+                    min_temp_width = len(min_temp) * 4
+                    max_temp_width = len(max_temp) * 4
+
+                    # Calculate temp_x for centering temperature text
+                    temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2
+
+                    # Calculate min_temp_x for centering min temperature text
+                    min_temp_x = temp_x + max_temp_width
+
+                    # Calculate max_temp_x for centering max temperature text
+                    max_temp_x = temp_x
+
+                    # Calculate icon_x for centering the icon
+                    icon_x = offset + (space_width - ICON_SIZE) // 2
+
+                    # Calculate day_x for centering the day name
+                    day_x = offset + (space_width - 12) // 2
 
                     # Draw day
                     _ = graphics.DrawText(
                         self.canvas,
                         TEXT_FONT,
-                        offset + 5,
+                        day_x,
                         DAY_POSITION,
                         DAY_COLOUR,
-                        datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
+                        day_name
                     )
 
                     # Draw the icon
-                    icon = day["values"]["weatherCode"]
                     image = Image.open(f"icons/{icon}.png")
-
-                    # Make image fit our screen.
                     image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
-                    self.matrix.SetImage(image.convert('RGB'), offset + 5, ICON_POSITION)
-
+                    self.matrix.SetImage(image.convert('RGB'), icon_x, ICON_POSITION)
+                    
+                    # Clear previous temperature values
+                    self.draw_square(
+                        min_temp_x,  # Left x coordinate
+                        TEMP_POSITION - FONT_HEIGHT,  # Top y coordinate
+                        max_temp_x + max_temp_width,  # Right x coordinate
+                        TEMP_POSITION + FONT_HEIGHT,  # Bottom y coordinate
+                        colours.BLUE
+                    )
+                    
                     # Draw min temperature
                     _ = graphics.DrawText(
                         self.canvas,
                         TEXT_FONT,
-                        offset + 11,
+                        min_temp_x,
                         TEMP_POSITION,
                         MIN_T_COLOUR,
-                        f"{day['values']['temperatureMin']:.0f}"
+                        min_temp
                     )
+        
                     # Draw max temperature
                     _ = graphics.DrawText(
                         self.canvas,
                         TEXT_FONT,
-                        offset + 2,
+                        max_temp_x,
                         TEMP_POSITION,
                         MAX_T_COLOUR,
-                        f"{day['values']['temperatureMax']:.0f}"
+                        max_temp
                     )
-                    offset += 22
+
+                    offset += space_width
