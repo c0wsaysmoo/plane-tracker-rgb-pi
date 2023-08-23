@@ -13,7 +13,7 @@ except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
     TOMORROW_API_KEY = None
     TEMPERATURE_UNITS = "metric"
-    FORECAST_DAYS = "3"
+    FORECAST_DAYS = 2
 
 if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
     TEMPERATURE_UNITS = "metric"
