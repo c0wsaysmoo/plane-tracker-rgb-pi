@@ -19,4 +19,4 @@ GPIO_SLOWDOWN = 2
 JOURNEY_CODE_SELECTED = "xxx" # the airport code of where you live
 JOURNEY_BLANK_FILLER = " ? "
 HAT_PWM_ENABLED = True #if you didn't solder type False
-FORECAST_DAYS = 2 #today plus the next two days
+FORECAST_DAYS = 3 #today plus the next two days
