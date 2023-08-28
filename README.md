@@ -1,4 +1,5 @@
 # planefinal
+found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
 Minor update, can now handle 3 digit temperatures in the max/min
 
 Hello.
