@@ -8,7 +8,7 @@ from rgbmatrix import graphics
 # Setup
 DATE_COLOUR = colours.TEAL
 DATE_FONT = fonts.extrasmall
-DATE_POSITION = (41, 11)
+DATE_POSITION = (40, 11)
 
 
 class DateScene(object):
