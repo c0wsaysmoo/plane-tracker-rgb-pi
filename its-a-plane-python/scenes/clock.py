@@ -7,7 +7,7 @@ from rgbmatrix import graphics
 
 # Setup
 CLOCK_FONT = fonts.large_bold
-CLOCK_POSITION = (1, 11)
+CLOCK_POSITION = (0, 11)
 CLOCK_COLOUR = colours.TEAL  
 
 
