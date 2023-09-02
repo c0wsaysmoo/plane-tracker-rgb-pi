@@ -90,7 +90,7 @@ class DaysForecastScene(object):
                     icon_x = offset + (space_width - ICON_SIZE) // 2
 
                     # Calculate day_x for centering the day name
-                    day_x = offset + (space_width - 12) // 2
+                    day_x = offset + (space_width - 12) // 2 + 1
 
                     # Draw day
                     _ = graphics.DrawText(
