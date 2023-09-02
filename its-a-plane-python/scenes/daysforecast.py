@@ -78,7 +78,7 @@ class DaysForecastScene(object):
                     max_temp_width = len(max_temp) * 4
 
                     # Calculate temp_x for centering temperature text
-                    temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2
+                    temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2 + 1
 
                     # Calculate min_temp_x for centering min temperature text
                     min_temp_x = temp_x + max_temp_width
