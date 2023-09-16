@@ -48,40 +48,47 @@ def grab_temperature_and_humidity(retries=3, delay=1):
 
     return current_temp, humidity
 
-def grab_forecast():
-    # Get the current time
-    current_time = datetime.utcnow()
-    # Add 6 hours to the current time
-    dt = current_time + timedelta(hours=6)
-    forecast = None
-    resp = r.post(
-        f"{TOMORROW_API_URL}/timelines",
-        headers={
-            "Accept-Encoding": "gzip",
-            "accept": "application/json",
-            "content-type": "application/json"
-        },
-        params={"apikey": TOMORROW_API_KEY}, 
-        json={
-            "location": TEMPERATURE_LOCATION,
-            "units": TEMPERATURE_UNITS,
-            "fields": [
-                "temperatureMin",
-                "temperatureMax",
-                "weatherCode"
-            ],
-            "timesteps": [
-                "1d"
-            ],
-            "startTime": dt.isoformat(),
-            "endTime": (dt+timedelta(days=int(FORECAST_DAYS))).isoformat()
-        }
-    )    
-    try:
-        forecast = resp.json()["data"]["timelines"][0]["intervals"]
-    except Exception as e:
-        print(f"An error... {e}")
-    return forecast
+def grab_forecast(retries=3, delay=2):
+    for attempt in range(retries):
+        try:
+            # Get the current time
+            current_time = datetime.utcnow()
+            # Add 6 hours to the current time
+            dt = current_time + timedelta(hours=6)
+            
+            resp = r.post(
+                f"{TOMORROW_API_URL}/timelines",
+                headers={
+                    "Accept-Encoding": "gzip",
+                    "accept": "application/json",
+                    "content-type": "application/json"
+                },
+                params={"apikey": TOMORROW_API_KEY}, 
+                json={
+                    "location": TEMPERATURE_LOCATION,
+                    "units": TEMPERATURE_UNITS,
+                    "fields": [
+                        "temperatureMin",
+                        "temperatureMax",
+                        "weatherCodeDay"
+                    ],
+                    "timesteps": [
+                        "1d"
+                    ],
+                    "startTime": dt.isoformat(),
+                    "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
+                }
+            )    
+            resp.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+            forecast = resp.json()["data"]["timelines"][0]["intervals"]
+            return forecast
+        except (r.exceptions.RequestException, KeyError) as e:
+            print(f"Attempt {attempt + 1} failed. Error: {e}")
+            if attempt < retries - 1:
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+    
+    return None  # Return None if all retries fail
     
 # Example usage
 temperature, humidity = grab_temperature_and_humidity(retries=3, delay=2)
@@ -101,7 +108,7 @@ if forecast_data is not None:
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCode"]
+        weather_code_day = interval["values"]["weatherCodeDay"]
         print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
 else:
     print("Failed to retrieve forecast.")
