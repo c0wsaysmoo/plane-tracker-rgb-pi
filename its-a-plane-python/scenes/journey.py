@@ -26,7 +26,7 @@ JOURNEY_SPACING = 5
 JOURNEY_FONT = fonts.regularplus
 JOURNEY_FONT_SELECTED = fonts.regularplus_bold
 ARROW_COLOUR = colours.GREY
-DISTANCE_COLOUR = colours.GREY
+DISTANCE_COLOUR = colours.CYAN
 DISTANCE_POSITION = (17, 16)
 DISTANCE_WIDTH = 48
 DISTANCE_FONT = fonts.extrasmall
@@ -92,12 +92,14 @@ class JourneyScene(object):
         # Set colors based on departure and arrival delays
         if departure_delay_minutes <= 20:
             origin_color = colours.LIMEGREEN
-        elif 0 < departure_delay_minutes <= 40:
+        elif 20 < departure_delay_minutes <= 40:
             origin_color = colours.YELLOW
-        elif 30 < departure_delay_minutes <= 60:
+        elif 40 < departure_delay_minutes <= 60:
             origin_color = colours.ORANGE
-        else:
+        elif 60 < departure_delay_minutes <= 240:
             origin_color = colours.RED
+        else:
+            origin_color = colours.PINK_DARK
         
         if arrival_delay_minutes <= 0:
             destination_color = colours.LIMEGREEN
@@ -105,8 +107,10 @@ class JourneyScene(object):
             destination_color = colours.YELLOW
         elif 30 < arrival_delay_minutes <= 60:
             destination_color = colours.ORANGE
-        else:
+        elif 60 < arrival_delay_minutes <= 240:
             destination_color = colours.RED
+        else:
+            destination_color = colours.PINK_DARK
         
         # Draw background with the chosen color
         self.draw_square(
