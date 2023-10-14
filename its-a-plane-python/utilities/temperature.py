@@ -23,7 +23,7 @@ from config import TEMPERATURE_LOCATION
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
 
-def grab_temperature_and_humidity(retries=3, delay=1):
+def grab_temperature_and_humidity(retries=60, delay=5):
     current_temp, humidity = None, None
 
     for attempt in range(retries):
@@ -48,7 +48,7 @@ def grab_temperature_and_humidity(retries=3, delay=1):
 
     return current_temp, humidity
 
-def grab_forecast(retries=3, delay=2):
+def grab_forecast(retries=60, delay=5):
     for attempt in range(retries):
         try:
             # Get the current time
@@ -70,7 +70,7 @@ def grab_forecast(retries=3, delay=2):
                     "fields": [
                         "temperatureMin",
                         "temperatureMax",
-                        "weatherCode"
+                        "weatherCodeDay"
                     ],
                     "timesteps": [
                         "1d"
@@ -108,7 +108,7 @@ if forecast_data is not None:
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCode"]
+        weather_code_day = interval["values"]["weatherCodeDay"]
         print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
 else:
     print("Failed to retrieve forecast.")
