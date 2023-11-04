@@ -1,5 +1,5 @@
 # planefinal
-found a better collection of airline logos that I should have most of them. found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
+crap looks like in all the updates the default plane pic got taken out, so that is fixed now. found a better collection of airline logos that I should have most of them. found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
 Minor update, can now handle 3 digit temperatures in the max/min
 
 Hello.
