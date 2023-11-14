@@ -1,6 +1,7 @@
 # planefinal
 crap looks like in all the updates the default plane pic got taken out, so that is fixed now. found a better collection of airline logos that I should have most of them. found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
-Minor update, can now handle 3 digit temperatures in the max/min
+More updates (I need a new hobby)
+The clock changes color at sunrise and sunset, the date changes based on the current moonphase (white is full moon, purple is new moon, waning will have white on the left side, and waxing will have white on the right side), the distrance to origin and destination airport the units are now a different color to make it easier to read AND I put the 12/24clock preference in the config file.
 
 Hello.
 So the basis of this project came from [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) and his instructions are way better than mine. Mine is running on a Pi3A+ with [adafruit bonnet](https://www.adafruit.com/product/3211) (not hat) and a [64x32 rgb panel](https://www.adafruit.com/product/2278) although any should work.
@@ -32,7 +33,6 @@ When you use git to pull these files you'll have to move everything into a folde
 
 You'll need to fill out the config file.
 
-If you want to change the clock to 24hr you'll need to edit the clock.py in scene and change line 29 from ("%l:%M") to ("%H:%M")
 
 FYI the logos are going to be a little blurry, again they are 16x16 pixels so you can only do so much and since most were batch shrunk they haven't been touched up. If youd like to touch them up and add them that would be great OR add ones that are missing. Just save the new logo as XXX.png and 16x16 size and put it into the logo folder. I have most of them.
 
