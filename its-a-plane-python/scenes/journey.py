@@ -27,6 +27,7 @@ JOURNEY_FONT = fonts.regularplus
 JOURNEY_FONT_SELECTED = fonts.regularplus_bold
 ARROW_COLOUR = colours.GREY
 DISTANCE_COLOUR = colours.CYAN
+DISTANCE_MEASURE = colours.TEAL
 DISTANCE_POSITION = (17, 16)
 DISTANCE_WIDTH = 48
 DISTANCE_FONT = fonts.extrasmall
@@ -156,26 +157,32 @@ class JourneyScene(object):
         # Calculate the adjusted positions for drawing the text
         distance_origin_x = center_x - half_width + (half_width - distance_origin_text_width) // 2
         distance_destination_x = center_x + (half_width - distance_destination_text_width) // 2
+        
+      # Iterate through each character in distance_origin_text
+        distance_origin_text_length = 0
+        for ch in distance_origin_text:
+            ch_length = graphics.DrawText(
+                self.canvas,
+                DISTANCE_FONT,
+                distance_origin_x + distance_origin_text_length,
+                DISTANCE_POSITION[1],  # Keep the same vertical position
+                DISTANCE_COLOUR if ch.isnumeric() else DISTANCE_MEASURE,
+                ch,
+            )
+            distance_origin_text_length += ch_length
 
-        # Draw the distance_origin_text at the adjusted position on the left
-        _ = graphics.DrawText(
-            self.canvas,
-            DISTANCE_FONT,
-            distance_origin_x,
-            DISTANCE_POSITION[1],  # Keep the same vertical position
-            DISTANCE_COLOUR,
-            distance_origin_text,
-        )
-
-        # Draw the distance_destination_text at the adjusted position on the right
-        _ = graphics.DrawText(
-            self.canvas,
-            DISTANCE_FONT,
-            distance_destination_x,
-            DISTANCE_POSITION[1],  # Keep the same vertical position
-            DISTANCE_COLOUR,
-            distance_destination_text,
-        )
+        # Iterate through each character in distance_destination_text
+        distance_destination_text_length = 0
+        for ch in distance_destination_text:
+            ch_length = graphics.DrawText(
+                self.canvas,
+                DISTANCE_FONT,
+                distance_destination_x + distance_destination_text_length,
+                DISTANCE_POSITION[1],  # Keep the same vertical position
+                DISTANCE_COLOUR if ch.isnumeric() else DISTANCE_MEASURE,
+                ch,
+            )
+            distance_destination_text_length += ch_length
 
     @Animator.KeyFrame.add(0)
     def journey_arrow(self):
