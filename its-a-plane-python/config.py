@@ -13,6 +13,7 @@ TEMPERATURE_LOCATION = "xx.xxx,xx.xxx" #lat,long of your place usually the same 
 TOMORROW_API_KEY = "xxxxxxx" # Get an API key from https://www.tomorrow.io/
 TEMPERATURE_UNITS = "imperial" #type metric if you want that instead for whatever reason
 DISTANCE_UNITS = "imperial" #type metric if you want that instead for whatever reason
+CLOCK_FORMAT = "12hr" #use 12hr or 24hr add that to your config file
 MIN_ALTITUDE = 2600 #feet
 BRIGHTNESS = 100
 GPIO_SLOWDOWN = 2
