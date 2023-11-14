@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import requests as r
 import pytz
 import time
+import json 
 
 # Attempt to load config data
 try:
@@ -23,10 +24,10 @@ from config import TEMPERATURE_LOCATION
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
 
-def grab_temperature_and_humidity(retries=60, delay=5):
+def grab_temperature_and_humidity(delay=2):
     current_temp, humidity = None, None
 
-    for attempt in range(retries):
+    while True:
         try:
             request = r.get(
                 f"{TOMORROW_API_URL}/weather/realtime",
@@ -41,19 +42,16 @@ def grab_temperature_and_humidity(retries=60, delay=5):
             current_temp, humidity = data["temperature"], data["humidity"]
             break  # If successful, exit the loop and return the temperature and humidity
         except r.exceptions.RequestException as e:
-            print(f"Attempt {attempt + 1} failed. Error: {e}")
-            if attempt < retries - 1:
-                print(f"Retrying in {delay} seconds...")
-                time.sleep(delay)
+            print(f"Request failed. Error: {e}")
+            print(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
 
     return current_temp, humidity
 
-def grab_forecast(retries=60, delay=5):
-    for attempt in range(retries):
+def grab_forecast(delay=2):
+    while True:
         try:
-            # Get the current time
             current_time = datetime.utcnow()
-            # Add 6 hours to the current time
             dt = current_time + timedelta(hours=6)
             
             resp = r.post(
@@ -70,7 +68,10 @@ def grab_forecast(retries=60, delay=5):
                     "fields": [
                         "temperatureMin",
                         "temperatureMax",
-                        "weatherCode"
+                        "weatherCodeDay",
+                        "sunriseTime",
+                        "sunsetTime",
+                        "moonPhase"
                     ],
                     "timesteps": [
                         "1d"
@@ -79,36 +80,30 @@ def grab_forecast(retries=60, delay=5):
                     "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
                 }
             )    
-            resp.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+            resp.raise_for_status()  # Fix the method name here
+            
+            # Print the raw JSON response for debugging
+            #print("Raw JSON Response:")
+            #print(json.dumps(resp.json(), indent=4))
             forecast = resp.json()["data"]["timelines"][0]["intervals"]
             return forecast
         except (r.exceptions.RequestException, KeyError) as e:
-            print(f"Attempt {attempt + 1} failed. Error: {e}")
-            if attempt < retries - 1:
-                print(f"Retrying in {delay} seconds...")
-                time.sleep(delay)
+            print(f"Request failed. Error: {e}")
+            print(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
     
-    return None  # Return None if all retries fail
+    return None
     
-# Example usage
-temperature, humidity = grab_temperature_and_humidity(retries=3, delay=2)
-if temperature is not None:
-    print(f"Current temperature: {temperature} \u00b0C")  # Or \u00b0F based on TEMPERATURE_UNITS
-else:
-    print("Failed to retrieve temperature.")
-
-if humidity is not None:
-    print(f"Current humidity: {humidity}%")
-else:
-    print("Failed to retrieve humidity.")
-
 forecast_data = grab_forecast()
 if forecast_data is not None:
     print("Weather forecast:")
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCode"]
-        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}")
+        weather_code_day = interval["values"]["weatherCodeDay"]
+        sunrise = interval["values"]["sunriseTime"]
+        sunset = interval["values"]["sunsetTime"]
+        moon_phase = interval["values"]["moonPhase"]
+        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}, Sunrise: {sunrise}, Sunset: {sunset}, Moon Phase: {moon_phase}")
 else:
     print("Failed to retrieve forecast.")
