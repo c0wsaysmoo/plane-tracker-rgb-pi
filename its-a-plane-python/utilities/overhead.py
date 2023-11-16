@@ -2,7 +2,7 @@ from FlightRadar24.api import FlightRadar24API
 from threading import Thread, Lock
 from time import sleep
 import math
-
+from typing import Optional, Tuple
 from config import DISTANCE_UNITS
 
 try:
@@ -45,20 +45,22 @@ def feet_to_miles_plus_earth(altitude_ft):
 
 def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     try:
-        (x0, y0, z0) = polar_to_cartesian(
-            flight.latitude,
-            flight.longitude,
-            feet_to_miles_plus_earth(home[2]),
-        )
+        # Convert latitude and longitude from degrees to radians
+        lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
+        lat2, lon2 = math.radians(home[0]), math.radians(home[1])
 
-        (x1, y1, z1) = polar_to_cartesian(
-            home[0],
-            home[1],
-            feet_to_miles_plus_earth(home[2]),
-        )
+        # Differences in coordinates
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
 
-        dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+        # Haversine formula
+        a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
+        # Haversine distance in miles using the defined Earth radius
+        dist_miles = EARTH_RADIUS_M * c
+
+        # Convert distance units if needed
         if DISTANCE_UNITS == "metric":
             dist_km = dist_miles * 1.609  # Convert miles to kilometers
             return dist_km
@@ -100,23 +102,22 @@ def degrees_to_cardinal(d):
 def distance_from_flight_to_origin(flight, origin_latitude, origin_longitude, origin_altitude):
     if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
         try:
-            #print("Flight Data: latitude =", flight.latitude, "longitude =", flight.longitude, "altitude =", flight.altitude)
-            #print("Origin data: latitude =", origin_latitude, "longitude =", origin_longitude, "altitude =", origin_altitude)
+            # Convert latitude and longitude from degrees to radians
+            lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
+            lat2, lon2 = math.radians(origin_latitude), math.radians(origin_longitude)
 
-            (x1, y1, z1) = polar_to_cartesian(
-                flight.latitude,
-                flight.longitude,
-                feet_to_miles_plus_earth(flight.altitude),
-            )
+            # Differences in coordinates
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
 
-            (x0, y0, z0) = polar_to_cartesian(
-                origin_latitude,
-                origin_longitude,
-                feet_to_miles_plus_earth(origin_altitude),
-            )
+            # Haversine formula
+            a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-            dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+            # Haversine distance in miles using the defined Earth radius
+            dist_miles = EARTH_RADIUS_M * c
 
+            # Convert distance units if needed
             if DISTANCE_UNITS == "metric":
                 dist_km = dist_miles * 1.609  # Convert miles to kilometers
                 return dist_km
@@ -132,22 +133,22 @@ def distance_from_flight_to_origin(flight, origin_latitude, origin_longitude, or
 def distance_from_flight_to_destination(flight, destination_latitude, destination_longitude, destination_altitude):
     if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
         try:
-            #print("Flight Data: latitude =", flight.latitude, "longitude =", flight.longitude, "altitude =", flight.altitude)
-            #print("destination data: latitude =", destination_latitude, "longitude =", destination_longitude, "altitude =", destination_altitude)
-            (x1, y1, z1) = polar_to_cartesian(
-                flight.latitude,
-                flight.longitude,
-                feet_to_miles_plus_earth(flight.altitude),
-            )
+            # Convert latitude and longitude from degrees to radians
+            lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
+            lat2, lon2 = math.radians(destination_latitude), math.radians(destination_longitude)
 
-            (x0, y0, z0) = polar_to_cartesian(
-                destination_latitude,
-                destination_longitude,
-                feet_to_miles_plus_earth(destination_altitude),
-            )
+            # Differences in coordinates
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
 
-            dist_miles = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+            # Haversine formula
+            a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
+            # Haversine distance in miles using the defined Earth radius
+            dist_miles = EARTH_RADIUS_M * c
+
+            # Convert distance units if needed
             if DISTANCE_UNITS == "metric":
                 dist_km = dist_miles * 1.609  # Convert miles to kilometers
                 return dist_km
@@ -172,6 +173,23 @@ class Overhead:
 
     def grab_data(self):
         Thread(target=self._grab_data).start()
+        
+    #def get_airline_logo(self, iata: str, icao: str) -> Optional[Tuple[bytes, str]]:
+        #"""
+        #Download the logo of an airline from FlightRadar24 and return it as bytes.
+        #"""
+        #first_logo_url = Core.airline_logo_url.format(iata, icao)
+
+        # Try to get the image by the first URL option.
+        #response = APIRequest(first_logo_url, headers=Core.image_headers, exclude_status_codes=[403,])
+        #status_code = response.get_status_code()
+
+        #if not str(status_code).startswith("4"):
+            #logo_bytes = response.get_content()
+            #file_extension = first_logo_url.split(".")[-1]
+            #return logo_bytes, file_extension
+        #else:
+            #return None
 
     def _grab_data(self):
         # Mark data as old
