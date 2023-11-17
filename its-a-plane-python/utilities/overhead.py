@@ -40,9 +40,6 @@ def polar_to_cartesian(lat, long, alt):
             alt * math.cos(DEG2RAD * lat) * math.cos(DEG2RAD * long),
         ]
 
-def feet_to_miles_plus_earth(altitude_ft):
-        return ((altitude_ft) / 5280) + EARTH_RADIUS_M
-
 def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     try:
         # Convert latitude and longitude from degrees to radians
