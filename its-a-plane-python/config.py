@@ -6,8 +6,7 @@ ZONE_HOME = {
 }
 LOCATION_HOME = [
     xx.xxx, # Latitude (deg) https://www.latlong.net/
-    xx.xxx, # Longitude (deg)
-    xxx # Altitude (ft) https://whatismyelevation.com/
+    xx.xxx # Longitude (deg)
 ]
 TEMPERATURE_LOCATION = "xx.xxx,xx.xxx" #lat,long of your place usually the same as location_home
 TOMORROW_API_KEY = "xxxxxxx" # Get an API key from https://www.tomorrow.io/
