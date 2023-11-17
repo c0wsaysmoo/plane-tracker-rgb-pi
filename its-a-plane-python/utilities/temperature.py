@@ -68,7 +68,7 @@ def grab_forecast(delay=2):
                     "fields": [
                         "temperatureMin",
                         "temperatureMax",
-                        "weatherCodeDay",
+                        "weatherCode",
                         "sunriseTime",
                         "sunsetTime",
                         "moonPhase"
@@ -100,7 +100,7 @@ if forecast_data is not None:
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCodeDay"]
+        weather_code_day = interval["values"]["weatherCode"]
         sunrise = interval["values"]["sunriseTime"]
         sunset = interval["values"]["sunsetTime"]
         moon_phase = interval["values"]["moonPhase"]
