@@ -15,11 +15,11 @@ you'll want to [install the bonnet](https://learn.adafruit.com/adafruit-rgb-matr
 
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
-sudo apt install python3-pip
+sudo apt install python3-pip 
 
-sudo pip3 install pytz requests
+sudo pip3 install pytz requests (this only works with python version 3.9)
 
-sudo pip3 install FlightRadarAPI
+sudo pip3 install FlightRadarAPI (this only works with python version 3.9)
 
 cd its-a-plane-python
 
