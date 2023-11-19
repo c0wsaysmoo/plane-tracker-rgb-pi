@@ -8,7 +8,7 @@ from utilities.temperature import grab_forecast
 from rgbmatrix import graphics
 
 # Setup
-DAY_COLOUR = colours.GREY
+DAY_COLOUR = colours.PINK_DARK
 MIN_T_COLOUR = colours.BLUE_MEDIUM
 MAX_T_COLOUR = colours.ORANGE
 TEXT_FONT = fonts.extrasmall
