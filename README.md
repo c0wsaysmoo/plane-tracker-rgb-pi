@@ -15,17 +15,38 @@ you'll want to [install the bonnet](https://learn.adafruit.com/adafruit-rgb-matr
 
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
+for python 3.9.#
+
 sudo apt install python3-pip 
 
-sudo pip3 install pytz requests (this only works with python version 3.9)
+sudo pip3 install pytz requests
 
-sudo pip3 install FlightRadarAPI (this only works with python version 3.9)
+sudo pip3 install FlightRadarAPI
 
-cd its-a-plane-python
+for python 3.11.#
+
+sudo apt install python3-pip 
+
+sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
+
+pip3 install pytz requests
+
+pip3 install FlightRadarAPI
+
+sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.11
+
+
 
 
 You'll have to make it executable by running chmod +x /home/path/its-a-plane-python/its-a-plane.py
-Although to get it to run on boot youll have to do a crontab -e and add @reboot sleep 60 && sudo ./its-a-plane.py
+
+you can test run it by the command prompt
+
+sudo /home/path/its-a-plane-python/its-a-plane.py or /home/path/its-a-plane-python/its-a-plane.py
+
+Although to get it to run on boot youll have to do a crontab -e and add @reboot sleep 60 && sudo ./its-a-plane.py #python 3.9
+
+ @reboot sleep 60 && ./its-a-plane.py #python 3.11
 
 This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.com/assets/5772) if that's not the case youll have to be False under "HAT_PWM_ENABLED" in the config file
 
