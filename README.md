@@ -52,6 +52,7 @@ This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
 
+
 You'll need to fill out the config file.
 
 
@@ -65,9 +66,14 @@ git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
-![PXL_20230819_190424332](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/aff9d3dc-eeb1-40b3-963a-d243fb5db403)
-![PXL_20230813_181336664](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4578076f-61c9-45cd-b8f6-3fbda4461e0e)
 
+![PXL_20230623_194045200](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/b901fc67-098b-40d3-91cd-3acf335d06c3)
+![PXL_20230623_194026493](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/ebfca26a-19c1-491c-a44c-93239c9a75f2)
+![PXL_20230623_194018097](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4505c237-88da-49a0-836a-f13e0c5d5631)
+![PXL_20231119_213716793](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/fb2e236c-bc9c-4469-adaa-6b59b7649bce)
+![PXL_20231119_213727328 MP](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/a2121fe6-e051-4097-b4bd-3868c368a068)
+![PXL_20231119_214846285](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/7889a9c0-8b4a-4bb7-bf67-2b2e7a29a16b)
+![PXL_20231119_214848797](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/41a50f29-f12c-41db-b93b-2ef41a8e7805)
 
 
 
