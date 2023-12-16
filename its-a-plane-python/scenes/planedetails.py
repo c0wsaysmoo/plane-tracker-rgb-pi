@@ -3,7 +3,8 @@ from utilities.animator import Animator
 from setup import colours, fonts, screen
 
 # Setup
-PLANE_DETAILS_COLOUR = colours.PINK
+PLANE_COLOUR = colours.TROPICAL_PINK
+PLANE_DISTANCE_COLOUR = colours.TROPICAL_ORANGE
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
@@ -19,29 +20,24 @@ class PlaneDetailsScene(object):
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
-
         # Guard against no data
         if len(self._data) == 0:
             return
-            
-        distance = self._data[self._data_index]["distance"]
-        direction = self._data[self._data_index]["direction"]
-        distance_origin = int(self._data[self._data_index]["distance_origin"])
-        distance_destination = int(self._data[self._data_index]["distance_destination"])
 
-        # Convert distance to either miles or kilometers based on UNITS configuration
-        if DISTANCE_UNITS == "imperial":
-            distance_units = "mi"
-        elif DISTANCE_UNITS == "metric":
-            distance_units = "KM"
-        else:
-            distance_units = "Units"
+        # Extract data
+        plane_data = self._data[self._data_index]
+        plane_name = plane_data["plane"]
+        distance = plane_data["distance"]
+        direction = plane_data["direction"]
+        distance_units = "mi" if DISTANCE_UNITS == "imperial" else "KM"
 
-        # Construct the plane details string
-        plane = f'{self._data[self._data_index]["plane"]} {self._data[self._data_index]["distance"]:.2f}{distance_units} {self._data[self._data_index]["direction"]}'
-        
-        # Print plane details to terminal for debugging
-        #print(plane)
+        # Construct the plane details strings
+        plane_name_text = f'{plane_name} '
+        distance_text = f'{distance:.2f}{distance_units} {direction}'
+
+        # Calculate the widths of each section
+        plane_name_width = len(plane_name_text) * 5
+        distance_direction_text_width = max(len(distance_text) * 5, screen.WIDTH)
 
         # Draw background
         self.draw_square(
@@ -52,23 +48,37 @@ class PlaneDetailsScene(object):
             colours.BLACK,
         )
 
-        # Draw text
-        text_length = graphics.DrawText(
+        # Draw text with different colors for plane name and distance/direction
+        plane_name_width = graphics.DrawText(
             self.canvas,
             PLANE_FONT,
             self.plane_position,
             PLANE_DISTANCE_FROM_TOP,
-            PLANE_DETAILS_COLOUR,
-            plane,
+            PLANE_COLOUR,  # Set the color for the plane name
+            plane_name_text,
         )
+
+        distance_text_width = graphics.DrawText(
+            self.canvas,
+            PLANE_FONT,
+            self.plane_position + plane_name_width,
+            PLANE_DISTANCE_FROM_TOP,
+            PLANE_DISTANCE_COLOUR,  # Set the color for distance/direction
+            distance_text,
+        )
+
+        # Calculate the total width of the text string
+        total_text_width = plane_name_width + distance_text_width
 
         # Handle scrolling
         self.plane_position -= 1
-        if self.plane_position + text_length < 0:
+
+        # Check if the text has completely scrolled off the screen
+        if self.plane_position + total_text_width < 0:
             self.plane_position = screen.WIDTH
             if len(self._data) > 1:
                 self._data_index = (self._data_index + 1) % len(self._data)
-                self._data_all_looped = (not self._data_index) or self._data_all_looped
+                self._data_all_looped = self._data_index == 0  # Set to True when the loop completes
                 self.reset_scene()
 
     @Animator.KeyFrame.add(0)
