@@ -1,7 +1,7 @@
 # planefinal
-crap looks like in all the updates the default plane pic got taken out, so that is fixed now. found a better collection of airline logos that I should have most of them. found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
+found a better collection of airline logos that I should have most of them. Github only allows 1000 files in a folder so I created a new folder. You'll need to move them into 1 folder called "logo" found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
 More updates (I need a new hobby)
-The clock changes color at sunrise and sunset, the date changes based on the current moonphase (white is full moon, purple is new moon, waning will have white on the left side, and waxing will have white on the right side), the distrance to origin and destination airport the units are now a different color to make it easier to read AND I put the 12/24clock preference in the config file.
+The clock changes color at sunrise and sunset, the date changes based on the current moonphase (white is full moon, purple is new moon, waning will have white on the left side, and waxing will have white on the right side), the distrance to origin and destination airport the units are now a different color to make it easier to read AND I put the 12/24clock preference in the config file. The plane type and the distance/direction are now seperate colors. I changed the color palette as well. 
 
 Hello.
 So the basis of this project came from [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) and his instructions are way better than mine. Mine is running on a Pi3A+ with [adafruit bonnet](https://www.adafruit.com/product/3211) (not hat) and a [64x32 rgb panel](https://www.adafruit.com/product/2278) although any should work.
@@ -54,6 +54,9 @@ Although to get it to run on boot youll have to do a crontab -e and add @reboot 
 This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.com/assets/5772) if that's not the case youll have to be False under "HAT_PWM_ENABLED" in the config file
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
+
+You'll have to move all the logos from logo2 into logo
+mv logo1/* logo/
 
 
 You'll need to fill out the config file.
