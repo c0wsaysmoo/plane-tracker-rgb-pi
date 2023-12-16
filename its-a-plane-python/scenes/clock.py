@@ -10,9 +10,8 @@ import logging
 # Setup
 CLOCK_FONT = fonts.large_bold
 CLOCK_POSITION = (0, 11)
-DAY_COLOUR = colours.MELTWATER
-NIGHT_COLOUR = colours.CERULEAN_BLUE
-
+DAY_COLOUR = colours.TROPICAL_LIGHT_BLUE
+NIGHT_COLOUR = colours.TROPICAL_DARK_BLUE
 from config import CLOCK_FORMAT
 
 class ClockScene(object):

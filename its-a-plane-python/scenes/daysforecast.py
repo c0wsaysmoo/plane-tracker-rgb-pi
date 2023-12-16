@@ -8,9 +8,9 @@ from utilities.temperature import grab_forecast
 from rgbmatrix import graphics
 
 # Setup
-DAY_COLOUR = colours.PINK_DARK
-MIN_T_COLOUR = colours.BLUE_MEDIUM
-MAX_T_COLOUR = colours.ORANGE
+DAY_COLOUR = colours.TROPICAL_YELLOW
+MIN_T_COLOUR = colours.TROPICAL_BLUE
+MAX_T_COLOUR = colours.TROPICAL_ORANGE
 TEXT_FONT = fonts.extrasmall
 FONT_HEIGHT = 5
 DISTANCE_FROM_TOP = 32
