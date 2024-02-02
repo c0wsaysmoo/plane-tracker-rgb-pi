@@ -67,7 +67,7 @@ class DaysForecastScene(object):
                 for day in forecast:
                     # Extract day_name and icon
                     day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
-                    icon = day["values"]["weatherCodeDay"]
+                    icon = day["values"]["weatherCode"]
 
                     # Calculate the maximum width between min and max temperature text
                     min_temp = f"{day['values']['temperatureMin']:.0f}"
