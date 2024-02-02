@@ -8,7 +8,7 @@ from utilities.temperature import grab_forecast
 from rgbmatrix import graphics
 
 # Setup
-DAY_COLOUR = colours.TROPICAL_YELLOW
+DAY_COLOUR = colours.TROPICAL_PINK
 MIN_T_COLOUR = colours.TROPICAL_BLUE
 MAX_T_COLOUR = colours.TROPICAL_ORANGE
 TEXT_FONT = fonts.extrasmall
@@ -67,7 +67,7 @@ class DaysForecastScene(object):
                 for day in forecast:
                     # Extract day_name and icon
                     day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
-                    icon = day["values"]["weatherCode"]
+                    icon = day["values"]["weatherCodeDay"]
 
                     # Calculate the maximum width between min and max temperature text
                     min_temp = f"{day['values']['temperatureMin']:.0f}"

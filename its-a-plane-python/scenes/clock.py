@@ -6,12 +6,15 @@ from rgbmatrix import graphics
 import logging
 
 
+# Configure logging
+#logging.basicConfig(filename='myapp.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Setup
 CLOCK_FONT = fonts.large_bold
 CLOCK_POSITION = (0, 11)
-DAY_COLOUR = colours.TROPICAL_LIGHT_BLUE
+DAY_COLOUR = colours.TROPICAL_YELLOW
 NIGHT_COLOUR = colours.TROPICAL_DARK_BLUE
+
 from config import CLOCK_FORMAT
 
 class ClockScene(object):

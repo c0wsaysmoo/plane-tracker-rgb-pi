@@ -1,6 +1,7 @@
 from rgbmatrix import graphics
 from utilities.animator import Animator
 from setup import colours, fonts, screen
+from config import DISTANCE_UNITS
 
 # Setup
 PLANE_COLOUR = colours.TROPICAL_PINK
@@ -8,9 +9,6 @@ PLANE_DISTANCE_COLOUR = colours.TROPICAL_ORANGE
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
-
-from config import DISTANCE_UNITS
-
 
 class PlaneDetailsScene(object):
     def __init__(self):
@@ -78,7 +76,7 @@ class PlaneDetailsScene(object):
             self.plane_position = screen.WIDTH
             if len(self._data) > 1:
                 self._data_index = (self._data_index + 1) % len(self._data)
-                self._data_all_looped = self._data_index == 0  # Set to True when the loop completes
+                self._data_all_looped = (not self._data_index) or self._data_all_looped 
                 self.reset_scene()
 
     @Animator.KeyFrame.add(0)
