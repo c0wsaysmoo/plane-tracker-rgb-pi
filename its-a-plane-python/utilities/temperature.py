@@ -14,7 +14,7 @@ except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
     TOMORROW_API_KEY = None
     TEMPERATURE_UNITS = "metric"
-    FORECAST_DAYS = 2
+    FORECAST_DAYS = 3
 
 if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
     TEMPERATURE_UNITS = "metric"
@@ -68,7 +68,7 @@ def grab_forecast(delay=2):
                     "fields": [
                         "temperatureMin",
                         "temperatureMax",
-                        "weatherCode",
+                        "weatherCodeDay",
                         "sunriseTime",
                         "sunsetTime",
                         "moonPhase"
@@ -100,7 +100,7 @@ if forecast_data is not None:
     for interval in forecast_data:
         temperature_min = interval["values"]["temperatureMin"]
         temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCode"]
+        weather_code_day = interval["values"]["weatherCodeDay"]
         sunrise = interval["values"]["sunriseTime"]
         sunset = interval["values"]["sunsetTime"]
         moon_phase = interval["values"]["moonPhase"]

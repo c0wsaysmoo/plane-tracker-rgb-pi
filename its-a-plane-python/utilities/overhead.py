@@ -40,6 +40,7 @@ def polar_to_cartesian(lat, long, alt):
             alt * math.cos(DEG2RAD * lat) * math.cos(DEG2RAD * long),
         ]
 
+
 def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
     try:
         # Convert latitude and longitude from degrees to radians
@@ -170,23 +171,7 @@ class Overhead:
 
     def grab_data(self):
         Thread(target=self._grab_data).start()
-        
-    #def get_airline_logo(self, iata: str, icao: str) -> Optional[Tuple[bytes, str]]:
-        #"""
-        #Download the logo of an airline from FlightRadar24 and return it as bytes.
-        #"""
-        #first_logo_url = Core.airline_logo_url.format(iata, icao)
 
-        # Try to get the image by the first URL option.
-        #response = APIRequest(first_logo_url, headers=Core.image_headers, exclude_status_codes=[403,])
-        #status_code = response.get_status_code()
-
-        #if not str(status_code).startswith("4"):
-            #logo_bytes = response.get_content()
-            #file_extension = first_logo_url.split(".")[-1]
-            #return logo_bytes, file_extension
-        #else:
-            #return None
 
     def _grab_data(self):
         # Mark data as old

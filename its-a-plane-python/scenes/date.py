@@ -47,7 +47,7 @@ class DateScene(object):
             [colours.PINK_DARK, colours.MIDDLE_PURPLE],  # Moon phase 1
             [colours.PINK_DARK, colours.WHITE],  # Moon phase 2
             [colours.MIDDLE_PURPLE, colours.WHITE],  # Moon phase 3
-            [colours.GREY, colours.GREY],  # Moon phase 4 (no gradient, same color,using grey since white is bright)
+            [colours.GREY, colours.GREY],  # Moon phase 4 (no gradient, same color)
             [colours.WHITE, colours.MIDDLE_PURPLE],  # Moon phase 5
             [colours.WHITE, colours.PINK_DARK],  # Moon phase 6
             [colours.MIDDLE_PURPLE, colours.PINK_DARK]  # Moon phase 7 (middle_purple to PINK_DARK gradient)
