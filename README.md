@@ -61,7 +61,7 @@ When you use git to pull these files you'll have to move everything into a folde
 
 You'll have to move all the logos from logo2 into logo
 
-mv logo1/* logo/
+mv /home/path/logo2/* /home/path/logo/
 
 
 You'll need to fill out the config file.
