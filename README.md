@@ -59,9 +59,13 @@ This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.
 
 When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
 
-You'll have to move all the logos from logo2 into logo
+You'll have to move all the logos from logo2 and logo into logos
 
-mv /home/path/logo2/* /home/path/logo/
+mkdir /home/path/logos
+
+mv /home/path/logo/* /home/path/logos/
+
+mv /home/path/logo2/* /home/path/logos/
 
 
 You'll need to fill out the config file.
