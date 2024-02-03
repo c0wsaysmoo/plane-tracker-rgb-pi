@@ -16,6 +16,10 @@ ssh into it and at the command prompt
 
 you'll want to [install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) 
 
+you'll need to install git and login with your stuff
+
+sudo apt-get install git
+
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
 for python 3.9.#
