@@ -22,7 +22,7 @@ sudo apt-get install git
 
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 
-for python 3.9.#
+for Linux Bullseye
 
 sudo apt install python3-pip 
 
@@ -30,7 +30,7 @@ sudo pip3 install pytz requests
 
 sudo pip3 install FlightRadarAPI
 
-for python 3.11.#
+for Linux Bookworm
 
 sudo apt install python3-pip 
 
@@ -51,9 +51,9 @@ you can test run it by the command prompt
 
 sudo /home/path/its-a-plane-python/its-a-plane.py or /home/path/its-a-plane-python/its-a-plane.py
 
-Although to get it to run on boot youll have to do a crontab -e and add @reboot sleep 60 && sudo ./its-a-plane.py #python 3.9
+Although to get it to run on boot youll have to do a crontab -e and add @reboot sleep 60 && sudo ./its-a-plane.py #Bulleyes
 
- @reboot sleep 60 && ./its-a-plane.py #python 3.11
+ @reboot sleep 60 && ./its-a-plane.py #Bookworm
 
 This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.com/assets/5772) if that's not the case youll have to be False under "HAT_PWM_ENABLED" in the config file
 
