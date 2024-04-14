@@ -4,7 +4,7 @@ from PIL import Image
 from utilities.animator import Animator
 from setup import colours, fonts, frames, screen
 from utilities.temperature import grab_forecast
-
+from config import NIGHT_START, NIGHT_END
 from rgbmatrix import graphics
 
 # Setup
@@ -16,11 +16,11 @@ FONT_HEIGHT = 5
 DISTANCE_FROM_TOP = 32
 ICON_SIZE = 10
 FORECAST_SIZE = FONT_HEIGHT * 2 + ICON_SIZE
-
 DAY_POSITION = DISTANCE_FROM_TOP - FONT_HEIGHT - ICON_SIZE
 ICON_POSITION = DISTANCE_FROM_TOP - FONT_HEIGHT - ICON_SIZE
 TEMP_POSITION = DISTANCE_FROM_TOP
-
+NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
+NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
 
 class DaysForecastScene(object):
     def __init__(self):
@@ -31,6 +31,11 @@ class DaysForecastScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
+        now = datetime.now().replace(microsecond=0).time()
+        if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
+            self._redraw_forecast = True
+            return    
+    
         # Ensure redraw when there's new data
         if len(self._data):
             self._redraw_forecast = True
