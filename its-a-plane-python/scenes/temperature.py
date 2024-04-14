@@ -4,12 +4,14 @@ from rgbmatrix import graphics
 from utilities.animator import Animator
 from setup import colours, fonts, frames, screen
 from utilities.temperature import grab_temperature_and_humidity
+from config import NIGHT_START, NIGHT_END
 
 # Scene Setup
 TEMPERATURE_REFRESH_SECONDS = 600
 TEMPERATURE_FONT = fonts.small
 TEMPERATURE_FONT_HEIGHT = 6
-
+NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
+NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
 
 class TemperatureScene(object):
     def __init__(self):
@@ -32,7 +34,11 @@ class TemperatureScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def temperature(self, count):
-        
+        now = datetime.now().replace(microsecond=0).time()
+        if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
+            self._redraw_temp = True
+            return  
+            
         # Ensure redraw when there's new data
         if len(self._data):
             self._redraw_temp = True
