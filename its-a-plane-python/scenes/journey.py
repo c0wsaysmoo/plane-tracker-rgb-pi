@@ -99,9 +99,12 @@ class JourneyScene(object):
             origin_color = colours.ORANGE
         elif 60 < departure_delay_minutes <= 240:
             origin_color = colours.RED
-        else:
+        elif 240 < departure_delay_minutes <= 480:
             origin_color = colours.PINK_DARK
+        else:
+            origin_color = colours.BLUE
         
+        # Adjust colors for arrival delays
         if arrival_delay_minutes <= 0:
             destination_color = colours.LIMEGREEN
         elif 0 < arrival_delay_minutes <= 30:
@@ -110,8 +113,10 @@ class JourneyScene(object):
             destination_color = colours.ORANGE
         elif 60 < arrival_delay_minutes <= 240:
             destination_color = colours.RED
-        else:
+        elif 240 < arrival_delay_minutes <= 480:
             destination_color = colours.PINK_DARK
+        else:
+            destination_color = colours.BLUE
         
         # Draw background with the chosen color
         self.draw_square(
