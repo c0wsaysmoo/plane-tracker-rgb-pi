@@ -31,6 +31,7 @@ class DaysForecastScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
+        #redraws the screen at night start and end so it'll adjust the brightness
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
             self._redraw_forecast = True
