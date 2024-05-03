@@ -52,10 +52,10 @@ class DateScene(object):
             [colours.PINK_DARK, colours.MIDDLE_PURPLE],  # Moon phase 1
             [colours.PINK_DARK, colours.WHITE],  # Moon phase 2
             [colours.MIDDLE_PURPLE, colours.WHITE],  # Moon phase 3
-            [colours.GREY, colours.GREY],  # Moon phase 4 (no gradient, same color)
+            [colours.GREY, colours.GREY],  # Moon phase 4
             [colours.WHITE, colours.MIDDLE_PURPLE],  # Moon phase 5
             [colours.WHITE, colours.PINK_DARK],  # Moon phase 6
-            [colours.MIDDLE_PURPLE, colours.PINK_DARK]  # Moon phase 7 (middle_purple to PINK_DARK gradient)
+            [colours.MIDDLE_PURPLE, colours.PINK_DARK]  # Moon phase 7
             # Define colors for the remaining phases as needed
         ]
 
@@ -88,6 +88,7 @@ class DateScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def date(self, count):
+        #redraws the screen at night start and end so it'll adjust the brightness
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
             self._last_date = None
