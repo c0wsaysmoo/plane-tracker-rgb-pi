@@ -68,7 +68,7 @@ def grab_forecast(delay=2):
                     "fields": [
                         "temperatureMin",
                         "temperatureMax",
-                        "weatherCode",
+                        "weatherCodeFullDay",
                         "sunriseTime",
                         "sunsetTime",
                         "moonPhase"
@@ -94,16 +94,16 @@ def grab_forecast(delay=2):
     
     return None
     
-forecast_data = grab_forecast()
-if forecast_data is not None:
-    print("Weather forecast:")
-    for interval in forecast_data:
-        temperature_min = interval["values"]["temperatureMin"]
-        temperature_max = interval["values"]["temperatureMax"]
-        weather_code_day = interval["values"]["weatherCode"]
-        sunrise = interval["values"]["sunriseTime"]
-        sunset = interval["values"]["sunsetTime"]
-        moon_phase = interval["values"]["moonPhase"]
-        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}, Sunrise: {sunrise}, Sunset: {sunset}, Moon Phase: {moon_phase}")
-else:
-    print("Failed to retrieve forecast.")
+#forecast_data = grab_forecast()
+#if forecast_data is not None:
+#    print("Weather forecast:")
+#    for interval in forecast_data:
+#        temperature_min = interval["values"]["temperatureMin"]
+#        temperature_max = interval["values"]["temperatureMax"]
+#        weather_code_day = interval["values"]["weatherCodeFullDay"]
+#        sunrise = interval["values"]["sunriseTime"]
+#        sunset = interval["values"]["sunsetTime"]
+#        moon_phase = interval["values"]["moonPhase"]
+#        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}, Sunrise: {sunrise}, Sunset: {sunset}, Moon Phase: {moon_phase}")
+#else:
+#    print("Failed to retrieve forecast.")
