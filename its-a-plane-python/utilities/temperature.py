@@ -38,10 +38,25 @@ def grab_temperature_and_humidity(delay=2):
                 }
             )
             request.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
-            data = request.json()["data"]["values"]
-            current_temp, humidity = data["temperature"], data["humidity"]
-            break  # If successful, exit the loop and return the temperature and humidity
-        except r.exceptions.RequestException as e:
+            
+            # Print the raw JSON response for debugging
+            #print("Raw JSON Response:")
+            #print(json.dumps(request.json(), indent=4))
+            
+            # Safely extract data
+            data = request.json().get("data", {}).get("values", {})
+            current_temp = data.get("temperature")
+            humidity = data.get("humidity")
+
+            # Retry if temperature or humidity is missing
+            if current_temp is None or humidity is None:
+                print("Temperature or humidity data not available in response.")
+                raise KeyError("Missing temperature or humidity in API response.")
+            
+            # If the data is valid, exit the loop
+            break
+
+        except (r.exceptions.RequestException, KeyError) as e:
             print(f"Request failed. Error: {e}")
             print(f"Retrying in {delay} seconds...")
             time.sleep(delay)
