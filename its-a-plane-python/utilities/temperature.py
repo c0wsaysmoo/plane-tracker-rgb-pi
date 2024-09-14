@@ -95,16 +95,25 @@ def grab_forecast(delay=2):
                     "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
                 }
             )    
-            resp.raise_for_status()  # Fix the method name here
-            
-            # Print the raw JSON response for debugging
-            #print("Raw JSON Response:")
-            #print(json.dumps(resp.json(), indent=4))
-            forecast = resp.json()["data"]["timelines"][0]["intervals"]
+            resp.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+
+            # Safely access the JSON response to avoid KeyError
+            data = resp.json().get("data", {})
+            timelines = data.get("timelines", [])
+
+            if not timelines:
+                raise KeyError("Timelines not found in response.")
+
+            forecast = timelines[0].get("intervals", [])
+
+            if not forecast:
+                raise KeyError("Forecast intervals not found in timelines.")
+
             return forecast
+
         except (r.exceptions.RequestException, KeyError) as e:
-            print(f"Request failed. Error: {e}")
-            print(f"Retrying in {delay} seconds...")
+            logging.error(f"Request failed. Error: {e}")
+            logging.info(f"Retrying in {delay} seconds...")
             time.sleep(delay)
     
     return None
