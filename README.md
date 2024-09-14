@@ -1,6 +1,4 @@
 # planefinal
-New updates 
-I added dimming so you can auto dim the display between x times you can set how dim it gets and when it starts and ends or you can leave the dimming off. I found a better collection of airline logos that I should have most of them. Github only allows 1000 files in a folder so I created a new folder. You'll need to move them into 1 folder called "logos" found a weird issue where I had to disable the IVP6 on the raspberry pi or else it kept losing connection and would see the blinking light in the top right flashing nonstop so you may have to do that as well
 
 Hello.
 So the basis of this project came from [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) and his instructions are way better than mine. Mine is running on a Pi3A+ with [adafruit bonnet](https://www.adafruit.com/product/3211) (not hat) and a [64x32 rgb panel](https://www.adafruit.com/product/2278) although any should work.
@@ -78,6 +76,14 @@ If you want to add a power button, you'll need to solder onto the bonnet pins on
 git clone https://github.com/Howchoo/pi-power-button.git
 
 ./pi-power-button/script/install
+
+(if you have bookworm you'll need to do the following)
+
+sudo nano /boot/firmware/config.txt
+
+and at the bottom under "all" add
+
+dtoverlay=gpio-shutdown,gpio_pin=3,active_low=1,gpio_pull=up
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
 
