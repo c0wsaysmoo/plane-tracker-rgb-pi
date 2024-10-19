@@ -72,7 +72,7 @@ You'll need Git for downloading the project files and other resources:
 sudo apt-get install git
 git config --global user.name "YOUR NAME"
 git config --global user.email "YOUR EMAIL"
-
+```
 Clone the repository:
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
