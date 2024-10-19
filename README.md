@@ -150,7 +150,7 @@ For Bullseye
 ```
 
 Optional: Add a Power Button
-If you'd like to add a power button, you can solder the **GND/SCL** pins on the bonnet. Then, run the following commands:
+If you'd like to add a power button, you can solder the button to the **GND/SCL** pins on the bonnet. Then, run the following commands:
 ```
 git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
