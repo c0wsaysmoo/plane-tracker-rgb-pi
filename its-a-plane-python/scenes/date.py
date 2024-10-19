@@ -48,14 +48,14 @@ class DateScene(object):
     def map_moon_phase_to_color(self, moonphase):
         # Define the two colors for the specific moon phases
         colors = [
-            [colours.PINK_DARK, colours.PINK_DARK],  # Moon phase 0
-            [colours.PINK_DARK, colours.MIDDLE_PURPLE],  # Moon phase 1
-            [colours.PINK_DARK, colours.WHITE],  # Moon phase 2
-            [colours.MIDDLE_PURPLE, colours.WHITE],  # Moon phase 3
-            [colours.GREY, colours.GREY],  # Moon phase 4
-            [colours.WHITE, colours.MIDDLE_PURPLE],  # Moon phase 5
-            [colours.WHITE, colours.PINK_DARK],  # Moon phase 6
-            [colours.MIDDLE_PURPLE, colours.PINK_DARK]  # Moon phase 7
+            [colours.DARK_PURPLE, colours.DARK_PURPLE],  # Moon phase 0
+            [colours.DARK_PURPLE, colours.DARK_MID_PURPLE],  # Moon phase 1
+            [colours.DARK_PURPLE, colours.WHITE],  # Moon phase 2
+            [colours.DARK_MID_PURPLE, colours.WHITE],  # Moon phase 3
+            [colours.GREY, colours.GREY],  # Moon phase 4 (no gradient, same color)
+            [colours.WHITE, colours.DARK_MID_PURPLE],  # Moon phase 5
+            [colours.WHITE, colours.DARK_PURPLE],  # Moon phase 6
+            [colours.DARK_MID_PURPLE, colours.DARK_PURPLE]  # Moon phase 7 (middle_purple to PINK_DARK gradient)
             # Define colors for the remaining phases as needed
         ]
 
