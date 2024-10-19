@@ -33,7 +33,9 @@ This project is based on [Colin Waddell](https://github.com/ColinWaddell/its-a-p
 - Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
 - The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
 
-I've spent a LOT of time messing with this and adding things and trying to make it as easy to setup as possible. If you'd like to get me a coffee I'd appreciate it! paypal.me/c0wsaysmoo on paypal
+I've spent a LOT of time messing with this and adding things and trying to make it as easy to setup as possible. If you'd like to get me a coffee I'd appreciate it!
+paypal.me/c0wsaysmoo on paypal
+
 ---
 
 ### Hardware Overview:
