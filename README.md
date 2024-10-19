@@ -55,6 +55,7 @@ I've spent a LOT of time messing with this and adding things and trying to make 
 - Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
 - [Adafruit bonnet](https://www.adafruit.com/product/3211)
 - [64x32 RGB P4 panel](https://www.adafruit.com/product/2278)
+- [An acrylic difusser](https://www.adafruit.com/product/4749) (makes it easier to read, this one is slightly larger than the panel so keep that in mind when making the case)
 - MicroSD card (any size)
 - [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
 - [CPU heatsink](https://www.adafruit.com/product/3083)
