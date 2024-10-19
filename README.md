@@ -1,18 +1,19 @@
 # Project Overview
 
-This project is based on [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) work, with some additional features I’ve added. 
+This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/its-a-plane-python), with some additional features I’ve added.
+
 ## Clock Screen:
 - Displays time, date, current temperature, and a 3-day forecast.
--The current temperature color is based on the current humidity level on a gradient of white-blue.
+- The current temperature color is based on the current humidity level on a gradient of white-blue.
 - Time changes color at sunrise and sunset.
-- Date shows moon phases with a purple-to-white gradient. It gradually becomes white on the right until the full moon, then fades white on the left as the moon wanes.
+- The date shows moon phases with a purple-to-white gradient. It gradually becomes white on the right until the full moon, then fades white on the left as the moon wanes.
 - The display dims at predefined times, set in the config file.
 - You can switch between 12hr/24hr time and choose imperial or metric units.
 
 ## Flight Tracker Screen:
 - Displays the origin and destination airport codes, with distances to both airports.
 - Airport codes are color-coded based on the difference between the scheduled and actual departure times, as well as the scheduled and estimated arrival times.
-  
+
   **Departure:**
   - 0-20 mins: Green
   - 20-40 mins: Yellow
@@ -33,25 +34,23 @@ This project is based on [Colin Waddell](https://github.com/ColinWaddell/its-a-p
 - Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
 - The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
 
-I've spent a LOT of time messing with this and adding things and trying to make it as easy to setup as possible. If you'd like to get me a coffee I'd appreciate it!
-paypal.me/c0wsaysmoo on paypal
+I've spent a LOT of time messing with this and adding things and trying to make it as easy to set up as possible. If you'd like to get me a coffee, I'd appreciate it!
+[paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
 ---
 
-### Hardware Overview:
+## Hardware Overview:
 - Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
 - [Adafruit bonnet](https://www.adafruit.com/product/3211)
 - [64x32 RGB P4 panel](https://www.adafruit.com/product/2278)
 - MicroSD card (any size)
-- [5V 4A power supply]( https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
-- [CPU heatsink]( https://www.adafruit.com/product/3083) 
--[2x20 pin extender]( https://www.microcenter.com/product/480891/schmartboard-inc-schmartboard-inc-short-2x20-female-stackable-headers-qty-4) to prevent the bonnet from resting on it
-- [Optional power button]( https://www.microcenter.com/product/420422/mcm-electronics-push-button-switch-spst-red) (though not really necessary)
+- [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
+- [CPU heatsink](https://www.adafruit.com/product/3083)
+- [2x20 pin extender](https://www.microcenter.com/product/480891/schmartboard-inc-schmartboard-inc-short-2x20-female-stackable-headers-qty-4) to prevent the bonnet from resting on it
+- [Optional power button](https://www.microcenter.com/product/420422/mcm-electronics-push-button-switch-spst-red) (though not really necessary)
 - Soldering iron only required for PWM bridge
 
-
-
-# Plane Tracker RGB Pi Setup Guide
+---
 
 # Plane Tracker RGB Pi Setup Guide
 
@@ -73,6 +72,7 @@ You'll need Git for downloading the project files and other resources:
 sudo apt-get install git
 git config --global user.name "YOUR NAME"
 git config --global user.email "YOUR EMAIL"
+
 Clone the repository:
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
