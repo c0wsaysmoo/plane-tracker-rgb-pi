@@ -96,6 +96,7 @@ Clone the repository:
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 ```
 If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
+
 After cloning the files, move everything to the main folder, as some files need to be in /home/xxx/ rather than /home/xxx/plane-tracker-rgb-pi/
 ```
 mkdir /home/XXX/logos
@@ -139,6 +140,7 @@ sudo /home/path/its-a-plane-python/its-a-plane.py
 Set Up the Script to Run on Boot
 
 To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following lines:
+
 For Bookworm
 ```
 @reboot sleep 60 && ./its-a-plane.py
