@@ -1,89 +1,120 @@
-# planefinal
+# Project Overview
 
-Hello.
-So the basis of this project came from [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) and his instructions are way better than mine. Mine is running on a Pi3A+ with [adafruit bonnet](https://www.adafruit.com/product/3211) (not hat) and a [64x32 rgb panel](https://www.adafruit.com/product/2278) although any should work.
-This will pull the logo from my database that matches the ICAO code. If there is no logo than it defaults to a blank plane. The airline name is the IATA code, meaning the logo is who is operating the flight and the name is who they are operating under. IE some regionals are partnered with multiple airlines. The airport codes are color coordinated to reflect the scheduled departure and arrival and actual and estimated. If the plane took off 0-20 from scheduled departure its green, 20-40 minutes is yellow, 40-60 minutes is orange, 1-4 hours is red, 4-8 hours is purple, and 8+ is blue. With the arrival if its estimated on time or early its green, 0-30 min late is yellow, 30-60 min late is orange, 1-4 hours is red, 4-8 hours is purple, and 8+ is blue. It now tells you the flights current distance from the origin airport and the distance left to the destination airport. It'll tell you the current distance and direction the plane is from your house as well and the distances and direction update the plane goes by. This has a 3 day forecast and the current temperature reflects the current humidity based on a white-blue gradient of 0% humid being white and 100% humid being blue. Since the logos are from my own collection I obviously don't have them all so if you find any missing add them or let me know so I can add them for others. IE a plane goes by and it says an airline but gives a blank plane picture. You can also choose to display the temperature to C or F, the distances in mi or KM, and the 12hr clock or 24hr clock in the config file. The clock changes color at sunrise and sunset, the date changes based on the current moonphase (white is full moon, purple is new moon, waning will have white on the left side, and waxing will have white on the right side), the distrance to origin and destination airport the units are now a different color to make it easier to read. The plane type and the distance/direction are now seperate colors. I changed the color palette as well.  I don't foresee many more updates do this, but who knows? Also I tried this on a pi zero and it worked(ish) there was a little bit of flicker I couldn't get to go away, but it works for sure on the pi3 A+. YMMV
+This project is based on [Colin Waddell](https://github.com/ColinWaddell/its-a-plane-python) work, with some additional features I’ve added. 
+## Clock Screen:
+- Displays time, date, current temperature, and a 3-day forecast.
+-The current temperature color is based on the current humidity level on a gradient of white-blue.
+- Time changes color at sunrise and sunset.
+- Date shows moon phases with a purple-to-white gradient. It gradually becomes white on the right until the full moon, then fades white on the left as the moon wanes.
+- The display dims at predefined times, set in the config file.
+- You can switch between 12hr/24hr time and choose imperial or metric units.
 
-I've spent a LOT of time messing with this and adding things and trying to make it as easy to setup as possible. If you'd like to get me a coffee I'd appreciate it!
-paypal.me/c0wsaysmoo on paypal
+## Flight Tracker Screen:
+- Displays the origin and destination airport codes, with distances to both airports.
+- Airport codes are color-coded based on the difference between the scheduled and actual departure times, as well as the scheduled and estimated arrival times.
+  
+  **Departure:**
+  - 0-20 mins: Green
+  - 20-40 mins: Yellow
+  - 40-60 mins: Orange
+  - 1-4 hrs: Red
+  - 4-8 hrs: Purple
+  - 8+ hrs: Blue
+  
+  **Arrival:**
+  - On-time or early: Green
+  - 0-30 mins late: Yellow
+  - 30-60 mins late: Orange
+  - 1-4 hrs late: Red
+  - 4-8 hrs late: Purple
+  - 8+ hrs late: Blue
 
-once you get the pi going, you can use [this guide](https://linuxconfig.org/enabling-ssh-on-raspberry-pi-a-comprehensive-guide)
+- An arrow between the airport codes acts as a progress bar for the flight, starting red (just left) and turning green (almost complete).
+- Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
+- The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
 
-ssh into it and at the command prompt 
+I've spent a LOT of time messing with this and adding things and trying to make it as easy to setup as possible. If you'd like to get me a coffee I'd appreciate it! paypal.me/c0wsaysmoo on paypal
+---
 
-you'll want to [install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) 
+### Hardware Overview:
+- Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
+- [Adafruit bonnet](https://www.adafruit.com/product/3211)
+- [64x32 RGB P4 panel](https://www.adafruit.com/product/2278)
+- MicroSD card (any size)
+- [5V 4A power supply]( https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
+- [CPU heatsink]( https://www.adafruit.com/product/3083) 
+-[2x20 pin extender]( https://www.microcenter.com/product/480891/schmartboard-inc-schmartboard-inc-short-2x20-female-stackable-headers-qty-4) to prevent the bonnet from resting on it
+- [Optional power button]( https://www.microcenter.com/product/420422/mcm-electronics-push-button-switch-spst-red) (though not really necessary)
+- Soldering iron only required for PWM bridge
 
-you'll need to install git and login with your stuff
 
+
+# Plane Tracker RGB Pi Setup Guide
+
+# Plane Tracker RGB Pi Setup Guide
+
+Once you get your Raspberry Pi up and running, you can follow [this guide](https://linuxconfig.org/enabling-ssh-on-raspberry-pi-a-comprehensive-guide) to set up the project.
+
+### 1. Install Raspberry Pi OS Lite
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi OS Lite**. **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
+
+### 2. Connect via SSH
+I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, proceed with the following steps.
+
+### 3. Install the Adafruit Bonnet
+[Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
+
+### 4. Install Git and Configure Your Info
+You'll need Git for downloading the project files and other resources:
+
+```bash
 sudo apt-get install git
-
+git config --global user.name "YOUR NAME"
+git config --global user.email "YOUR EMAIL"
+Clone the repository:
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
+If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
+After cloning the files, move everything to the main folder, as some files need to be in /home/xxx/ rather than /home/xxx/plane-tracker-rgb-pi/
+mkdir /home/XXX/logos
+mv /home/XXX/logo/* /home/path/logos/
+mv /home/XXX/logo2/* /home/path/logos/
 
-for Linux Bullseye
-
-sudo apt install python3-pip 
-
-sudo pip3 install pytz requests
-
-sudo pip3 install FlightRadarAPI
-
-for Linux Bookworm
-
-sudo apt install python3-pip 
-
+For Linux Bookworm:
+sudo apt install python3-pip
 sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
-
 pip3 install pytz requests
-
 pip3 install FlightRadarAPI
-
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.11
 
+For Linux Bullseye:
+sudo apt install python3-pip
+sudo pip3 install pytz requests
+sudo pip3 install FlightRadarAPI
 
+Make the Script Executable
+chmod +x /home/path/its-a-plane-python/its-a-plane.py
 
+Run the Script
 
-You'll have to make it executable by running chmod +x /home/path/its-a-plane-python/its-a-plane.py
+For Bookworm
+/home/path/its-a-plane-python/its-a-plane.py
 
-you can test run it by the command prompt
+For Bullseye
+sudo /home/path/its-a-plane-python/its-a-plane.py
 
-sudo /home/path/its-a-plane-python/its-a-plane.py or /home/path/its-a-plane-python/its-a-plane.py
+Set Up the Script to Run on Boot
+To ensure the script runs on boot, use ‘’’crontab -e’’’ to edit the cron jobs and add the following lines:
+For Bookworm
+@reboot sleep 60 && ./its-a-plane.py
 
-Although to get it to run on boot youll have to do a crontab -e and add @reboot sleep 60 && sudo ./its-a-plane.py #Bulleyes
+For Bullseye 
+@reboot sleep 60 && sudo ./its-a-plane.py
 
- @reboot sleep 60 && ./its-a-plane.py #Bookworm
-
-This also assumes the bridge is [soldered on the bonnet](https://learn.adafruit.com/assets/5772) if that's not the case youll have to be False under "HAT_PWM_ENABLED" in the config file
-
-When you use git to pull these files you'll have to move everything into a folder up. logos and files must be in the main folder ie /home/xxx/ not /home/xxx/plane-tracker-rgb-pi
-
-You'll have to move all the logos from logo2 and logo into logos
-
-mkdir /home/path/logos
-
-mv /home/path/logo/* /home/path/logos/
-
-mv /home/path/logo2/* /home/path/logos/
-
-
-You'll need to fill out the config file.
-
-
-FYI the logos are going to be a little blurry, again they are 16x16 pixels so you can only do so much and since most were batch shrunk they haven't been touched up. If youd like to touch them up and add them that would be great OR add ones that are missing. Just save the new logo as XXX.png and 16x16 size and put it into the logo folder. I have most of them.
-
-
-If you want to add a power button, you'll need to solder onto the bonnet pins on the GND/SCL then
-
+Optional: Add a Power Button
+If you'd like to add a power button, you can solder the GND/SCL pins on the bonnet. Then, run the following commands:
 git clone https://github.com/Howchoo/pi-power-button.git
-
 ./pi-power-button/script/install
 
-(if you have bookworm you'll need to do the following)
-
-sudo nano /boot/firmware/config.txt
-
-and at the bottom under "all" add
-
-dtoverlay=gpio-shutdown,gpio_pin=3,active_low=1,gpio_pull=up
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
 
