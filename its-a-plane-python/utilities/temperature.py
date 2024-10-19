@@ -3,6 +3,7 @@ import requests as r
 import pytz
 import time
 import json 
+import logging
 
 # Attempt to load config data
 try:
