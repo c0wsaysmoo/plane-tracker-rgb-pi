@@ -75,7 +75,7 @@ These are what I used to make mine.
 Once you get your Raspberry Pi up and running, you can follow [this guide](https://linuxconfig.org/enabling-ssh-on-raspberry-pi-a-comprehensive-guide) to set up the project.
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi OS Lite**. **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite**. **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
 
 ### 2. Connect via SSH
 I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, proceed with the following steps.
