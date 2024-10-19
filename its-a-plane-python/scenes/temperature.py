@@ -71,7 +71,7 @@ class TemperatureScene(object):
                 # Get the humidity ratio (0% -> white, 100% -> blue)
                 humidity_ratio = current_humidity / 100.0
 
-                temp_colour = self.colour_gradient(colours.WHITE, colours.BLUE, humidity_ratio)
+                temp_colour = self.colour_gradient(colours.WHITE, colours.DARK_BLUE, humidity_ratio)
 
                 # Calculate the length of the formatted temperature string
                 font_character_width = 5
