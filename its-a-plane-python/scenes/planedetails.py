@@ -4,8 +4,8 @@ from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 
 # Setup
-PLANE_COLOUR = colours.TROPICAL_PINK
-PLANE_DISTANCE_COLOUR = colours.TROPICAL_ORANGE
+PLANE_COLOUR = colours.LIGHT_MID_BLUE
+PLANE_DISTANCE_COLOUR = colours.LIGHT_PINK
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
