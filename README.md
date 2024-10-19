@@ -140,13 +140,13 @@ git clone https://github.com/Howchoo/pi-power-button.git
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
 
-![PXL_20231119_213716793](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/fb2e236c-bc9c-4469-adaa-6b59b7649bce)
-![PXL_20231119_213727328 MP](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/a2121fe6-e051-4097-b4bd-3868c368a068)
-![PXL_20231119_214846285](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/7889a9c0-8b4a-4bb7-bf67-2b2e7a29a16b)
-![PXL_20231119_214848797](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/41a50f29-f12c-41db-b93b-2ef41a8e7805)
-![PXL_20230623_194045200](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/b901fc67-098b-40d3-91cd-3acf335d06c3)
-![PXL_20230623_194026493](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/ebfca26a-19c1-491c-a44c-93239c9a75f2)
-![PXL_20230623_194018097](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi/assets/127139588/4505c237-88da-49a0-836a-f13e0c5d5631)
-
+![tracker](https://github.com/user-attachments/assets/534b990d-ad96-4332-ac72-9e2538048b0b)
+![PXL_20241019_155956016](https://github.com/user-attachments/assets/2a2fbde8-6240-4e0c-a082-fc6db95ab368)
+![PXL_20241019_165305826](https://github.com/user-attachments/assets/2a12f416-25d2-49b4-a5d0-bf9e9a4c7edb)
+![PXL_20241019_165254031](https://github.com/user-attachments/assets/30cf66aa-25fb-4287-9557-3301418ea4b3)
+![PXL_20241019_155500974](https://github.com/user-attachments/assets/5edae259-fbf3-4b8f-8ee7-4ec05742c6de)
+![PXL_20241019_155518437](https://github.com/user-attachments/assets/a16bc27b-43ff-4bcd-bda7-aedb853f12ca)
+![PXL_20241019_155629794](https://github.com/user-attachments/assets/2418ee63-a429-49c2-8c70-15f3f678ef76)
+![PXL_20241019_155605121](https://github.com/user-attachments/assets/94edc647-e34e-4a70-81fa-fba3a28a2bc3)
 
 
