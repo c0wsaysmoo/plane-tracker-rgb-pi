@@ -26,16 +26,18 @@ JOURNEY_SPACING = 5
 JOURNEY_FONT = fonts.regularplus
 JOURNEY_FONT_SELECTED = fonts.regularplus_bold
 ARROW_COLOUR = colours.GREY
-DISTANCE_COLOUR = colours.TROPICAL_LIGHT_BLUE
-DISTANCE_MEASURE = colours.TROPICAL_DARK_BLUE
+DISTANCE_ORIGIN_COLOUR = colours.LIGHT_GREEN
+DISTANCE_DESTINATION_COLOUR = colours.LIGHT_LIGHT_RED
+DISTANCE_COLOUR = colours.LIGHT_TEAL
+DISTANCE_MEASURE = colours.LIGHT_DARK_TEAL
 DISTANCE_POSITION = (17, 16)
 DISTANCE_WIDTH = 48
 DISTANCE_FONT = fonts.extrasmall
 
 # Element Positions
-ARROW_POINT_POSITION = (41, 5)
-ARROW_WIDTH = 3
-ARROW_HEIGHT = 6
+ARROW_POINT_POSITION = (42, 5)
+ARROW_WIDTH = 5
+ARROW_HEIGHT = 8
 
 
 class JourneyScene(object):
@@ -92,31 +94,31 @@ class JourneyScene(object):
         
         # Set colors based on departure and arrival delays
         if departure_delay_minutes <= 20:
-            origin_color = colours.LIMEGREEN
+            origin_color = colours.LIGHT_MID_GREEN
         elif 20 < departure_delay_minutes <= 40:
-            origin_color = colours.YELLOW
+            origin_color = colours.LIGHT_YELLOW
         elif 40 < departure_delay_minutes <= 60:
-            origin_color = colours.ORANGE
+            origin_color = colours.LIGHT_MID_ORANGE
         elif 60 < departure_delay_minutes <= 240:
-            origin_color = colours.RED
+            origin_color = colours.LIGHT_RED
         elif 240 < departure_delay_minutes <= 480:
-            origin_color = colours.PINK_DARK
+            origin_color = colours.LIGHT_PURPLE
         else:
-            origin_color = colours.BLUE
+            origin_color = colours.LIGHT_DARK_BLUE
         
         # Adjust colors for arrival delays
         if arrival_delay_minutes <= 0:
-            destination_color = colours.LIMEGREEN
+            destination_color = colours.LIGHT_MID_GREEN
         elif 0 < arrival_delay_minutes <= 30:
-            destination_color = colours.YELLOW
+            destination_color = colours.LIGHT_YELLOW
         elif 30 < arrival_delay_minutes <= 60:
-            destination_color = colours.ORANGE
+            destination_color = colours.LIGHT_MID_ORANGE
         elif 60 < arrival_delay_minutes <= 240:
-            destination_color = colours.RED
+            destination_color = colours.LIGHT_RED
         elif 240 < arrival_delay_minutes <= 480:
-            destination_color = colours.PINK_DARK
+            destination_color = colours.LIGHT_PURPLE
         else:
-            destination_color = colours.BLUE
+            destination_color = colours.LIGHT_DARK_BLUE
         
         # Draw background with the chosen color
         self.draw_square(
@@ -143,7 +145,7 @@ class JourneyScene(object):
             JOURNEY_FONT_SELECTED
             if destination == JOURNEY_CODE_SELECTED
             else JOURNEY_FONT,
-            JOURNEY_POSITION[0] + text_length + JOURNEY_SPACING,
+            JOURNEY_POSITION[0] + text_length + JOURNEY_SPACING + 1,
             JOURNEY_HEIGHT,
             destination_color,
             destination if destination else JOURNEY_BLANK_FILLER,
@@ -195,7 +197,7 @@ class JourneyScene(object):
         if len(self._data) == 0:
             return
 
-        # Black area before arrow
+        # Black area before arrow (clears previous arrow)
         self.draw_square(
             ARROW_POINT_POSITION[0] - ARROW_WIDTH,
             ARROW_POINT_POSITION[1] - (ARROW_HEIGHT // 2),
@@ -204,32 +206,97 @@ class JourneyScene(object):
             colours.BLACK,
         )
 
-        # Starting positions for filled in arrow
-        x = ARROW_POINT_POSITION[0] - ARROW_WIDTH
+        # Starting positions for filled-in arrow
+        x = ARROW_POINT_POSITION[0] - ARROW_WIDTH + 1
         y1 = ARROW_POINT_POSITION[1] - (ARROW_HEIGHT // 2)
         y2 = ARROW_POINT_POSITION[1] + (ARROW_HEIGHT // 2)
 
-        # Tip of arrow
-        self.canvas.SetPixel(
-            ARROW_POINT_POSITION[0],
-            ARROW_POINT_POSITION[1],
-            ARROW_COLOUR.red,
-            ARROW_COLOUR.green,
-            ARROW_COLOUR.blue,
-        )
+        # Retrieve distances
+        distance_origin = int(self._data[self._data_index]["distance_origin"])
+        distance_destination = int(self._data[self._data_index]["distance_destination"])
 
-        # Draw using columns
-        for col in range(0, ARROW_WIDTH):
-            graphics.DrawLine(
-                self.canvas,
-                x,
-                y1,
-                x,
-                y2,
-                ARROW_COLOUR,
-            )
+        # Handle cases where both or either distance is zero
+        if distance_origin == 0 and distance_destination == 0:
+            # Both distances are 0, draw all with ARROW_COLOUR
+            for _ in range(ARROW_WIDTH):  # ARROW_WIDTH is now defined as 5
+                graphics.DrawLine(
+                    self.canvas,
+                    x,
+                    y1,
+                    x,
+                    y2,
+                    ARROW_COLOUR,
+                )
+                x += 1
+                y1 += 1
+                y2 -= 1
+        elif distance_origin == 0 or distance_destination == 0:
+            # Either distance is 0, draw all with ARROW_COLOUR
+            for _ in range(ARROW_WIDTH):  # ARROW_WIDTH is still 5
+                graphics.DrawLine(
+                    self.canvas,
+                    x,
+                    y1,
+                    x,
+                    y2,
+                    ARROW_COLOUR,
+                )
+                x += 1
+                y1 += 1
+                y2 -= 1
+        else:
+            # Calculate the total distance and the percentage
+            total_distance = distance_origin + distance_destination
+            origin_ratio = distance_origin / total_distance
+            destination_ratio = distance_destination / total_distance
+            
+            # Total number of pixels for the arrow (5 pixels wide)
+            total_pixels = ARROW_WIDTH  # Ensure this is set to 5
 
-            # Calculate next column's data
-            x += 1
-            y1 += 1
-            y2 -= 1
+            # Allocate pixels based on 10% increments
+            if origin_ratio <= 0.10:
+                origin_pixels = 0
+            elif origin_ratio <= 0.30:
+                origin_pixels = 1
+            elif origin_ratio <= 0.50:
+                origin_pixels = 2
+            elif origin_ratio <= 0.70:
+                origin_pixels = 3
+            elif origin_ratio <= 0.90:
+                origin_pixels = 4
+            else:
+                origin_pixels = 5  # Maximum pixels for origin when ratio > 0.90
+
+            destination_pixels = total_pixels - origin_pixels  # Ensure total equals ARROW_WIDTH
+
+            # Debugging prints for ratios and pixel allocation
+            #print(f"Origin ratio: {origin_ratio:.2f}, Destination ratio: {destination_ratio:.2f}")
+            #print(f"Origin pixels: {origin_pixels}, Destination pixels: {destination_pixels}")
+
+            # Draw Color A (DISTANCE_ORIGIN_COLOUR) first, consecutively
+            for _ in range(origin_pixels):
+                graphics.DrawLine(
+                    self.canvas,
+                    x,
+                    y1,
+                    x,
+                    y2,
+                    DISTANCE_ORIGIN_COLOUR,
+                )
+                x += 1
+                y1 += 1
+                y2 -= 1
+
+            # Then draw Color B (DISTANCE_DESTINATION_COLOUR) consecutively
+            for _ in range(destination_pixels):
+                graphics.DrawLine(
+                    self.canvas,
+                    x,
+                    y1,
+                    x,
+                    y2,
+                    DISTANCE_DESTINATION_COLOUR,
+                )
+                x += 1
+                y1 += 1
+                y2 -= 1
