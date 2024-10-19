@@ -8,9 +8,9 @@ from config import NIGHT_START, NIGHT_END
 from rgbmatrix import graphics
 
 # Setup
-DAY_COLOUR = colours.TROPICAL_PINK
-MIN_T_COLOUR = colours.TROPICAL_BLUE
-MAX_T_COLOUR = colours.TROPICAL_ORANGE
+DAY_COLOUR = colours.LIGHT_PINK
+MIN_T_COLOUR = colours.LIGHT_MID_BLUE
+MAX_T_COLOUR = colours.LIGHT_DARK_ORANGE
 TEXT_FONT = fonts.extrasmall
 FONT_HEIGHT = 5
 DISTANCE_FROM_TOP = 32
