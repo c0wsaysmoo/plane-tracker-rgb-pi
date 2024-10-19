@@ -99,6 +99,7 @@ If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=
 
 After cloning the files, move everything to the main folder, as some files need to be in /home/xxx/ rather than /home/xxx/plane-tracker-rgb-pi/
 ```
+mv /home/XXX/plane-tracker-rgb-pi/* /home/XXX/
 mkdir /home/XXX/logos
 mv /home/XXX/logo/* /home/path/logos/
 mv /home/XXX/logo2/* /home/path/logos/
