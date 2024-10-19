@@ -37,6 +37,18 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 I've spent a LOT of time messing with this and adding things and trying to make it as easy to set up as possible. If you'd like to get me a coffee, I'd appreciate it!
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
+![tracker](https://github.com/user-attachments/assets/802a6c43-31d2-48dc-816b-4eb0ca0367e1)
+![PXL_20241019_155956016](https://github.com/user-attachments/assets/91532d4f-3b6f-4a1b-9a26-43ffe5c6093d)
+![PXL_20241019_165254031](https://github.com/user-attachments/assets/2e70bfcd-70ae-4acc-ba69-dde07c56a068)
+![PXL_20241019_165305826](https://github.com/user-attachments/assets/5188780d-84ff-4111-8bde-9584d6a70df2)
+![PXL_20241019_155500974](https://github.com/user-attachments/assets/5c3540e9-b699-41c8-8aef-32fb7a7f7b5d)
+![PXL_20241019_155518437](https://github.com/user-attachments/assets/2d6f4beb-59f1-4771-80ce-8bafd00cd1fc)
+![PXL_20241019_155605121](https://github.com/user-attachments/assets/4b71b758-00c9-4586-a5a0-ad251696eb17)
+![PXL_20241019_155629794](https://github.com/user-attachments/assets/f82088b8-e959-44e3-82f3-7207779cc659)
+![PXL_20241019_155732297](https://github.com/user-attachments/assets/77a329c7-d9c2-4a33-ab07-b6f6a2bf6ded)
+
+
+
 ---
 
 ## Hardware Overview:
@@ -140,13 +152,5 @@ git clone https://github.com/Howchoo/pi-power-button.git
 
 I'm on reddit under this name if you have any questions or let me know if you make this.
 
-![tracker](https://github.com/user-attachments/assets/534b990d-ad96-4332-ac72-9e2538048b0b)
-![PXL_20241019_155956016](https://github.com/user-attachments/assets/2a2fbde8-6240-4e0c-a082-fc6db95ab368)
-![PXL_20241019_165305826](https://github.com/user-attachments/assets/2a12f416-25d2-49b4-a5d0-bf9e9a4c7edb)
-![PXL_20241019_165254031](https://github.com/user-attachments/assets/30cf66aa-25fb-4287-9557-3301418ea4b3)
-![PXL_20241019_155500974](https://github.com/user-attachments/assets/5edae259-fbf3-4b8f-8ee7-4ec05742c6de)
-![PXL_20241019_155518437](https://github.com/user-attachments/assets/a16bc27b-43ff-4bcd-bda7-aedb853f12ca)
-![PXL_20241019_155629794](https://github.com/user-attachments/assets/2418ee63-a429-49c2-8c70-15f3f678ef76)
-![PXL_20241019_155605121](https://github.com/user-attachments/assets/94edc647-e34e-4a70-81fa-fba3a28a2bc3)
 
 
