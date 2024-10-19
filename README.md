@@ -137,6 +137,7 @@ sudo /home/path/its-a-plane-python/its-a-plane.py
 ```
 
 Set Up the Script to Run on Boot
+
 To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following lines:
 For Bookworm
 ```
@@ -149,7 +150,7 @@ For Bullseye
 ```
 
 Optional: Add a Power Button
-If you'd like to add a power button, you can solder the GND/SCL pins on the bonnet. Then, run the following commands:
+If you'd like to add a power button, you can solder the **GND/SCL** pins on the bonnet. Then, run the following commands:
 ```
 git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
