@@ -56,7 +56,7 @@ Had to remount the Pi since the display ribbon bumped into the panel
 
 ## Hardware Overview:
 
-These are what I used to make mine.
+This is what I used to make mine. Other than the Pi and the Bonnet you can use whatever you want. 
 - Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
 - [Adafruit bonnet](https://www.adafruit.com/product/3211)
 - [64x32 RGB P4 panel](https://www.adafruit.com/product/2278) (I used a P4 panal measures roughly 10in x 5in, they make smaller screens P3/P2.5 etc if you want a smaller version)
