@@ -1,4 +1,4 @@
-Seems to be an issue with tomorrow.io currently
+Seems to be an issue with tomorrow.io currently, have to wait until it's fixed on their end
 
 # Project Overview
 
