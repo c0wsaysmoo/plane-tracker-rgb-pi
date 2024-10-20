@@ -1,4 +1,4 @@
-Updated the Temperature.py file in the Utilities folder, so replace and reboot. If the Current Temperature or Current Humidity fields are missing (like they currently are) then it defaults to 0. Seems like the issue with Tomorrow.io hasn't been fixed yet. This should work until it is fixed. I think. This isn't my fault, just bad timing.
+Updated the Temperature.py file in the Utilities folder, so replace and reboot. If the Current Temperature or Current Humidity fields are missing then it defaults to 0. Seems like the issue on their end has been fixed as well. 
 
 # Project Overview
 
