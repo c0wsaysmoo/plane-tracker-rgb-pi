@@ -36,7 +36,7 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 - Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
 - The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
 
-I've spent a LOT of time messing with this and adding things and trying to make it as easy to set up as possible. If you'd like to get me a coffee, I'd appreciate it!
+I've spent a LOT of time messing with this and adding things and trying to make it as easy to set up as possible. If you'd like to get me a coffee, I'd appreciate it, especially if I help troubleshoot for you!
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
 ![tracker](https://github.com/user-attachments/assets/802a6c43-31d2-48dc-816b-4eb0ca0367e1)
@@ -176,7 +176,7 @@ git clone https://github.com/Howchoo/pi-power-button.git
 ```
 
 
-I'm on reddit under this name if you have any questions or let me know if you make this.
+I'm on reddit under this name if you have any questions or let me know if you make this. Please please please read the instructions carefully if you have any issues. Most issues are by not following them properly. 
 
 
 
