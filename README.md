@@ -39,6 +39,8 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 I've put a LOT of my time and effort into this project. If you'd like to show your appreciation (especially if I help you troubleshoot), consider getting me a coffee! I've shared this project in good faith—please don't take advantage of it.
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
+Please please please reread the instructions carefully if you have any issues. Most issues are by not following them properly. I'm on reddit under this name, if you absolutly can't figure it out shoot me a message. 
+
 ![tracker](https://github.com/user-attachments/assets/802a6c43-31d2-48dc-816b-4eb0ca0367e1)
 ![PXL_20241019_155956016](https://github.com/user-attachments/assets/91532d4f-3b6f-4a1b-9a26-43ffe5c6093d)
 ![PXL_20241019_165254031](https://github.com/user-attachments/assets/2e70bfcd-70ae-4acc-ba69-dde07c56a068)
@@ -92,7 +94,7 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 
 ### 3. Install the Adafruit Bonnet
 [Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
-Test to make sure the panel works before you do anything else. You're looking for "HELLO WORLD" yellow happy face. If it's only partially displaying than reattach the panel to the bonnet.
+Test to make sure the panel works before you do anything else. You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in RED. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi.
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2
@@ -156,16 +158,16 @@ sudo /home/path/its-a-plane-python/its-a-plane.py
 
 Set Up the Script to Run on Boot
 
-To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following lines:
+To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following line:
 
 For Bookworm
 ```
-@reboot sleep 60 && ./its-a-plane.py
+@reboot sleep 60 && /home/flight/its-a-plane-python/its-a-plane.py
 ```
 
 For Bullseye 
 ```
-@reboot sleep 60 && sudo ./its-a-plane.py
+@reboot sleep 60 && sudo /home/flight/its-a-plane-python/its-a-plane.py
 ```
 
 Optional: Add a Power Button
@@ -174,9 +176,3 @@ If you'd like to add a power button, you can solder the button to the **GND/SCL*
 git clone https://github.com/Howchoo/pi-power-button.git
 ./pi-power-button/script/install
 ```
-
-
-I'm on reddit under this name if you have any questions or let me know if you make this. Please please please read the instructions carefully if you have any issues. Most issues are by not following them properly. 
-
-
-
