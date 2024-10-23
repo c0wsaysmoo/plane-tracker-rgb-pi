@@ -94,7 +94,7 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 
 ### 3. Install the Adafruit Bonnet
 [Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
-Test to make sure the panel works before you do anything else. You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in RED. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi.
+Test to make sure the panel works before you do anything else. You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2
