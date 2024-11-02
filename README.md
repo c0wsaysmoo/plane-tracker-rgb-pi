@@ -39,7 +39,7 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 I've put a LOT of my time and effort into this project. If you'd like to show your appreciation (especially if I help you troubleshoot), consider getting me a coffee! I've shared this project in good faith—please don't take advantage of it.
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
-Please please please reread the instructions carefully if you have any issues. Most issues are by not following them properly. I'm on reddit under this name, if you absolutly can't figure it out shoot me a message. 
+Please please please reread the instructions carefully if you have any issues. Most issues are by not following them properly. I'm on reddit under a new name **lazyboy5259**, if you absolutly can't figure it out shoot me a message. 
 
 ![tracker](https://github.com/user-attachments/assets/802a6c43-31d2-48dc-816b-4eb0ca0367e1)
 ![PXL_20241019_155956016](https://github.com/user-attachments/assets/91532d4f-3b6f-4a1b-9a26-43ffe5c6093d)
@@ -95,6 +95,8 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 ### 3. Install the Adafruit Bonnet
 [Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
+
+**"path"** is your username for the pi
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2
@@ -115,7 +117,7 @@ git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 ```
 If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
 
-After cloning the files, move everything to the main folder, as some files need to be in /home/path/ rather than /home/path/plane-tracker-rgb-pi/
+After cloning the files, move everything to the main folder, as some files need to be in /home/path/ rather than /home/path/plane-tracker-rgb-pi/ 
 ```
 mv /home/path/plane-tracker-rgb-pi/* /home/path/
 mkdir /home/path/logos
