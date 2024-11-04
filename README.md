@@ -1,4 +1,4 @@
-I'm on Reddit under a new name **Fit-Garbage-2259**
+I'm on Reddit under a new name [**Fit-Garbage-2259**](https://old.reddit.com/user/fit-garbage-2259)
 
 # Project Overview
 
