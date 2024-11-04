@@ -64,7 +64,7 @@ This is what I used to make mine. Other than the Pi and the Bonnet you can use w
 - [64x32 RGB P4 panel](https://www.adafruit.com/product/2278) (I used a P4 panal measures roughly 10in x 5in, they make smaller screens P3/P2.5 etc if you want a smaller version. Can buy them from Amazon as well. If the colors look inverted you'll need to go to the display file and change 
 "RGB" to "RBG")
 - [An acrylic difusser](https://www.adafruit.com/product/4749) (makes it easier to read, this one is slightly larger than the P4 panel so keep that in mind when making the case)
-- [double sided tape](https://www.amazon.com/EZlifego-Multipurpose-Removable-Transparent-Household/dp/B07VNSXY31) 
+- [double sided tape](https://www.amazon.com/EZlifego-Multipurpose-Removable-Transparent-Household/dp/B07VNSXY31) (I use it to attach the acrylic to the panel.)
 - MicroSD card (any size)
 - [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
 - [CPU heatsink](https://www.adafruit.com/product/3083)
@@ -97,9 +97,17 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 
 **"path"** is your username for the pi
+
+With the bridge soldered
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
-sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2
+sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 
+```
+
+Without the bridge soldered 
+```
+cd /home/path/rpi-rgb-led-matrix/examples-api-use/
+sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64--led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat
 ```
 
 
