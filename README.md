@@ -148,6 +148,12 @@ Make the Script Executable
 chmod +x /home/path/its-a-plane-python/its-a-plane.py
 ```
 
+Edit the config file
+
+```
+nano /home/path/its-a-plane-python/config.py
+```
+
 Run the Script
 
 For Bookworm
