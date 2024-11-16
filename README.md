@@ -98,16 +98,10 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 
 **"path"** is your username for the pi
 
-With the bridge soldered
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
-sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 
-```
 
-Without the bridge soldered 
-```
-cd /home/path/rpi-rgb-led-matrix/examples-api-use/
-sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64--led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat
+sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 
 ```
 
 
