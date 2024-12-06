@@ -72,6 +72,7 @@ This is what I used to make mine. Other than the Pi and the Bonnet you can use w
 - [Optional power button](https://www.microcenter.com/product/420422/mcm-electronics-push-button-switch-spst-red) (though not really necessary)
 - Soldering iron only required for PWM bridge or power button. The Pi 3 seems to be ok without the PWM bridge, but anything less and you'll want to.
 - The case I built using a strip of 2in x 1/4in wood that I clampted and glued togother.
+- However my friend [made this case](https://makerworld.com/en/models/819892#profileId-762764) that you can 3D print. 
 - M2.5 machine screws to screw the bonnet onto the Pi and to screw the Pi onto the case from Ace Hardware.
 
 ---
