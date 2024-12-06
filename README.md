@@ -67,10 +67,10 @@ This is what I used to make mine. Other than the Pi and the Bonnet you can use w
 - [double sided tape](https://www.amazon.com/EZlifego-Multipurpose-Removable-Transparent-Household/dp/B07VNSXY31) (I use it to attach the acrylic to the panel)
 - MicroSD card (any size)
 - [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
-- [CPU heatsink](https://www.adafruit.com/product/3083)
-- [2x20 pin extender](https://www.microcenter.com/product/480891/schmartboard-inc-schmartboard-inc-short-2x20-female-stackable-headers-qty-4) to prevent the bonnet from resting on it
+- [CPU heatsink](https://www.adafruit.com/product/3084) (this is the smaller heatsink)
+- [2x20 pin extender](https://www.microcenter.com/product/480891/schmartboard-inc-schmartboard-inc-short-2x20-female-stackable-headers-qty-4) to prevent the bonnet from resting on it (the smaller heatsink you may not need the extender, but a normal size heatsink you will)
 - [Optional power button](https://www.microcenter.com/product/420422/mcm-electronics-push-button-switch-spst-red) (though not really necessary)
-- Soldering iron only required for PWM bridge or power button (I've always soldered the bridge)
+- Soldering iron only required for PWM bridge or power button. The Pi 3 seems to be ok without the PWM bridge, but anything less and you'll want to.
 - The case I built using a strip of 2in x 1/4in wood that I clampted and glued togother.
 - M2.5 machine screws to screw the bonnet onto the Pi and to screw the Pi onto the case from Ace Hardware.
 
