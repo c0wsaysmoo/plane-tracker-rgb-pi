@@ -95,6 +95,9 @@ I use **MobaXterm** on Windows to SSH into the Pi. After SSH-ing into the Pi, pr
 
 ### 3. Install the Adafruit Bonnet
 [Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
+
+You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge. More details in the link above.
+
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 
 **"path"** is your username for the pi
