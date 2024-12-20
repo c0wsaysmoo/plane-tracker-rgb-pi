@@ -61,8 +61,7 @@ Had to remount the Pi since the display ribbon bumped into the panel
 This is what I used to make mine. Other than the Pi and the Bonnet you can use whatever you want. 
 - Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
 - [Adafruit bonnet](https://www.adafruit.com/product/3211)
-- [64x32 RGB P4 panel](https://www.adafruit.com/product/2278) (I used a P4 panal measures roughly 10in x 5in, they make smaller screens P3/P2.5 etc if you want a smaller version as long as it's 64x32. Can buy them from Amazon as well. If the colors look inverted you'll need to go to the display file and change "RGB" to "RBG")
-- [An acrylic difusser](https://www.adafruit.com/product/4749) (makes it easier to read, this one is slightly larger than the P4 panel so keep that in mind when making the case)
+- [64x32 RGB P4 panel](https://www.adafruit.com/product/2278) (I used a P4 panel measuring approximately 10 inches by 5 inches. If you prefer a smaller screen, you can opt for P3 or P2.5 panels etc, as long as they are 64x32 in size. These are available on Amazon and other websites. If the colors appear inverted, adjust the display file by changing 'RGB' to 'RBG.')
 - [double sided tape](https://www.amazon.com/EZlifego-Multipurpose-Removable-Transparent-Household/dp/B07VNSXY31) (I use it to attach the acrylic to the panel)
 - MicroSD card (any size)
 - [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
