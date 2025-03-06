@@ -1,6 +1,6 @@
 I'm on Reddit under a new name [**Fit-Garbage-2259**](https://old.reddit.com/user/fit-garbage-2259)
 
-seems there is an issue with the flight radar api waiting to see if it comes back
+seems there is an [issue](https://flightradar24com.freshdesk.com/support/solutions/articles/3000117503) with the flight radar api waiting to see if it comes back
 
 # Project Overview
 
