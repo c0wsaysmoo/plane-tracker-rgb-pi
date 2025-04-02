@@ -83,7 +83,7 @@ Once you get your Raspberry Pi up and running, you can follow [this guide](https
 
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite**. **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
 When using the Imager make sure these settings are selected to enable SSH and make sure your WIFI information is typed in EXACTLY or else it won't connect when turned on.
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
