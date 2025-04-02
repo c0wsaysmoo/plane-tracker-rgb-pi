@@ -1,7 +1,5 @@
 I'm on Reddit under a new name [**Fit-Garbage-2259**](https://old.reddit.com/user/fit-garbage-2259)
 
-It appears to be back up and running!!
-
 # Project Overview
 
 This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/its-a-plane-python), with some additional features I’ve added.
