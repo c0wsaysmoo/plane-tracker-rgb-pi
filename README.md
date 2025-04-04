@@ -62,7 +62,7 @@ This is what I used to make mine. Other than the Pi and the Bonnet you can use w
 - Raspberry Pi 3A+ (Pi Zero had flickering, and Pi 5 isn’t compatible)
 - [Adafruit bonnet](https://www.adafruit.com/product/3211)
 - [64x32 RGB P4 panel](https://www.adafruit.com/product/2278) (I used a P4 panel measuring approximately 10 inches by 5 inches. If you prefer a smaller screen, you can opt for P3 or P2.5 panels etc, as long as they are 64x32 in size. These are available on Amazon and other websites. If the colors appear inverted, adjust the display file by changing 'RGB' to 'RBG.')
-- [Tinted acrylic makes the screen so much easier to read and looks nicer 10/10 recommend. Keep in mind that the acrylic panel is slightly larger than the P4 screen when you make the case](https://www.adafruit.com/product/4749)
+- [Tinted acrylic](https://www.adafruit.com/product/4749 makes the screen so much easier to read and looks nicer 10/10 recommend. Keep in mind that the acrylic panel is slightly larger than the P4 screen when you make the case.
 - [double sided tape](https://www.amazon.com/EZlifego-Multipurpose-Removable-Transparent-Household/dp/B07VNSXY31) (I use it to attach the acrylic to the panel)
 - MicroSD card (any size)
 - [5V 4A power supply](https://www.amazon.com/Facmogu-Switching-Transformer-Compatible-5-5x2-1mm/dp/B087LY41PV) (powers both the Pi and the bonnet)
