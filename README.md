@@ -135,6 +135,7 @@ For Linux Bookworm:
 sudo apt install python3-pip
 sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
 pip3 install pytz requests
+pip install beautifulsoup4
 pip3 install FlightRadarAPI
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.11
 ```
@@ -143,7 +144,13 @@ For Linux Bullseye:
 ```
 sudo apt install python3-pip
 sudo pip3 install pytz requests
+sudo pip install beautifulsoup4
 sudo pip3 install FlightRadarAPI
+```
+
+Move the RGB Module 
+```
+mv /home/path/rpi-rgb-led-matrix/bindings/python/rgbmatrix /home/path/its-a-plane-python/
 ```
 
 Make the Script Executable
