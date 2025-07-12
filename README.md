@@ -103,8 +103,18 @@ You can solder a bridge between the 4 and 18 to enable PWM for less screen flick
 
 ```
 cd /home/path/rpi-rgb-led-matrix/examples-api-use/
+```
 
-sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 
+If you DIDN'T solder 
+
+```
+sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat
+```
+
+If you DID solder
+
+```
+sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
 
