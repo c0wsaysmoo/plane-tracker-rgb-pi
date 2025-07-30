@@ -79,7 +79,7 @@ class JourneyScene(object):
         #print(f"Destination: {destination}, Arrival Delay (minutes): {arrival_delay_minutes}")
         
         if departure_delay_minutes is None:
-            destination_color = colours.LIGHT_GREY
+            origin_color = colours.LIGHT_GREY
         elif departure_delay_minutes <= 20:
             origin_color = colours.LIGHT_MID_GREEN
         elif 20 < departure_delay_minutes <= 40:
