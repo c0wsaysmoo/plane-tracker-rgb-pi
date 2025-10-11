@@ -8,6 +8,8 @@ The script runs 24/7 and saves its result to a file called close.txt inside the 
 
 That way, I can always check back later to see which flight has come closest to my house, even when I’m not watching live.
 
+However it won't work if you are using "sudo" to run the code. You'll have to go into crontab and take "sudo" out if you are using it. 
+
 # Project Overview
 
 This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/its-a-plane-python), with some additional features I’ve added.
@@ -186,28 +188,22 @@ nano /home/path/its-a-plane-python/config.py
 
 Run the Script
 
-For Bookworm
+For Bookworm/Bullseye
 ```
 /home/path/its-a-plane-python/its-a-plane.py
 ```
-
-For Bullseye
-```
-sudo /home/path/its-a-plane-python/its-a-plane.py
-```
-
 Set Up the Script to Run on Boot
 
 To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following line:
 
-For Bookworm
+For Bookworm/Bullseye
 ```
-@reboot sleep 60 && /home/flight/its-a-plane-python/its-a-plane.py
+@reboot sleep 60 && /home/path/its-a-plane-python/its-a-plane.py
 ```
 
-For Bullseye 
+You can also run it like so to create a log file in case there are issues. 
 ```
-@reboot sleep 60 && sudo /home/flight/its-a-plane-python/its-a-plane.py
+@reboot sleep 60 && /home/path/its-a-plane-python/its-a-plane.py >> /home/path/its-a-plane-python/workdammit.log 2>&1
 ```
 
 Optional: Add a Power Button
