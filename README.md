@@ -1,6 +1,6 @@
 I'm on Reddit under [**Fit-Garbage-2259**](https://old.reddit.com/user/fit-garbage-2259)
 
-# Update
+## Update
 
 I got bored one day and decided to make my flight tracker a bit more interesting — so now it logs every flight that passes by, calculates the distance from my home location, and only keeps the one that’s been the closest so far.
 
