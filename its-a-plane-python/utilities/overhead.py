@@ -4,7 +4,9 @@ from time import sleep
 import math
 from typing import Optional, Tuple
 from config import DISTANCE_UNITS
-
+import os
+import json
+from datetime import datetime
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import NewConnectionError
 from urllib3.exceptions import MaxRetryError
@@ -24,6 +26,42 @@ MAX_ALTITUDE = 100000  # feet
 EARTH_RADIUS_M = 3958.8  # Earth's radius in miles
 BLANK_FIELDS = ["", "N/A", "NONE"]
 
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
+LOG_FILE = os.path.join(BASE_DIR, "close.txt")
+
+def log_flight_data(entry: dict):
+    """Log only the closest flight to home in a readable JSON format."""
+    try:
+        # Format the timestamp in local time
+        local_time = datetime.now().strftime("%b %d %Y, %I:%M:%S %p")
+        entry_with_time = {"timestamp": local_time, **entry}
+
+        # Read the current closest flight (if any)
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                current_closest = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            current_closest = None
+
+        # Compare distances
+        new_distance = entry_with_time.get("distance", float("inf"))
+        current_distance = current_closest.get("distance", float("inf")) if current_closest else float("inf")
+
+        if new_distance < current_distance:
+            # Overwrite with the new closest flight
+            with open(LOG_FILE, "w", encoding="utf-8") as f:
+                json.dump(entry_with_time, f, indent=4)
+            #print(f"Updated closest flight: {entry_with_time['callsign']} ({new_distance:.2f}) miles away")
+        else:
+            #print(f"Skipped flight {entry_with_time['callsign']} ({new_distance:.2f}) miles away; not closer than current closest")
+            pass
+
+    except Exception as e:
+        print(f"Failed to log flight data: {e}")
+        
+        
 try:
     # Attempt to load config data
     from config import ZONE_HOME, LOCATION_HOME
@@ -304,27 +342,30 @@ class Overhead:
 
                         owner_iata = flight.airline_iata or "N/A"
                             
-                        data.append(
-                            {
-                                "airline": airline,
-                                "plane": plane,
-                                "origin": origin,
-                                "owner_iata":owner_iata,
-                                "owner_icao": owner_icao,
-                                "destination": destination,
-                                "time_scheduled_departure": time_scheduled_departure,
-                                "time_scheduled_arrival": time_scheduled_arrival,
-                                "time_real_departure": time_real_departure,
-                                "time_estimated_arrival": time_estimated_arrival,
-                                "vertical_speed": flight.vertical_speed,
-                                "callsign": callsign,
-                                "distance_origin": distance_origin,
-                                "distance_destination": distance_destination,
-                                "distance": distance_from_flight_to_home(flight),
-                                "direction": degrees_to_cardinal(plane_bearing(flight)),
-                            }
-                        )
-                    
+                        entry = {
+                            "airline": airline,
+                            "plane": plane,
+                            "origin": origin,
+                            "owner_iata": owner_iata,
+                            "owner_icao": owner_icao,
+                            "destination": destination,
+                            "time_scheduled_departure": time_scheduled_departure,
+                            "time_scheduled_arrival": time_scheduled_arrival,
+                            "time_real_departure": time_real_departure,
+                            "time_estimated_arrival": time_estimated_arrival,
+                            "vertical_speed": flight.vertical_speed,
+                            "callsign": callsign,
+                            "distance_origin": distance_origin,
+                            "distance_destination": distance_destination,
+                            "distance": distance_from_flight_to_home(flight),
+                            "direction": degrees_to_cardinal(plane_bearing(flight)),
+                        }
+
+                        data.append(entry)
+                        
+                        # Log the entry
+                        log_flight_data(entry)
+                        
                         break
 
                     except (KeyError, AttributeError):
