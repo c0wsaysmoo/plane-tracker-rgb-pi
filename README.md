@@ -6,6 +6,10 @@ I got bored and decided to make my flight tracker a bit more interesting — so 
 
 The script runs 24/7 and saves its result to a file called close.txt inside the its-a-plane-python folder. Every time a flight is detected, it compares the current flight’s distance to the one previously logged. If it’s closer, it overwrites the file with the new flight’s info.
 
+```
+nano /home/path/its-a-plane-python/close.txt
+```
+
 That way, you can always check back later to see which flight has come closest to your house, even when you're not watching live.
 
 However it won't work if you are using "sudo" to run the code. You'll have to go into crontab and take "sudo" out if you are using it. 
