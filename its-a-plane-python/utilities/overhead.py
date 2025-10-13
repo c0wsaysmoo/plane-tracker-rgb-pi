@@ -35,7 +35,7 @@ def log_flight_data(entry: dict):
     """Log only the closest flight to home in a readable JSON format."""
     try:
         # Format the timestamp in local time
-        local_time = datetime.now().strftime("%b %d %Y, %I:%M:%S %p")
+        local_time = datetime.now().strftime("%b %d %Y, %H:%M:%S")
         entry_with_time = {"timestamp": local_time, **entry}
 
         # Read the current closest flight (if any)
@@ -411,3 +411,4 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
