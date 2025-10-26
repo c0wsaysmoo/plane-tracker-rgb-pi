@@ -68,6 +68,7 @@ Had to remount the Pi since the display ribbon bumped into the panel
 ![PXL_20241019_155629794](https://github.com/user-attachments/assets/f82088b8-e959-44e3-82f3-7207779cc659)
 ![PXL_20241019_155732297](https://github.com/user-attachments/assets/77a329c7-d9c2-4a33-ab07-b6f6a2bf6ded)
 <img width="422" height="322" alt="distance" src="https://github.com/user-attachments/assets/354cda11-9f3d-4b04-ad8e-68ddfc3ec3e5" />
+The closest flight will now save to a file called "close.txt." It will check each new flight against this one until a closer one replaces it.
 
 
 
