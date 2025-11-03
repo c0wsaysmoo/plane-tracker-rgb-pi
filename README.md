@@ -1,10 +1,11 @@
-I'm on Reddit under [**Fit-Garbage-2259**](https://old.reddit.com/user/fit-garbage-2259)
 
 ## Update
 
 I got bored and decided to make my flight tracker a bit more interesting — so now it logs every flight that passes by, calculates the distance from your home location, and only keeps the one that’s been the closest so far.
 
 The script runs 24/7 and saves its result to a file called close.txt inside the its-a-plane-python folder. Every time a flight is detected, it compares the current flight’s distance to the one previously logged. If it’s closer, it overwrites the file with the new flight’s info.
+
+New addition is the ability for the tracker to send you an email each time it logs a new closest flight.
 
 ```
 nano /home/path/its-a-plane-python/close.txt
