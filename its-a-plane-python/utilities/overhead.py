@@ -3,13 +3,15 @@ from threading import Thread, Lock
 from time import sleep
 import math
 from typing import Optional, Tuple
-from config import DISTANCE_UNITS
+from config import DISTANCE_UNITS, CLOCK_FORMAT
 import os
 import json
 from datetime import datetime
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import NewConnectionError
 from urllib3.exceptions import MaxRetryError
+from setup import email_alerts
+
 
 try:
     # Attempt to load config data
@@ -32,11 +34,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "close.txt")
 
 def log_flight_data(entry: dict):
-    """Log only the closest flight to home in a readable JSON format."""
+    """Log only the closest flight to home in a readable JSON format and send email alerts if configured."""
     try:
-        # Format the timestamp in local time
-        local_time = datetime.now().strftime("%b %d %Y, %H:%M:%S")
-        entry_with_time = {"timestamp": local_time, **entry}
+        # Format timestamp based on CLOCK_FORMAT
+        if CLOCK_FORMAT == "24hr":
+            timestamp = datetime.now().strftime("%b %d %Y, %H:%M:%S")
+        else:
+            timestamp = datetime.now().strftime("%b %d %Y, %I:%M:%S %p")
+
+        entry_with_time = {"timestamp": timestamp, **entry}
 
         # Read the current closest flight (if any)
         try:
@@ -49,14 +55,36 @@ def log_flight_data(entry: dict):
         new_distance = entry_with_time.get("distance", float("inf"))
         current_distance = current_closest.get("distance", float("inf")) if current_closest else float("inf")
 
+        # Only update and send email if there's a new closest flight
         if new_distance < current_distance:
-            # Overwrite with the new closest flight
+            # Update the log file
             with open(LOG_FILE, "w", encoding="utf-8") as f:
                 json.dump(entry_with_time, f, indent=4)
-            #print(f"Updated closest flight: {entry_with_time['callsign']} ({new_distance:.2f}) miles away")
-        else:
-            #print(f"Skipped flight {entry_with_time['callsign']} ({new_distance:.2f}) miles away; not closer than current closest")
-            pass
+
+            # Distance string
+            distance_str = f"{new_distance:.5f} km away" if DISTANCE_UNITS.lower() == "metric" else f"{new_distance:.5f} miles away"
+            distance_origin_str = f"{entry_with_time.get('distance_origin', 0):.5f} km" if DISTANCE_UNITS.lower() == "metric" else f"{entry_with_time.get('distance_origin', 0):.5f} miles"
+            distance_destination_str = f"{entry_with_time.get('distance_destination', 0):.5f} km" if DISTANCE_UNITS.lower() == "metric" else f"{entry_with_time.get('distance_destination', 0):.5f} miles"
+
+            # Clean up origin/destination
+            origin = entry_with_time.get("origin") or "?"
+            destination = entry_with_time.get("destination") or "?"
+
+            # Prepare the email
+            subject = f"New Closest Flight: {entry_with_time.get('callsign', 'Unknown')}"
+            body = (
+                f"Timestamp: {entry_with_time['timestamp']}\n"
+                f"Airline: {entry_with_time.get('airline', 'N/A')}\n"
+                f"Flight: {entry_with_time.get('callsign', 'N/A')}\n"
+                f"From: {origin} To: {destination}\n"
+                f"Distance from origin: {distance_origin_str}\n"
+                f"Distance to destination: {distance_destination_str}\n"
+                f"Distance: {distance_str}\n"
+                f"Direction: {entry_with_time.get('direction', 'N/A')}\n"
+            )
+
+            # Send the email alert
+            email_alerts.send_email_alert(subject, body)
 
     except Exception as e:
         print(f"Failed to log flight data: {e}")
