@@ -80,6 +80,7 @@ def log_flight_data(entry: dict):
                 f"From: {origin} To: {destination}\n"
                 f"Distance from origin: {distance_origin_str}\n"
                 f"Distance to destination: {distance_destination_str}\n"
+                f"Plane: {entry_with_time.get('plane', 'N/A')}\n"
                 f"Distance: {distance_str}\n"
                 f"Direction: {entry_with_time.get('direction', 'N/A')}\n"
             )
@@ -440,5 +441,6 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
