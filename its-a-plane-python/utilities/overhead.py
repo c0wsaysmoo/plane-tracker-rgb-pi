@@ -4,8 +4,7 @@ from time import sleep
 import math
 from typing import Optional, Tuple
 from config import DISTANCE_UNITS, CLOCK_FORMAT
-import os
-import json
+import os, json, socket
 from datetime import datetime
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import NewConnectionError
@@ -27,7 +26,6 @@ MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000  # feet
 EARTH_RADIUS_M = 3958.8  # Earth's radius in miles
 BLANK_FIELDS = ["", "N/A", "NONE"]
-
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -60,6 +58,8 @@ def log_flight_data(entry: dict):
             # Update the log file
             with open(LOG_FILE, "w", encoding="utf-8") as f:
                 json.dump(entry_with_time, f, indent=4)
+                
+            hostname = socket.gethostname()
 
             # Distance string
             distance_str = f"{new_distance:.5f} km away" if DISTANCE_UNITS.lower() == "metric" else f"{new_distance:.5f} miles away"
@@ -74,6 +74,7 @@ def log_flight_data(entry: dict):
             subject = f"New Closest Flight: {entry_with_time.get('callsign', 'Unknown')}"
             body = (
                 f"Timestamp: {entry_with_time['timestamp']}\n"
+                f"Hostname: {hostname}\n"
                 f"Airline: {entry_with_time.get('airline', 'N/A')}\n"
                 f"Flight: {entry_with_time.get('callsign', 'N/A')}\n"
                 f"From: {origin} To: {destination}\n"
@@ -439,4 +440,5 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
