@@ -127,9 +127,9 @@ def log_farthest_flight(entry: dict):
 
         # Build email subject
         if rank == 1:
-            subject = f"New Farthest Flight ({reason}) — {callsign}"
+            subject = f"New Farthest Flight ({reason}) - {callsign}"
         else:
-            subject = f"{rank_text}-Farthest Flight ({reason}) — {callsign}"
+            subject = f"{rank_text}-Farthest Flight ({reason}) - {callsign}"
 
         email_alerts.send_flight_summary(subject, entry, reason)
 
@@ -486,6 +486,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
