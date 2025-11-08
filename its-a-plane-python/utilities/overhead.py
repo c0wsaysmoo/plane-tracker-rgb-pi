@@ -3,14 +3,13 @@ from threading import Thread, Lock
 from time import sleep
 import math
 from typing import Optional, Tuple
-from config import DISTANCE_UNITS, CLOCK_FORMAT
+from config import DISTANCE_UNITS, CLOCK_FORMAT, MAX_FARTHEST
 import os, json, socket
 from datetime import datetime
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import NewConnectionError
 from urllib3.exceptions import MaxRetryError
 from setup import email_alerts
-
 
 try:
     # Attempt to load config data
@@ -30,67 +29,97 @@ BLANK_FIELDS = ["", "N/A", "NONE"]
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 LOG_FILE = os.path.join(BASE_DIR, "close.txt")
+LOG_FILE_FARTHEST = os.path.join(BASE_DIR, "farthest.txt")
 
 def log_flight_data(entry: dict):
-    """Log only the closest flight to home in a readable JSON format and send email alerts if configured."""
+    """Log only a new closest flight and send email alert."""
     try:
-        # Format timestamp based on CLOCK_FORMAT
-        if CLOCK_FORMAT == "24hr":
-            timestamp = datetime.now().strftime("%b %d %Y, %H:%M:%S")
-        else:
-            timestamp = datetime.now().strftime("%b %d %Y, %I:%M:%S %p")
+        entry["timestamp"] = email_alerts.get_timestamp()
 
-        entry_with_time = {"timestamp": timestamp, **entry}
-
-        # Read the current closest flight (if any)
+        # Load previous closest flight
         try:
             with open(LOG_FILE, "r", encoding="utf-8") as f:
-                current_closest = json.load(f)
+                current = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            current_closest = None
+            current = None
 
-        # Compare distances
-        new_distance = entry_with_time.get("distance", float("inf"))
-        current_distance = current_closest.get("distance", float("inf")) if current_closest else float("inf")
+        new_d = entry.get("distance", float("inf"))
+        old_d = current.get("distance", float("inf")) if current else float("inf")
 
-        # Only update and send email if there's a new closest flight
-        if new_distance < current_distance:
-            # Update the log file
+        if new_d < old_d:
+            # Save new closest flight
             with open(LOG_FILE, "w", encoding="utf-8") as f:
-                json.dump(entry_with_time, f, indent=4)
-                
-            hostname = socket.gethostname()
+                json.dump(entry, f, indent=4)
 
-            # Distance string
-            distance_str = f"{new_distance:.5f} km away" if DISTANCE_UNITS.lower() == "metric" else f"{new_distance:.5f} miles away"
-            distance_origin_str = f"{entry_with_time.get('distance_origin', 0):.5f} km" if DISTANCE_UNITS.lower() == "metric" else f"{entry_with_time.get('distance_origin', 0):.5f} miles"
-            distance_destination_str = f"{entry_with_time.get('distance_destination', 0):.5f} km" if DISTANCE_UNITS.lower() == "metric" else f"{entry_with_time.get('distance_destination', 0):.5f} miles"
-
-            # Clean up origin/destination
-            origin = entry_with_time.get("origin") or "?"
-            destination = entry_with_time.get("destination") or "?"
-
-            # Prepare the email
-            subject = f"New Closest Flight: {entry_with_time.get('callsign', 'Unknown')}"
-            body = (
-                f"Timestamp: {entry_with_time['timestamp']}\n"
-                f"Hostname: {hostname}\n"
-                f"Airline: {entry_with_time.get('airline', 'N/A')}\n"
-                f"Flight: {entry_with_time.get('callsign', 'N/A')}\n"
-                f"From: {origin} To: {destination}\n"
-                f"Distance from origin: {distance_origin_str}\n"
-                f"Distance to destination: {distance_destination_str}\n"
-                f"Plane: {entry_with_time.get('plane', 'N/A')}\n"
-                f"Distance: {distance_str}\n"
-                f"Direction: {entry_with_time.get('direction', 'N/A')}\n"
-            )
-
-            # Send the email alert
-            email_alerts.send_email_alert(subject, body)
+            subject = f"New Closest Flight: {entry.get('callsign','Unknown')}"
+            email_alerts.send_flight_summary(subject, entry)
 
     except Exception as e:
-        print(f"Failed to log flight data: {e}")
-        
+        print("Failed to log closest flight:", e)
+
+
+def log_farthest_flight(entry: dict):
+    """Track top-x farthest flights (unique by callsign) and alert when updated."""
+    try:
+        d_o = entry.get("distance_origin", -1)
+        d_d = entry.get("distance_destination", -1)
+        if d_o < 0 and d_d < 0:
+            return
+
+        # Determine farthest distance and reason
+        if d_o >= d_d:
+            far = d_o
+            reason = "origin"
+        else:
+            far = d_d
+            reason = "destination"
+
+        entry["timestamp"] = email_alerts.get_timestamp()
+        entry["reason"] = reason
+        entry["farthest_value"] = far
+        callsign = entry.get("callsign", "UNKNOWN")
+
+        # Load previous top-x farthest flights
+        try:
+            with open(LOG_FILE_FARTHEST, "r", encoding="utf-8") as f:
+                lst = json.load(f)
+                lst = lst if isinstance(lst, list) else []
+        except (FileNotFoundError, json.JSONDecodeError):
+            lst = []
+
+        # Update existing flight entry if it exists, otherwise append
+        updated = False
+        for i, f in enumerate(lst):
+            if f.get("callsign") == callsign:
+                if far > f.get("farthest_value", -1):
+                    lst[i] = entry
+                    updated = True
+                break
+        else:
+            # Flight not in top list, add it
+            lst.append(entry)
+            updated = True
+
+        # Sort and take top-x
+        lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
+        new_top = lst[:MAX_FARTHEST]
+
+        # Detect if the top-x changed
+        old_vals = sorted([x.get("farthest_value", 0) for x in lst], reverse=True)
+        new_vals = sorted([x.get("farthest_value", 0) for x in new_top], reverse=True)
+        changed = updated or old_vals[:MAX_FARTHEST] != new_vals
+
+        # Save new top-x
+        with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
+            json.dump(new_top, f, indent=4)
+
+        # Send email if top-x changed
+        if changed:
+            subject = f"New Farthest Flight ({reason}) - {callsign}"
+            email_alerts.send_flight_summary(subject, entry, reason)
+
+    except Exception as e:
+        print("Failed to log farthest flight:", e)
         
 try:
     # Attempt to load config data
@@ -441,6 +470,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
