@@ -1,7 +1,7 @@
 
 ## Update
 
-It logs the closest flight to your location and the top N farthest flights (from origin or destination), storing them in close.txt and farthest.txt. Each time a flight is detected, the script calculates its distance from home, updates the logs if a new closest or farthest flight is found, and automatically sends an email alert when these changes occur. All email notifications come from `flight.tracker.alerts2025@gmail.com`. You can change the number of farthest flights to track `(MAX_FARTHEST)`, making it easy to keep an eye on nearby air traffic even if you aren't watching the clock.
+It logs the closest flight to your location and the top N farthest flights (from origin or destination), storing them in close.txt and farthest.txt. Each time a flight is detected, the script calculates its distance from home, updates the logs if a new closest or farthest flight is found, and automatically sends an email alert when these changes occur. All email notifications come from `flight.tracker.alerts2025@gmail.com`. You can change the number of farthest flights to track `(MAX_FARTHEST)`, making it easy to keep an eye on nearby air traffic even if you aren't watching the clock. When first implemented, you may receive multiple emails as flights move closer or further away, but these alerts will taper off as the flights stabilize.
 
 If you would like to manually view the log files they are located here
 
