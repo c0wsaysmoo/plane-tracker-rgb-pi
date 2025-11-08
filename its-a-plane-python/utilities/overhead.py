@@ -59,12 +59,13 @@ def log_flight_data(entry: dict):
 
 
 def log_farthest_flight(entry: dict):
-    """Track top-x farthest flights (unique by callsign) and alert when updated."""
+    """Track top-N farthest flights (unique by callsign) and alert when updated."""
     try:
+        # Get distances from origin/destination
         d_o = entry.get("distance_origin", -1)
         d_d = entry.get("distance_destination", -1)
         if d_o < 0 and d_d < 0:
-            return
+            return  # Nothing to log
 
         # Determine farthest distance and reason
         if d_o >= d_d:
@@ -79,7 +80,7 @@ def log_farthest_flight(entry: dict):
         entry["farthest_value"] = far
         callsign = entry.get("callsign", "UNKNOWN")
 
-        # Load previous top-x farthest flights
+        # Load previous top-N farthest flights
         try:
             with open(LOG_FILE_FARTHEST, "r", encoding="utf-8") as f:
                 lst = json.load(f)
@@ -87,34 +88,34 @@ def log_farthest_flight(entry: dict):
         except (FileNotFoundError, json.JSONDecodeError):
             lst = []
 
-        # Update existing flight entry if it exists, otherwise append
+        # Check if this flight qualifies for top-N
+        min_in_top = min((f.get("farthest_value", 0) for f in lst), default=-1)
+        qualifies = far > min_in_top or len(lst) < MAX_FARTHEST
+
+        if not qualifies:
+            # Flight is not far enough to enter top-N, exit silently
+            return
+
+        # Update existing entry if it exists, otherwise append
         updated = False
         for i, f in enumerate(lst):
             if f.get("callsign") == callsign:
-                if far > f.get("farthest_value", -1):
-                    lst[i] = entry
-                    updated = True
+                lst[i] = entry
+                updated = True
                 break
-        else:
-            # Flight not in top list, add it
+        if not updated:
             lst.append(entry)
-            updated = True
 
-        # Sort and take top-x
+        # Sort and keep top-N
         lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
         new_top = lst[:MAX_FARTHEST]
 
-        # Detect if the top-x changed
-        old_vals = sorted([x.get("farthest_value", 0) for x in lst], reverse=True)
-        new_vals = sorted([x.get("farthest_value", 0) for x in new_top], reverse=True)
-        changed = updated or old_vals[:MAX_FARTHEST] != new_vals
-
-        # Save new top-x
+        # Save updated top-N
         with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
             json.dump(new_top, f, indent=4)
 
-        # Send email if top-x changed
-        if changed:
+        # Send email only if this flight is actually in top-N
+        if any(f.get("callsign") == callsign for f in new_top):
             subject = f"New Farthest Flight ({reason}) - {callsign}"
             email_alerts.send_flight_summary(subject, entry, reason)
 
@@ -470,6 +471,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
