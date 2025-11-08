@@ -1,19 +1,15 @@
 
 ## Update
 
-I got bored and decided to make my flight tracker a bit more interesting — so now it logs every flight that passes by, calculates the distance from your home location, and only keeps the one that’s been the closest so far.
-
-The script runs 24/7 and saves its result to a file called close.txt inside the its-a-plane-python folder. Every time a flight is detected, it compares the current flight’s distance to the one previously logged. If it’s closer, it overwrites the file with the new flight’s info.
-
-
-New addition is the ability for the tracker to send you an email each time it logs a new closest flight with the flight information and distance. It'll come from the email address flight.tracker.alerts2025@gmail.com that I made just for this. You may need to delete your current close.txt file in order to reset it. 
+Its-a-Plane Flight Tracker is a Python script that continuously monitors flights near your home. It logs the closest flight to your location and the top N farthest flights (from origin or destination), storing them in close.txt and farthest.txt. Each time a flight is detected, the script calculates its distance from home, updates the logs if a new closest or farthest flight is found, and automatically sends an email alert when these changes occur. All email notifications come from `flight.tracker.alerts2025@gmail.com`. Configurable options include your home location `(LOCATION_HOME)` and the number of farthest flights to track `(MAX_FARTHEST)`, making it easy to keep an eye on nearby air traffic even if you aren't watching the clock.
 
 
 ```
 nano /home/path/its-a-plane-python/close.txt
 ```
-
-That way, you can always check back later to see which flight has come closest to your house, even when you're not watching live.
+```
+nano /home/path/its-a-plane-python/farthest.txt
+```
 
 However it won't work if you are using "sudo" to run the code. You'll have to go into crontab and take "sudo" out if you are using it. 
 
