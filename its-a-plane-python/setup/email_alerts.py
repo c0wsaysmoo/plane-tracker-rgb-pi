@@ -3,7 +3,7 @@ import socket
 from email.mime.text import MIMEText
 from datetime import datetime
 from config import EMAIL, DISTANCE_UNITS, CLOCK_FORMAT
-
+from typing import Optional
 
 def get_timestamp():
     if CLOCK_FORMAT == "24hr":
@@ -40,7 +40,7 @@ def _send(subject: str, body: str):
         print(f"⚠️ Failed to send email: {e}")
 
 
-def send_flight_summary(subject: str, entry: dict, reason: str | None = None):
+def send_flight_summary(subject: str, entry: dict, reason: Optional[str] = None):
     """Formats + sends a flight summary email."""
     hostname = socket.gethostname()
 
@@ -68,3 +68,4 @@ def send_flight_summary(subject: str, entry: dict, reason: str | None = None):
     body += f"Direction: {entry.get('direction','N/A')}\n"
 
     _send(subject, body)
+
