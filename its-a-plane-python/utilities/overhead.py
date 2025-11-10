@@ -59,28 +59,35 @@ def log_flight_data(entry: dict):
 
 
 def log_farthest_flight(entry: dict):
-    """Track top-N farthest flights (unique by callsign) and alert when updated."""
+    """Track top-N farthest airports (unique) and alert when updated."""
     try:
-        # Get distances
+        # Distances
         d_o = entry.get("distance_origin", -1)
         d_d = entry.get("distance_destination", -1)
         if d_o < 0 and d_d < 0:
             return
 
-        # Determine farthest & reason
+        # Determine farthest + airport
         if d_o >= d_d:
             far = d_o
             reason = "origin"
+            airport = entry.get("origin")
         else:
             far = d_d
             reason = "destination"
+            airport = entry.get("destination")
+
+        if not airport:
+            return
 
         entry["timestamp"] = email_alerts.get_timestamp()
         entry["reason"] = reason
         entry["farthest_value"] = far
+        entry["_airport"] = airport
         callsign = entry.get("callsign", "UNKNOWN")
+        new_dist = entry.get("distance", 9e9)
 
-        # Load log
+        # Load existing list
         try:
             with open(LOG_FILE_FARTHEST, "r", encoding="utf-8") as f:
                 lst = json.load(f)
@@ -88,24 +95,47 @@ def log_farthest_flight(entry: dict):
         except (FileNotFoundError, json.JSONDecodeError):
             lst = []
 
-        # Determine if this flight could qualify
-        min_in_top = min((f.get("farthest_value", 0) for f in lst), default=-1)
-        qualifies = far > min_in_top or len(lst) < MAX_FARTHEST
+        # Map by airport
+        airport_map = {f.get("_airport"): f for f in lst}
+        existing = airport_map.get(airport)
 
-        if not qualifies:
-            return  # No email + no update
+        replace = False
+        notify = False
 
-        # Update or add
-        updated = False
-        for i, f in enumerate(lst):
-            if f.get("callsign") == callsign:
-                lst[i] = entry
-                updated = True
-                break
-        if not updated:
+        if existing:
+            old_far = existing.get("farthest_value", -1)
+            old_dist = existing.get("distance", 9e9)
+
+            # If new farther airport distance ? replace + email
+            if far > old_far:
+                replace = True
+                notify = True
+
+            # If not farther, but closer to me ? replace, no email
+            elif new_dist < old_dist:
+                replace = True
+                notify = False
+
+            else:
+                return  # ignore
+
+            # If replacing, update in list
+            for i, f in enumerate(lst):
+                if f.get("_airport") == airport:
+                    lst[i] = entry
+                    break
+
+        else:
+            # New airport, only add if qualifies
+            if len(lst) >= MAX_FARTHEST:
+                min_val = min(f.get("farthest_value", 0) for f in lst)
+                if far <= min_val:
+                    return
             lst.append(entry)
+            replace = True
+            notify = True
 
-        # Sort & trim
+        # sort and trim
         lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
         new_top = lst[:MAX_FARTHEST]
 
@@ -113,19 +143,22 @@ def log_farthest_flight(entry: dict):
         with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
             json.dump(new_top, f, indent=4)
 
-        # Determine final rank
-        try:
-            rank = next(i for i, f in enumerate(new_top) if f.get("callsign") == callsign) + 1
-        except StopIteration:
-            return  # Shouldn’t happen
+        # If no notification needed
+        if not notify:
+            return
 
-        # Rank suffix
+        # Determine rank
+        try:
+            rank = next(i for i, f in enumerate(new_top) if f.get("_airport") == airport) + 1
+        except StopIteration:
+            return
+
         def ordinal(n):
-            return f"{n}{'tsnrhtdd'[(n//10%10!=1)*(n%10<4)*n%10::4]}"  # cute 1st/2nd/3rd handling
+            return f"{n}{'tsnrhtdd'[(n//10%10!=1)*(n%10<4)*n%10::4]}"
 
         rank_text = ordinal(rank)
 
-        # Build email subject
+        # Email subject
         if rank == 1:
             subject = f"New Farthest Flight ({reason}) - {callsign}"
         else:
@@ -486,6 +519,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
