@@ -59,35 +59,48 @@ def log_flight_data(entry: dict):
 
 
 def log_farthest_flight(entry: dict):
-    """Track top-N farthest airports (unique) and alert when updated."""
+    """
+    Track farthest-airport flights.
+    Rules:
+      1) The "farthest airport" is whichever of origin/destination is farthest from home.
+      2) For the same airport:
+            - KEEP the entry closest to me (distance)
+      3) If a different airport:
+            - Only store it if its farthest_value is farther than at least one in list
+      4) Email only when:
+            - A new airport enters the list
+            - An airport becomes farther than previously stored
+    """
     try:
-        # Distances
+        # Pick the farthest airport for this entry
         d_o = entry.get("distance_origin", -1)
         d_d = entry.get("distance_destination", -1)
+
         if d_o < 0 and d_d < 0:
             return
 
-        # Determine farthest + airport
         if d_o >= d_d:
             far = d_o
-            reason = "origin"
             airport = entry.get("origin")
+            reason = "origin"
         else:
             far = d_d
-            reason = "destination"
             airport = entry.get("destination")
+            reason = "destination"
 
         if not airport:
             return
 
+        # Attach computed info
         entry["timestamp"] = email_alerts.get_timestamp()
         entry["reason"] = reason
         entry["farthest_value"] = far
         entry["_airport"] = airport
-        callsign = entry.get("callsign", "UNKNOWN")
-        new_dist = entry.get("distance", 9e9)
 
-        # Load existing list
+        callsign = entry.get("callsign", "UNKNOWN")
+        new_dist_me = entry.get("distance", 9e9)
+
+        # Load existing farthest list
         try:
             with open(LOG_FILE_FARTHEST, "r", encoding="utf-8") as f:
                 lst = json.load(f)
@@ -95,80 +108,82 @@ def log_farthest_flight(entry: dict):
         except (FileNotFoundError, json.JSONDecodeError):
             lst = []
 
-        # Map by airport
+        # Map
         airport_map = {f.get("_airport"): f for f in lst}
         existing = airport_map.get(airport)
 
-        replace = False
         notify = False
 
+        # --- Case A: Already have same airport ---
         if existing:
             old_far = existing.get("farthest_value", -1)
-            old_dist = existing.get("distance", 9e9)
+            old_dist_me = existing.get("distance", 9e9)
 
-            # If new farther airport distance ? replace + email
-            if far > old_far:
-                replace = True
+            # 1) Same farthest airport:
+            #    Keep the flight closer to ME
+            if far == old_far:
+                if new_dist_me < old_dist_me:
+                    # Replace silently
+                    for i, f in enumerate(lst):
+                        if f.get("_airport") == airport:
+                            lst[i] = entry
+                            break
+                else:
+                    return  # worse — ignore
+            # 2) New entry has more distant airport ? replace + notify
+            elif far > old_far:
                 notify = True
-
-            # If not farther, but closer to me ? replace, no email
-            elif new_dist < old_dist:
-                replace = True
-                notify = False
-
+                for i, f in enumerate(lst):
+                    if f.get("_airport") == airport:
+                        lst[i] = entry
+                        break
+            # 3) Airport is closer — ignore
             else:
-                return  # ignore
+                return
 
-            # If replacing, update in list
-            for i, f in enumerate(lst):
-                if f.get("_airport") == airport:
-                    lst[i] = entry
-                    break
-
+        # --- Case B: New airport ---
         else:
-            # New airport, only add if qualifies
+            # If list full, must outrank at least one
             if len(lst) >= MAX_FARTHEST:
-                min_val = min(f.get("farthest_value", 0) for f in lst)
-                if far <= min_val:
+                min_far = min(f.get("farthest_value", 0) for f in lst)
+                if far <= min_far:
                     return
             lst.append(entry)
-            replace = True
             notify = True
 
-        # sort and trim
+        # Sort & trim
         lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
-        new_top = lst[:MAX_FARTHEST]
+        lst = lst[:MAX_FARTHEST]
 
         # Save
         with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
-            json.dump(new_top, f, indent=4)
+            json.dump(lst, f, indent=4)
 
-        # If no notification needed
+        # No email unless needed
         if not notify:
             return
 
         # Determine rank
         try:
-            rank = next(i for i, f in enumerate(new_top) if f.get("_airport") == airport) + 1
+            rank = next(idx for idx, f in enumerate(lst) if f.get("_airport") == airport) + 1
         except StopIteration:
             return
 
         def ordinal(n):
             return f"{n}{'tsnrhtdd'[(n//10%10!=1)*(n%10<4)*n%10::4]}"
 
-        rank_text = ordinal(rank)
+        rank_txt = ordinal(rank)
 
-        # Email subject
+        # Subject
         if rank == 1:
             subject = f"New Farthest Flight ({reason}) - {callsign}"
         else:
-            subject = f"{rank_text}-Farthest Flight ({reason}) - {callsign}"
+            subject = f"{rank_txt}-Farthest Flight ({reason}) - {callsign}"
 
         email_alerts.send_flight_summary(subject, entry, reason)
 
     except Exception as e:
         print("Failed to log farthest flight:", e)
-
         
 try:
     # Attempt to load config data
@@ -519,6 +534,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
