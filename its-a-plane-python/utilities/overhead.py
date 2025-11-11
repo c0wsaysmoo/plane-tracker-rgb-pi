@@ -61,24 +61,24 @@ def log_flight_data(entry: dict):
 def log_farthest_flight(entry: dict):
     """
     Track farthest-airport flights.
+
     Rules:
       1) The "farthest airport" is whichever of origin/destination is farthest from home.
       2) For the same airport:
-            - KEEP the entry closest to me (distance)
+            - KEEP the flight closest to me (distance)
       3) If a different airport:
             - Only store it if its farthest_value is farther than at least one in list
       4) Email only when:
             - A new airport enters the list
-            - An airport becomes farther than previously stored
     """
     try:
-        # Pick the farthest airport for this entry
         d_o = entry.get("distance_origin", -1)
         d_d = entry.get("distance_destination", -1)
 
         if d_o < 0 and d_d < 0:
             return
 
+        # Pick the farthest airport for this entry
         if d_o >= d_d:
             far = d_o
             airport = entry.get("origin")
@@ -97,7 +97,6 @@ def log_farthest_flight(entry: dict):
         entry["farthest_value"] = far
         entry["_airport"] = airport
 
-        callsign = entry.get("callsign", "UNKNOWN")
         new_dist_me = entry.get("distance", 9e9)
 
         # Load existing farthest list
@@ -108,7 +107,6 @@ def log_farthest_flight(entry: dict):
         except (FileNotFoundError, json.JSONDecodeError):
             lst = []
 
-        # Map
         airport_map = {f.get("_airport"): f for f in lst}
         existing = airport_map.get(airport)
 
@@ -116,30 +114,16 @@ def log_farthest_flight(entry: dict):
 
         # --- Case A: Already have same airport ---
         if existing:
-            old_far = existing.get("farthest_value", -1)
             old_dist_me = existing.get("distance", 9e9)
 
-            # 1) Same farthest airport:
-            #    Keep the flight closer to ME
-            if far == old_far:
-                if new_dist_me < old_dist_me:
-                    # Replace silently
-                    for i, f in enumerate(lst):
-                        if f.get("_airport") == airport:
-                            lst[i] = entry
-                            break
-                else:
-                    return  # worse — ignore
-            # 2) New entry has more distant airport ? replace + notify
-            elif far > old_far:
-                notify = True
+            # Only replace if closer to me
+            if new_dist_me < old_dist_me:
                 for i, f in enumerate(lst):
                     if f.get("_airport") == airport:
                         lst[i] = entry
                         break
-            # 3) Airport is closer — ignore
             else:
-                return
+                return  # Not closer ? ignore
 
         # --- Case B: New airport ---
         else:
@@ -149,21 +133,21 @@ def log_farthest_flight(entry: dict):
                 if far <= min_far:
                     return
             lst.append(entry)
-            notify = True
+            notify = True  # Only new airport triggers email
 
         # Sort & trim
         lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
         lst = lst[:MAX_FARTHEST]
 
-        # Save
+        # Save updated list
         with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
             json.dump(lst, f, indent=4)
 
-        # No email unless needed
+        # Only send email for new airports
         if not notify:
             return
 
-        # Determine rank
+        callsign = entry.get("callsign", "UNKNOWN")
         try:
             rank = next(idx for idx, f in enumerate(lst) if f.get("_airport") == airport) + 1
         except StopIteration:
@@ -173,8 +157,6 @@ def log_farthest_flight(entry: dict):
             return f"{n}{'tsnrhtdd'[(n//10%10!=1)*(n%10<4)*n%10::4]}"
 
         rank_txt = ordinal(rank)
-
-        # Subject
         if rank == 1:
             subject = f"New Farthest Flight ({reason}) - {callsign}"
         else:
@@ -534,6 +516,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
