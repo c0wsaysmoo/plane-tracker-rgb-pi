@@ -11,6 +11,7 @@ from urllib3.exceptions import NewConnectionError
 from urllib3.exceptions import MaxRetryError
 from setup import email_alerts
 
+
 try:
     # Attempt to load config data
     from config import MIN_ALTITUDE
@@ -56,7 +57,6 @@ def log_flight_data(entry: dict):
 
     except Exception as e:
         print("Failed to log closest flight:", e)
-
 
 def log_farthest_flight(entry: dict):
     """
@@ -166,6 +166,8 @@ def log_farthest_flight(entry: dict):
 
     except Exception as e:
         print("Failed to log farthest flight:", e)
+
+
         
 try:
     # Attempt to load config data
@@ -468,8 +470,10 @@ class Overhead:
 
                         data.append(entry)
                         
-                        # Log the entry
+                        # Log the closest flight
                         log_flight_data(entry)
+                        # Log farthest flight (origin or destination)
+                        log_farthest_flight(entry)
                         
                         break
 
@@ -516,6 +520,7 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
 
 
 
