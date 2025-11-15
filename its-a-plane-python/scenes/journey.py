@@ -62,17 +62,13 @@ class JourneyScene(object):
         distance_origin_text = f'{dist_origin:.0f}{distance_units}'
         distance_destination_text = f'{dist_destination:.0f}{distance_units}'
 
-        departure_delay_minutes = (
-            (time_real_departure - time_scheduled_departure) / 60
-            if time_real_departure is not None and time_scheduled_departure is not None
-            else None
-        )
+        def safe_delay(real, scheduled):
+            if real is None or scheduled in (None, 0):
+                return None
+            return (real - scheduled) / 60
 
-        arrival_delay_minutes = (
-            (time_estimated_arrival - time_scheduled_arrival) / 60
-            if time_estimated_arrival is not None and time_scheduled_arrival is not None
-            else None
-        )
+        departure_delay_minutes = safe_delay(time_real_departure, time_scheduled_departure)
+        arrival_delay_minutes = safe_delay(time_estimated_arrival, time_scheduled_arrival)
         
         # Print time differences for debugging
         #print(f"Origin: {origin}, Departure Delay (minutes): {departure_delay_minutes}")
