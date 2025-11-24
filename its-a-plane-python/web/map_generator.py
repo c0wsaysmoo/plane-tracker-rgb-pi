@@ -21,7 +21,7 @@ def hsl_color(index, total):
 def generate_closest_map(entries, filename="closest.html"):
     m = folium.Map(location=LOCATION_HOME[:2], zoom_start=10)
     unit_label = get_unit_label()
-    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","orange"]
+    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","brown"]
 
     # Home marker
     folium.Marker(
@@ -71,7 +71,7 @@ def generate_closest_map(entries, filename="closest.html"):
 def generate_farthest_map(entries, filename="farthest.html"):
     m = folium.Map(location=LOCATION_HOME[:2], zoom_start=4)
     unit_label = get_unit_label()
-    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","orange"]
+    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","brown"]
 
     # Home pin stays a standard folium icon
     folium.Marker(
@@ -148,3 +148,4 @@ def generate_farthest_map(entries, filename="farthest.html"):
     filepath = os.path.join(MAPS_DIR, filename)
     m.save(filepath)
     return filepath
+
