@@ -1,76 +1,174 @@
-from FlightRadar24.api import FlightRadar24API
-from threading import Thread, Lock
-from time import sleep
+
+import os
+import json
 import math
-from typing import Optional, Tuple
-from config import DISTANCE_UNITS, CLOCK_FORMAT, MAX_FARTHEST
-import os, json, socket
+import socket
+from time import sleep
+from threading import Thread, Lock
 from datetime import datetime
+from typing import Optional, Tuple
+
+from FlightRadar24.api import FlightRadar24API
 from requests.exceptions import ConnectionError
-from urllib3.exceptions import NewConnectionError
-from urllib3.exceptions import MaxRetryError
+from urllib3.exceptions import NewConnectionError, MaxRetryError
+
+from config import (
+    DISTANCE_UNITS,
+    CLOCK_FORMAT,
+    MAX_FARTHEST,
+    MAX_CLOSEST,
+)
+
 from setup import email_alerts
+from web import map_generator, upload_helper
+
+# Optional config values
+
+try:
+    from config import MIN_ALTITUDE
+except (ImportError, ModuleNotFoundError, NameError):
+    MIN_ALTITUDE = 0
 
 
 try:
-    # Attempt to load config data
-    from config import MIN_ALTITUDE
+    from config import ZONE_HOME, LOCATION_HOME
+    ZONE_DEFAULT = ZONE_HOME
+    LOCATION_DEFAULT = LOCATION_HOME
+except (ImportError, ModuleNotFoundError, NameError):
+    ZONE_DEFAULT = {"tl_y": 41.904318, "tl_x": -87.647367,
+                    "br_y": 41.851654, "br_x": -87.573027}
+    LOCATION_DEFAULT = [41.882724, -87.623350]
 
-except (ModuleNotFoundError, NameError, ImportError):
-    # If there's no config data
-    MIN_ALTITUDE = 0  # feet
+# Constants
 
 RETRIES = 3
 RATE_LIMIT_DELAY = 1
 MAX_FLIGHT_LOOKUP = 5
-MAX_ALTITUDE = 100000  # feet
-EARTH_RADIUS_M = 3958.8  # Earth's radius in miles
+MAX_ALTITUDE = 100000
+EARTH_RADIUS_M = 3958.8
 BLANK_FIELDS = ["", "N/A", "NONE"]
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-
 LOG_FILE = os.path.join(BASE_DIR, "close.txt")
 LOG_FILE_FARTHEST = os.path.join(BASE_DIR, "farthest.txt")
 
+# Utility Functions
+
+def safe_load_json(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def safe_write_json(path: str, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+
+def ordinal(n: int):
+    return f"{n}{'tsnrhtdd'[(n//10 % 10 != 1) * (n % 10 < 4) * n % 10::4]}"
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Internal helper for distance."""
+    lat1, lon1 = map(math.radians, (lat1, lon1))
+    lat2, lon2 = map(math.radians, (lat2, lon2))
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = (
+        math.sin(dlat / 2)**2 +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    miles = EARTH_RADIUS_M * c
+
+    return miles * 1.609 if DISTANCE_UNITS == "metric" else miles
+
+
+def degrees_to_cardinal(deg):
+    dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    idx = int((deg + 22.5) / 45)
+    return dirs[idx % 8]
+
+
+def plane_bearing(flight, home=LOCATION_DEFAULT):
+    lat1, lon1 = map(math.radians, home)
+    lat2, lon2 = map(math.radians, (flight.latitude, flight.longitude))
+
+    b = math.atan2(
+        math.sin(lon2 - lon1) * math.cos(lat2),
+        math.cos(lat1) * math.sin(lat2)
+        - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
+    )
+    return (math.degrees(b) + 360) % 360
+
+# Distance wrappers
+
+def distance_from_flight_to_home(flight):
+    return haversine(
+        flight.latitude, flight.longitude,
+        LOCATION_DEFAULT[0], LOCATION_DEFAULT[1],
+    )
+
+def distance_to_point(flight, lat, lon):
+    return haversine(flight.latitude, flight.longitude, lat, lon)
+
+# Logging Closest Flights
+
 def log_flight_data(entry: dict):
-    """Log only a new closest flight and send email alert."""
+    """Track top-N closest flights and email only when NEW enters top-N."""
     try:
         entry["timestamp"] = email_alerts.get_timestamp()
+        lst = safe_load_json(LOG_FILE)
 
-        # Load previous closest flight
-        try:
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                current = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            current = None
+        callsigns = {f.get("callsign"): f for f in lst}
+        new_call = entry.get("callsign")
+        new_dist = entry.get("distance", float("inf"))
+        notify = False
 
-        new_d = entry.get("distance", float("inf"))
-        old_d = current.get("distance", float("inf")) if current else float("inf")
+        # Existing ? update if better
+        if new_call in callsigns:
+            idx = next(i for i, f in enumerate(lst) if f.get("callsign") == new_call)
+            if new_dist < lst[idx].get("distance", float("inf")):
+                lst[idx] = entry
+            else:
+                return
+        else:
+            lst.append(entry)
 
-        if new_d < old_d:
-            # Save new closest flight
-            with open(LOG_FILE, "w", encoding="utf-8") as f:
-                json.dump(entry, f, indent=4)
+        # Sorting by closest
+        lst.sort(key=lambda x: x.get("distance", float("inf")))
+        top_n = lst[:MAX_CLOSEST]
 
-            subject = f"New Closest Flight: {entry.get('callsign','Unknown')}"
-            email_alerts.send_flight_summary(subject, entry)
+        if new_call not in [f["callsign"] for f in top_n]:
+            return
+
+        rank = next(i + 1 for i, f in enumerate(top_n) if f["callsign"] == new_call)
+
+        if new_call not in callsigns:
+            notify = True
+
+        safe_write_json(LOG_FILE, top_n)
+
+        if notify:
+            html = map_generator.generate_closest_map(top_n, filename="closest.html")
+            url = upload_helper.upload_map_to_server(html)
+
+            subject = f"New {ordinal(rank)} Closest Flight - {entry.get('callsign','Unknown')}"
+            email_alerts.send_flight_summary(subject, entry, map_url=url)
 
     except Exception as e:
         print("Failed to log closest flight:", e)
 
-def log_farthest_flight(entry: dict):
-    """
-    Track farthest-airport flights.
+# Logging Farthest Flights
 
-    Rules:
-      1) The "farthest airport" is whichever of origin/destination is farthest from home.
-      2) For the same airport:
-            - KEEP the flight closest to me (distance)
-      3) If a different airport:
-            - Only store it if its farthest_value is farther than at least one in list
-      4) Email only when:
-            - A new airport enters the list
-    """
+def log_farthest_flight(entry: dict):
+    """Track farthest airports (origin or destination)."""
     try:
         d_o = entry.get("distance_origin", -1)
         d_d = entry.get("distance_destination", -1)
@@ -78,236 +176,58 @@ def log_farthest_flight(entry: dict):
         if d_o < 0 and d_d < 0:
             return
 
-        # Pick the farthest airport for this entry
-        if d_o >= d_d:
-            far = d_o
-            airport = entry.get("origin")
-            reason = "origin"
-        else:
-            far = d_d
-            airport = entry.get("destination")
-            reason = "destination"
+        reason = "origin" if d_o >= d_d else "destination"
+        far = d_o if reason == "origin" else d_d
+        airport = entry.get(reason)
 
         if not airport:
             return
 
-        # Attach computed info
         entry["timestamp"] = email_alerts.get_timestamp()
         entry["reason"] = reason
         entry["farthest_value"] = far
         entry["_airport"] = airport
 
-        new_dist_me = entry.get("distance", 9e9)
+        lst = safe_load_json(LOG_FILE_FARTHEST)
+        airport_map = {f["_airport"]: f for f in lst}
 
-        # Load existing farthest list
-        try:
-            with open(LOG_FILE_FARTHEST, "r", encoding="utf-8") as f:
-                lst = json.load(f)
-                lst = lst if isinstance(lst, list) else []
-        except (FileNotFoundError, json.JSONDecodeError):
-            lst = []
-
-        airport_map = {f.get("_airport"): f for f in lst}
         existing = airport_map.get(airport)
-
         notify = False
 
-        # --- Case A: Already have same airport ---
         if existing:
-            old_dist_me = existing.get("distance", 9e9)
-
-            # Only replace if closer to me
-            if new_dist_me < old_dist_me:
-                for i, f in enumerate(lst):
-                    if f.get("_airport") == airport:
-                        lst[i] = entry
-                        break
+            if entry["distance"] < existing.get("distance", 9e9):
+                lst = [entry if f["_airport"] == airport else f for f in lst]
             else:
-                return  # Not closer ? ignore
-
-        # --- Case B: New airport ---
+                return
         else:
-            # If list full, must outrank at least one
             if len(lst) >= MAX_FARTHEST:
-                min_far = min(f.get("farthest_value", 0) for f in lst)
-                if far <= min_far:
+                if far <= min(f["farthest_value"] for f in lst):
                     return
             lst.append(entry)
-            notify = True  # Only new airport triggers email
+            notify = True
 
-        # Sort & trim
-        lst.sort(key=lambda x: x.get("farthest_value", 0), reverse=True)
+        lst.sort(key=lambda x: x["farthest_value"], reverse=True)
         lst = lst[:MAX_FARTHEST]
+        safe_write_json(LOG_FILE_FARTHEST, lst)
 
-        # Save updated list
-        with open(LOG_FILE_FARTHEST, "w", encoding="utf-8") as f:
-            json.dump(lst, f, indent=4)
+        if notify:
+            html = map_generator.generate_farthest_map(lst, filename="farthest.html")
+            url = upload_helper.upload_map_to_server(html)
 
-        # Only send email for new airports
-        if not notify:
-            return
+            rank = next(i for i, f in enumerate(lst) if f["_airport"] == airport) + 1
+            cs = entry.get("callsign", "UNKNOWN")
 
-        callsign = entry.get("callsign", "UNKNOWN")
-        try:
-            rank = next(idx for idx, f in enumerate(lst) if f.get("_airport") == airport) + 1
-        except StopIteration:
-            return
+            if rank == 1:
+                subject = f"New Farthest Flight ({reason}) - {cs}"
+            else:
+                subject = f"{ordinal(rank)}-Farthest Flight ({reason}) - {cs}"
 
-        def ordinal(n):
-            return f"{n}{'tsnrhtdd'[(n//10%10!=1)*(n%10<4)*n%10::4]}"
-
-        rank_txt = ordinal(rank)
-        if rank == 1:
-            subject = f"New Farthest Flight ({reason}) - {callsign}"
-        else:
-            subject = f"{rank_txt}-Farthest Flight ({reason}) - {callsign}"
-
-        email_alerts.send_flight_summary(subject, entry, reason)
+            email_alerts.send_flight_summary(subject, entry, reason, map_url=url)
 
     except Exception as e:
         print("Failed to log farthest flight:", e)
 
-
-        
-try:
-    # Attempt to load config data
-    from config import ZONE_HOME, LOCATION_HOME
-
-    ZONE_DEFAULT = ZONE_HOME
-    LOCATION_DEFAULT = LOCATION_HOME
-
-except (ModuleNotFoundError, NameError, ImportError):
-    # If there's no config data
-    ZONE_DEFAULT = {"tl_y": 62.61, "tl_x": -13.07, "br_y": 49.71, "br_x": 3.46}
-    LOCATION_DEFAULT = [51.509865, -0.118092, EARTH_RADIUS_M]
-    
-def polar_to_cartesian(lat, long, alt):
-        DEG2RAD = math.pi / 180
-        return [
-            alt * math.cos(DEG2RAD * lat) * math.sin(DEG2RAD * long),
-            alt * math.sin(DEG2RAD * lat),
-            alt * math.cos(DEG2RAD * lat) * math.cos(DEG2RAD * long),
-        ]
-
-
-def distance_from_flight_to_home(flight, home=LOCATION_DEFAULT):
-    try:
-        # Convert latitude and longitude from degrees to radians
-        lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
-        lat2, lon2 = math.radians(home[0]), math.radians(home[1])
-
-        # Differences in coordinates
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-
-        # Haversine formula
-        a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-        # Haversine distance in miles using the defined Earth radius
-        dist_miles = EARTH_RADIUS_M * c
-
-        # Convert distance units if needed
-        if DISTANCE_UNITS == "metric":
-            dist_km = dist_miles * 1.609  # Convert miles to kilometers
-            return dist_km
-        else:
-            return dist_miles
-
-    except AttributeError:
-        # on error say it's far away
-        return 1e6
-               
-def plane_bearing(flight, home=LOCATION_DEFAULT):
-  # Convert latitude and longitude to radians
-  lat1 = math.radians(home[0])
-  long1 = math.radians(home[1])
-  lat2 = math.radians(flight.latitude)
-  long2 = math.radians(flight.longitude)
-
-  # Calculate the bearing
-  bearing = math.atan2(
-      math.sin(long2 - long1) * math.cos(lat2),
-      math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(long2 - long1)
-  )
-
-  # Convert the bearing to degrees
-  bearing = math.degrees(bearing)
-
-  # Make sure the bearing is positives
-  return (bearing + 360) % 360
-  
-def degrees_to_cardinal(d):
-    '''
-    note: this is highly approximate...
-    '''
-    dirs = ["N", "NE",  "E",  "SE", 
-            "S",  "SW",  "W",  "NW",]
-    ix = int((d + 22.5)/45)
-    return dirs[ix % 8]
-
-def distance_from_flight_to_origin(flight, origin_latitude, origin_longitude, origin_altitude):
-    if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
-        try:
-            # Convert latitude and longitude from degrees to radians
-            lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
-            lat2, lon2 = math.radians(origin_latitude), math.radians(origin_longitude)
-
-            # Differences in coordinates
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-
-            # Haversine formula
-            a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-            # Haversine distance in miles using the defined Earth radius
-            dist_miles = EARTH_RADIUS_M * c
-
-            # Convert distance units if needed
-            if DISTANCE_UNITS == "metric":
-                dist_km = dist_miles * 1.609  # Convert miles to kilometers
-                return dist_km
-            else:
-                return dist_miles
-        except Exception as e:
-            print("Error:", e)
-            return None
-    else:
-        print("Flight data is missing required attributes: latitude, longitude, or altitude")
-        return None
-
-def distance_from_flight_to_destination(flight, destination_latitude, destination_longitude, destination_altitude):
-    if hasattr(flight, 'latitude') and hasattr(flight, 'longitude') and hasattr(flight, 'altitude'):
-        try:
-            # Convert latitude and longitude from degrees to radians
-            lat1, lon1 = math.radians(flight.latitude), math.radians(flight.longitude)
-            lat2, lon2 = math.radians(destination_latitude), math.radians(destination_longitude)
-
-            # Differences in coordinates
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-
-            # Haversine formula
-            a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-            # Haversine distance in miles using the defined Earth radius
-            dist_miles = EARTH_RADIUS_M * c
-
-            # Convert distance units if needed
-            if DISTANCE_UNITS == "metric":
-                dist_km = dist_miles * 1.609  # Convert miles to kilometers
-                return dist_km
-            else:
-                return dist_miles
-        except Exception as e:
-            print("Error:", e)
-            return None
-    else:
-        print("Flight data is missing required attributes: latitude, longitude, or altitude")
-        return None
-
+# Overhead Class
 
 class Overhead:
     def __init__(self):
@@ -317,165 +237,103 @@ class Overhead:
         self._new_data = False
         self._processing = False
 
+    # Public
     def grab_data(self):
-        Thread(target=self._grab_data).start()
+        Thread(target=self._grab).start()
 
-    def _grab_data(self):
-        # Mark data as old
+    # Internal thread
+    def _grab(self):
         with self._lock:
             self._new_data = False
             self._processing = True
 
         data = []
 
-        # Grab flight details
         try:
             bounds = self._api.get_bounds(ZONE_DEFAULT)
             flights = self._api.get_flights(bounds=bounds)
 
-            # Sort flights by closest first
-            flights = [
-                f
-                for f in flights
-                if f.altitude < MAX_ALTITUDE and f.altitude > MIN_ALTITUDE
-            ]
-            flights = sorted(flights, key=lambda f: distance_from_flight_to_home(f))
+            flights = [f for f in flights
+                       if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
 
-            for flight in flights[:MAX_FLIGHT_LOOKUP]:
+            flights.sort(key=lambda f: distance_from_flight_to_home(f))
+            flights = flights[:MAX_FLIGHT_LOOKUP]
+
+            for f in flights:
                 retries = RETRIES
-
                 while retries:
-                    # Rate limit protection
                     sleep(RATE_LIMIT_DELAY)
-
-                    # Grab and store details
                     try:
-                        details = self._api.get_flight_details(flight)
+                        d = self._api.get_flight_details(f)
 
-                        # Get plane type
-                        try:
-                            plane = details["aircraft"]["model"]["code"]
-                        except (KeyError, TypeError):
-                            plane = ""
-
-                        # Tidy up what we pass along
-                        plane = plane if not (plane.upper() in BLANK_FIELDS) else ""
-
-                        origin = (
-                            flight.origin_airport_iata
-                            if not (flight.origin_airport_iata.upper() in BLANK_FIELDS)
-                            else ""
+                        # Extract fields
+                        plane = (
+                            d.get("aircraft", {}).get("model", {}).get("code", "")
+                            or f.airline_icao or ""
                         )
+                        airline = d.get("airline", {}).get("name", "")
 
-                        destination = (
-                            flight.destination_airport_iata
-                            if not (flight.destination_airport_iata.upper() in BLANK_FIELDS)
-                            else ""
-                        )
+                        origin = f.origin_airport_iata or ""
+                        destination = f.destination_airport_iata or ""
+                        callsign = f.callsign or ""
 
-                        callsign = (
-                            flight.callsign
-                            if not (flight.callsign.upper() in BLANK_FIELDS)
-                            else ""
-                        )
+                        # Times
+                        t = d.get("time", {})
+                        time_sched_dep = t.get("scheduled", {}).get("departure")
+                        time_sched_arr = t.get("scheduled", {}).get("arrival")
+                        time_real_dep = t.get("real", {}).get("departure")
+                        time_est_arr = t.get("estimated", {}).get("arrival")
 
-                        # Get airline type
-                        try:
-                            airline = details["airline"]["name"]
-                        except (KeyError, TypeError):
-                            airline = ""
-                            
-                        # Get departure and arrival times
-                        try:
-                            time_scheduled_departure = details["time"]["scheduled"]["departure"]
-                            time_scheduled_arrival = details["time"]["scheduled"]["arrival"]
-                            time_real_departure = details["time"]["real"]["departure"]
-                            time_estimated_arrival = details["time"]["estimated"]["arrival"]
-                        except (KeyError, TypeError):
-                            time_scheduled_departure = None
-                            time_scheduled_arrival = None
-                            time_real_departure = None
-                            time_estimated_arrival = None
-                            
-                        # Extract origin airport coordinates
-                        origin_latitude = None
-                        origin_longitude = None
-                        origin_altitude = None
-                        if details['airport']['origin'] is not None:
-                            origin_latitude = details['airport']['origin']['position']['latitude']
-                            origin_longitude = details['airport']['origin']['position']['longitude']
-                            origin_altitude = details['airport']['origin']['position']['altitude']
-                            #print("Origin Coordinates:", origin_latitude, origin_longitude, origin_altitude)
+                        # Airport coords
+                        o = d.get("airport", {}).get("origin")
+                        origin_lat = o["position"]["latitude"] if o else None
+                        origin_lon = o["position"]["longitude"] if o else None
 
-                        # Extract destination airport coordinates
-                        destination_latitude = None
-                        destination_longitude = None
-                        destination_altitude = None
-                        if details['airport']['destination'] is not None:
-                            destination_latitude = details['airport']['destination']['position']['latitude']
-                            destination_longitude = details['airport']['destination']['position']['longitude']
-                            destination_altitude = details['airport']['destination']['position']['altitude']
-                            #print("Destination Coordinates:", destination_latitude, destination_longitude, destination_altitude)
+                        dest = d.get("airport", {}).get("destination")
+                        dest_lat = dest["position"]["latitude"] if dest else None
+                        dest_lon = dest["position"]["longitude"] if dest else None
 
-                        # Calculate distances using modified functions
-                        distance_origin = 0
-                        distance_destination = 0
+                        dist_o = distance_to_point(f, origin_lat, origin_lon) if origin_lat else 0
+                        dist_d = distance_to_point(f, dest_lat, dest_lon) if dest_lat else 0
 
-                        if origin_latitude is not None:
-                            distance_origin = distance_from_flight_to_origin(
-                                flight,
-                                origin_latitude,
-                                origin_longitude,
-                                origin_altitude
-                            )
-
-                        if destination_latitude is not None:
-                            distance_destination = distance_from_flight_to_destination(
-                                flight,
-                                destination_latitude,
-                                destination_longitude,
-                                destination_altitude
-                            )
-                            
-
-                        # Get owner icao
-                        try:
-                            owner_icao = details["owner"]["code"]["icao"]
-                        except (KeyError, TypeError):
-                            owner_icao = (
-                                flight.airline_icao
-                                if not (flight.airline_icao.upper() in BLANK_FIELDS)
-                                else "")
-
-                        owner_iata = flight.airline_iata or "N/A"
-                            
                         entry = {
                             "airline": airline,
                             "plane": plane,
                             "origin": origin,
-                            "owner_iata": owner_iata,
-                            "owner_icao": owner_icao,
+                            "origin_latitude": origin_lat,
+                            "origin_longitude": origin_lon,
                             "destination": destination,
-                            "time_scheduled_departure": time_scheduled_departure,
-                            "time_scheduled_arrival": time_scheduled_arrival,
-                            "time_real_departure": time_real_departure,
-                            "time_estimated_arrival": time_estimated_arrival,
-                            "vertical_speed": flight.vertical_speed,
+                            "destination_latitude": dest_lat,
+                            "destination_longitude": dest_lon,
+                            "plane_latitude": f.latitude,
+                            "plane_longitude": f.longitude,
+
+                            "owner_iata": f.airline_iata or "N/A",
+                            "owner_icao": (
+                                d.get("owner", {}).get("code", {}).get("icao")
+                                or f.airline_icao or ""
+                            ),
+
+                            "time_scheduled_departure": time_sched_dep,
+                            "time_scheduled_arrival": time_sched_arr,
+                            "time_real_departure": time_real_dep,
+                            "time_estimated_arrival": time_est_arr,
+
+                            "vertical_speed": f.vertical_speed,
                             "callsign": callsign,
-                            "distance_origin": distance_origin,
-                            "distance_destination": distance_destination,
-                            "distance": distance_from_flight_to_home(flight),
-                            "direction": degrees_to_cardinal(plane_bearing(flight)),
+
+                            "distance_origin": dist_o,
+                            "distance_destination": dist_d,
+                            "distance": distance_from_flight_to_home(f),
+                            "direction": degrees_to_cardinal(plane_bearing(f)),
                         }
 
                         data.append(entry)
-                        
-                        # Log the closest flight
+
                         log_flight_data(entry)
-                        # Log farthest flight (origin or destination)
                         log_farthest_flight(entry)
-                        
-                        break
+
+                        break  # out of retry loop
 
                     except (KeyError, AttributeError):
                         retries -= 1
@@ -486,9 +344,11 @@ class Overhead:
                 self._data = data
 
         except (ConnectionError, NewConnectionError, MaxRetryError):
-            self._new_data = False
-            self._processing = False
+            with self._lock:
+                self._new_data = False
+                self._processing = False
 
+    # Properties
     @property
     def new_data(self):
         with self._lock:
@@ -510,11 +370,10 @@ class Overhead:
         return len(self._data) == 0
 
 
-# Main function
 if __name__ == "__main__":
-
     o = Overhead()
     o.grab_data()
+
     while not o.new_data:
         print("processing...")
         sleep(1)
