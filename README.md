@@ -15,7 +15,7 @@ Each time a flight is detected:
 **Email notifications:**  
 
 - Sent from `flight.tracker.alerts2025@gmail.com`  
-- Includes a **link to an interactive map** showing flight positions  
+- Includes a **link to an interactive map** showing flight positions (Link is good for 30 days. You can always view the maps on your local IP page)  
 
 **Key details:**  
 
@@ -23,12 +23,12 @@ Each time a flight is detected:
 - Closest flights are always updated in `close.txt`  
 - Farthest flights are maintained in `farthest.txt` independently  
 - Alerts taper off as flight positions stabilize  
-- Emails can be **turned off** while still keeping the log files  
+- Emails can be **turned off** while still keeping the log files and local wegpage. 
 
 **New features:**  
 
 - Generates **interactive maps** for both closest and farthest flights  
-- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080`  
+- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker) 
 
 This setup lets you stay updated without watching the clock, in addition to receiving email summaries with distance and map information.
 
