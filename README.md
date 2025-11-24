@@ -28,7 +28,7 @@ Each time a flight is detected:
 **New features:**  
 
 - Generates **interactive maps** for both closest and farthest flights  
-- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker) 
+- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker ie 192.168.x.x:8080 etc) 
 
 This setup lets you stay updated without watching the clock, in addition to receiving email summaries with distance and map information.
 
