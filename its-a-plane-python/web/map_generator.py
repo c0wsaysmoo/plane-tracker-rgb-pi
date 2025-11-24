@@ -9,14 +9,6 @@ os.makedirs(MAPS_DIR, exist_ok=True)
 
 def get_unit_label():
     return "mi" if DISTANCE_UNITS.lower() == "imperial" else "km"
-    
-def hsl_color(index, total):
-    """
-    Generate a distinct, evenly spaced color using HSL.
-    Output is CSS format: 'hsl(###, 80%, 45%)'
-    """
-    hue = int((index / max(total, 1)) * 360)
-    return f"hsl({hue}, 80%, 45%)"
 
 def generate_closest_map(entries, filename="closest.html"):
     m = folium.Map(location=LOCATION_HOME[:2], zoom_start=10)
@@ -148,4 +140,3 @@ def generate_farthest_map(entries, filename="farthest.html"):
     filepath = os.path.join(MAPS_DIR, filename)
     m.save(filepath)
     return filepath
-
