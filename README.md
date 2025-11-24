@@ -41,7 +41,21 @@ nano /home/path/its-a-plane-python/close.txt
 nano /home/path/its-a-plane-python/farthest.txt
 ```
 
-**NOTE** However it won't work if you are using "sudo" to run the code (if you set this up on Bullseye). You'll have to go into crontab and take "sudo" out if you are using it. 
+**Please read if you already have a tracker setup** 
+
+It won't work if you are using "sudo" to run the code (if you set this up on Bullseye). You'll have to go into crontab and take "sudo" out if you are using it. 
+
+If you already have a tracker setup and want to do these additions you'll have to install these. 
+
+```
+pip install folium selenium pillow
+pip3 install --user flask
+```
+Make sure if you replace `its-a-plane.py` that you reown it
+
+```
+chmod +x /home/path/its-a-plane-python/its-a-plane.py
+```
 
 # Project Overview
 
