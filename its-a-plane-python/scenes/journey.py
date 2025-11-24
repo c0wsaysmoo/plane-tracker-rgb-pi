@@ -6,7 +6,7 @@ from config import DISTANCE_UNITS
 try:
     from config import JOURNEY_CODE_SELECTED
 except (ModuleNotFoundError, NameError, ImportError):
-    JOURNEY_CODE_SELECTED = "GLA"
+    JOURNEY_CODE_SELECTED = "ORD"
 
 try:
     from config import JOURNEY_BLANK_FILLER
