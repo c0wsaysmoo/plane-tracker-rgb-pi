@@ -1,7 +1,36 @@
 
 ## Update
 
-It logs the closest flight to your location and the top N farthest flights (from origin or destination), storing them in close.txt and farthest.txt. Each time a flight is detected, the script calculates its distance from home, updates the logs if a new closest or top N farthest flight is found, and automatically sends an email alert when these changes occur. All email notifications come from `flight.tracker.alerts2025@gmail.com`. You can change the number of farthest flights to track `(MAX_FARTHEST)`, making it easy to keep an eye on nearby air traffic even if you aren't watching the clock. When first implemented, you may receive multiple emails as flights move closer or further away, but these alerts will taper off as the flights stabilize. It won't send emails if the airport is already on the list. If the airport is already on the list it'll pick the plane that is the closest to your location and update the log. This is to give a more accurate distance of your location to that airport. You can turn off the emails but keep the log files if you wish.
+Now logs the closest flights to your location and farthest destinations!
+
+1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
+2. **Top N farthest flights** based on origin or destination (`MAX_FARTHEST`)  
+
+Each time a flight is detected:  
+
+- Calculates the **distance from home**  
+- Updates `close.txt` and `farthest.txt` if a **new closest flight** or a **new top-N farthest flight** is found  
+- Sends an **automatic email alert** when these changes occur with flight details and map 
+
+**Email notifications:**  
+
+- Sent from `flight.tracker.alerts2025@gmail.com`  
+- Includes a **link to an interactive map** showing flight positions  
+
+**Key details:**  
+
+- Adjustable limits with `MAX_CLOSEST` and `MAX_FARTHEST`  
+- Closest flights are always updated in `close.txt`  
+- Farthest flights are maintained in `farthest.txt` independently  
+- Alerts taper off as flight positions stabilize  
+- Emails can be **turned off** while still keeping the log files  
+
+**New features:**  
+
+- Generates **interactive maps** for both closest and farthest flights  
+- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080`  
+
+This setup lets you stay updated without watching the clock, in addition to receiving email summaries with distance and map information.
 
 If you would like to manually view the log files they are located here
 
@@ -12,7 +41,7 @@ nano /home/path/its-a-plane-python/close.txt
 nano /home/path/its-a-plane-python/farthest.txt
 ```
 
-However it won't work if you are using "sudo" to run the code. You'll have to go into crontab and take "sudo" out if you are using it. 
+**NOTE** However it won't work if you are using "sudo" to run the code (if you set this up on Bullseye). You'll have to go into crontab and take "sudo" out if you are using it. 
 
 # Project Overview
 
@@ -101,7 +130,7 @@ Once you get your Raspberry Pi up and running, you can follow [this guide](https
 
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** whether the version is **Bookworm** or **Bullseye** — this will matter later.
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** These instructions are for Bookworm
 When using the Imager make sure these settings are selected to enable SSH and make sure your WIFI information is typed in EXACTLY or else it won't connect when turned on.
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
@@ -142,7 +171,7 @@ You'll need Git for downloading the project files and other resources:
 
 ```bash
 sudo apt-get install git
-git config --global user.name "YOUR NAME"
+git config --global user.name "YOUR USER NAME"
 git config --global user.email "YOUR EMAIL"
 ```
 Clone the repository:
@@ -166,15 +195,9 @@ sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
 pip3 install pytz requests
 pip install beautifulsoup4
 pip3 install FlightRadarAPI
+pip install folium selenium pillow
+pip3 install --user flask
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.11
-```
-
-For Linux Bullseye:
-```
-sudo apt install python3-pip
-sudo pip3 install pytz requests
-sudo pip install beautifulsoup4
-sudo pip3 install FlightRadarAPI
 ```
 
 Move the RGB Module 
@@ -195,7 +218,6 @@ nano /home/path/its-a-plane-python/config.py
 
 Run the Script
 
-For Bookworm/Bullseye
 ```
 /home/path/its-a-plane-python/its-a-plane.py
 ```
@@ -203,7 +225,6 @@ Set Up the Script to Run on Boot
 
 To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following line:
 
-For Bookworm/Bullseye
 ```
 @reboot sleep 60 && /home/path/its-a-plane-python/its-a-plane.py
 ```
