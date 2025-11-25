@@ -20,8 +20,8 @@ Each time a flight is detected:
 **Key details:**  
 
 - Adjustable limits with `MAX_CLOSEST` and `MAX_FARTHEST`  
-- Closest flights are always updated in `close.txt`  
-- Farthest flights are maintained in `farthest.txt` independently  
+- Closest flights to your house are always updated in `close.txt`  
+- Farthest destination/origin flights are maintained in `farthest.txt` independently  
 - Alerts taper off as flight positions stabilize  
 - Emails can be **turned off** while still keeping the log files and local wegpage. 
 
