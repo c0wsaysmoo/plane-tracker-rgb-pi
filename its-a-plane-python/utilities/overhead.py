@@ -193,25 +193,33 @@ def log_farthest_flight(entry: dict):
 
         existing = airport_map.get(airport)
         notify = False
+        updated = False
 
         if existing:
+            # Only update if "distance" improved
             if entry["distance"] < existing.get("distance", 9e9):
                 lst = [entry if f["_airport"] == airport else f for f in lst]
+                updated = True       # <-- regenerate map locally
             else:
                 return
         else:
+            # New airport entering top-N
             if len(lst) >= MAX_FARTHEST:
                 if far <= min(f["farthest_value"] for f in lst):
                     return
             lst.append(entry)
             notify = True
-
+            
         lst.sort(key=lambda x: x["farthest_value"], reverse=True)
         lst = lst[:MAX_FARTHEST]
         safe_write_json(LOG_FILE_FARTHEST, lst)
 
-        if notify:
+        # --- ALWAYS generate local map for notify OR updated ---
+        if notify or updated:
             html = map_generator.generate_farthest_map(lst, filename="farthest.html")
+
+        # --- ONLY upload + email if this is a NEW airport ---
+        if notify:
             url = upload_helper.upload_map_to_server(html)
 
             rank = next(i for i, f in enumerate(lst) if f["_airport"] == airport) + 1
@@ -379,3 +387,4 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
