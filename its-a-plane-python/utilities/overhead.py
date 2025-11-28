@@ -1,4 +1,3 @@
-
 import os
 import json
 import math
@@ -115,6 +114,7 @@ def distance_from_flight_to_home(flight):
         LOCATION_DEFAULT[0], LOCATION_DEFAULT[1],
     )
 
+
 def distance_to_point(flight, lat, lon):
     return haversine(flight.latitude, flight.longitude, lat, lon)
 
@@ -199,7 +199,7 @@ def log_farthest_flight(entry: dict):
             # Only update if "distance" improved
             if entry["distance"] < existing.get("distance", 9e9):
                 lst = [entry if f["_airport"] == airport else f for f in lst]
-                updated = True       # <-- regenerate map locally
+                updated = True
             else:
                 return
         else:
@@ -235,6 +235,7 @@ def log_farthest_flight(entry: dict):
     except Exception as e:
         print("Failed to log farthest flight:", e)
 
+
 # Overhead Class
 
 class Overhead:
@@ -249,7 +250,15 @@ class Overhead:
     def grab_data(self):
         Thread(target=self._grab).start()
 
-    # Internal thread
+    # Safe nested dict access
+    def safe_get(self, d, *keys, default=None):
+        """Safely get nested dictionary values."""
+        for key in keys:
+            if not d or not isinstance(d, dict):
+                return default
+            d = d.get(key)
+        return d if d is not None else default
+
     def _grab(self):
         with self._lock:
             self._new_data = False
@@ -261,9 +270,10 @@ class Overhead:
             bounds = self._api.get_bounds(ZONE_DEFAULT)
             flights = self._api.get_flights(bounds=bounds)
 
-            flights = [f for f in flights
-                       if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
+            # Altitude filter
+            flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
 
+            # Sort & slice
             flights.sort(key=lambda f: distance_from_flight_to_home(f))
             flights = flights[:MAX_FLIGHT_LOOKUP]
 
@@ -275,31 +285,28 @@ class Overhead:
                         d = self._api.get_flight_details(f)
 
                         # Extract fields
-                        plane = (
-                            d.get("aircraft", {}).get("model", {}).get("code", "")
-                            or f.airline_icao or ""
-                        )
-                        airline = d.get("airline", {}).get("name", "")
+                        plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.airline_icao or ""
+                        airline = self.safe_get(d, "airline", "name", default="")
 
                         origin = f.origin_airport_iata or ""
                         destination = f.destination_airport_iata or ""
                         callsign = f.callsign or ""
 
                         # Times
-                        t = d.get("time", {})
-                        time_sched_dep = t.get("scheduled", {}).get("departure")
-                        time_sched_arr = t.get("scheduled", {}).get("arrival")
-                        time_real_dep = t.get("real", {}).get("departure")
-                        time_est_arr = t.get("estimated", {}).get("arrival")
+                        t = self.safe_get(d, "time", default={})
+                        time_sched_dep = self.safe_get(t, "scheduled", "departure")
+                        time_sched_arr = self.safe_get(t, "scheduled", "arrival")
+                        time_real_dep = self.safe_get(t, "real", "departure")
+                        time_est_arr = self.safe_get(t, "estimated", "arrival")
 
-                        # Airport coords
-                        o = d.get("airport", {}).get("origin")
-                        origin_lat = o["position"]["latitude"] if o else None
-                        origin_lon = o["position"]["longitude"] if o else None
+                        # Airport coordinates
+                        o = self.safe_get(d, "airport", "origin")
+                        origin_lat = self.safe_get(o, "position", "latitude")
+                        origin_lon = self.safe_get(o, "position", "longitude")
 
-                        dest = d.get("airport", {}).get("destination")
-                        dest_lat = dest["position"]["latitude"] if dest else None
-                        dest_lon = dest["position"]["longitude"] if dest else None
+                        dest = self.safe_get(d, "airport", "destination")
+                        dest_lat = self.safe_get(dest, "position", "latitude")
+                        dest_lon = self.safe_get(dest, "position", "longitude")
 
                         dist_o = distance_to_point(f, origin_lat, origin_lon) if origin_lat else 0
                         dist_d = distance_to_point(f, dest_lat, dest_lon) if dest_lat else 0
@@ -317,10 +324,7 @@ class Overhead:
                             "plane_longitude": f.longitude,
 
                             "owner_iata": f.airline_iata or "N/A",
-                            "owner_icao": (
-                                d.get("owner", {}).get("code", {}).get("icao")
-                                or f.airline_icao or ""
-                            ),
+                            "owner_icao": self.safe_get(d, "owner", "code", "icao", default="") or f.airline_icao or "",
 
                             "time_scheduled_departure": time_sched_dep,
                             "time_scheduled_arrival": time_sched_arr,
@@ -338,12 +342,13 @@ class Overhead:
 
                         data.append(entry)
 
+                        # Log flights
                         log_flight_data(entry)
                         log_farthest_flight(entry)
 
-                        break  # out of retry loop
+                        break
 
-                    except (KeyError, AttributeError):
+                    except Exception as e:
                         retries -= 1
 
             with self._lock:
@@ -355,7 +360,7 @@ class Overhead:
             with self._lock:
                 self._new_data = False
                 self._processing = False
-
+                
     # Properties
     @property
     def new_data(self):
@@ -376,7 +381,8 @@ class Overhead:
     @property
     def data_is_empty(self):
         return len(self._data) == 0
-
+        
+# Main
 
 if __name__ == "__main__":
     o = Overhead()
@@ -387,4 +393,3 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
-
