@@ -27,6 +27,8 @@ def generate_closest_map(entries, filename="closest.html"):
     for idx, entry in enumerate(entries):
         color = colors[idx % len(colors)]
         plane_loc = [entry["plane_latitude"], entry["plane_longitude"]]
+        dist_origin = entry.get("distance_origin", 0)
+        dist_dest = entry.get("distance_destination", 0)
         dist_home = entry.get("distance", 0)
 
         popup_text = f"""
@@ -41,7 +43,9 @@ def generate_closest_map(entries, filename="closest.html"):
             <b>From:</b> {entry.get('origin','')}<br>
             <b>To:</b> {entry.get('destination','')}<br>
             <b>Plane:</b> {entry.get('plane','')}<br>
-            <b>Distance to Home:</b> {dist_home:.2f} {unit_label}
+            <b>Distance to Home:</b> {dist_home:.2f} {unit_label}<br>
+            <b>Distance Origin:</b> {dist_origin:.2f} {unit_label}<br>
+            <b>Distance Destination:</b> {dist_dest:.2f} {unit_label}
         </div>
         """
         folium.Marker(
@@ -140,3 +144,4 @@ def generate_farthest_map(entries, filename="farthest.html"):
     filepath = os.path.join(MAPS_DIR, filename)
     m.save(filepath)
     return filepath
+
