@@ -27,7 +27,7 @@ Each time a flight is detected:
 
 **New features:**  
 
-- Generates **interactive maps** for showing closest and farthest flights with generated curved Earth paths; dashed for flown, solid for remaining.
+- Generates **interactive maps** for showing closest and farthest flights with generated curved Earth paths; solid for flown, dashed for remaining.
  
 - Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker ie 192.168.x.x:8080 etc) 
 
@@ -120,7 +120,7 @@ The difference in size between P4 and P2.5 panel. I use P4 for the living room a
 The close.txt file. Farthest.txt looks the same.
 <img width="1733" height="985" alt="Screenshot 2025-12-01 142748" src="https://github.com/user-attachments/assets/6583fac2-c182-466d-8f9f-a5c669663a6f" />
 
-Map will show the top 3 farthest flights, and the closest ping'd flights to your location. 
+Map will show the top 3 farthest flights, and the closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses estimated flight path based on curve of the Earth
 
 
 <img width="362" height="361" alt="Screenshot 2025-11-05 045843" src="https://github.com/user-attachments/assets/2309c292-02f2-4db3-8075-4cf1726c8039" />
