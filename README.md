@@ -115,6 +115,7 @@ Had to remount the Pi since the display ribbon bumped into the panel
 The difference in size between P4 and P2.5 panel. I use P4 for the living room and P2.5 for my desk.
 
 <img width="422" height="322" alt="distance" src="https://github.com/user-attachments/assets/354cda11-9f3d-4b04-ad8e-68ddfc3ec3e5" />
+
 The close.txt file. Farthest.txt looks the same.
 <img width="1550" height="577" alt="Screenshot 2025-11-29 090500" src="https://github.com/user-attachments/assets/5aac37a4-c563-4312-a2c6-d63ccafe02e1" />
 Map will show the top 3 farthest flights, and the closest ping'd flights to your location. 
