@@ -174,12 +174,12 @@ def generate_farthest_map(entries, filename="farthest.html"):
         # Great-circle paths
         gc1 = great_circle_points([origin_lat, entry["origin_longitude"]], [plane_lat, plane_lon])
         gc1 = [[lat, align_to_reference_tile(lon, ref_lon)] for lat, lon in gc1]
-        folium.PolyLine(gc1, color=color, weight=2, opacity=0.9, dash_array="5,5",
+        folium.PolyLine(gc1, color=color, weight=2, opacity=0.9,
                 tooltip=f"Path: {entry.get('origin','UNK')} to Current").add_to(m)
 
         gc2 = great_circle_points([plane_lat, plane_lon], [dest_lat, entry["destination_longitude"]])
         gc2 = [[lat, align_to_reference_tile(lon, ref_lon)] for lat, lon in gc2]
-        folium.PolyLine(gc2, color=color, weight=2, opacity=0.9,
+        folium.PolyLine(gc2, color=color, weight=2, opacity=0.9, dash_array="5,5",
                 tooltip=f"Path: Current to {entry.get('destination','UNK')}").add_to(m)
 
         all_locs.extend([[plane_lat, plane_lon], [origin_lat, origin_lon], [dest_lat, dest_lon]])
@@ -191,3 +191,4 @@ def generate_farthest_map(entries, filename="farthest.html"):
     filepath = os.path.join(MAPS_DIR, filename)
     m.save(filepath)
     return filepath
+
