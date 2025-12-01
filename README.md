@@ -157,6 +157,8 @@ When using the Imager make sure these settings are selected to enable SSH and ma
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
 ![wifi](https://github.com/user-attachments/assets/0669de7a-cb9c-4c2a-9129-8b044c088f9f)
+
+Make sure you select the correct timezone since that is what is displayed on the clock. You can always change it later.
 ![ssh](https://github.com/user-attachments/assets/67d6fa8f-5ae3-4bf9-9f47-fbf78017ad78)
 
 ### 2. Connect via SSH
