@@ -27,7 +27,7 @@ Each time a flight is detected:
 
 **New features:**  
 
-- Generates **interactive maps** for showing closest and farthest flights with curved Earth paths; dashed for flown, solid for remaining.
+- Generates **interactive maps** for showing closest and farthest flights with generated curved Earth paths; dashed for flown, solid for remaining.
  
 - Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker ie 192.168.x.x:8080 etc) 
 
