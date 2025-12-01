@@ -121,6 +121,7 @@ The close.txt file. Farthest.txt looks the same.
 <img width="1752" height="810" alt="Screenshot 2025-12-01 154128" src="https://github.com/user-attachments/assets/587f8e87-a28e-4b46-97e4-3216cfb81702" />
 
 Map will show the top 3 farthest flights, and the closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses estimated flight path based on curve of the Earth
+
 <img width="362" height="361" alt="Screenshot 2025-11-05 045843" src="https://github.com/user-attachments/assets/2309c292-02f2-4db3-8075-4cf1726c8039" />
 
 The email
