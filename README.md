@@ -110,6 +110,10 @@ Had to remount the Pi since the display ribbon bumped into the panel
 ![PXL_20241019_155605121](https://github.com/user-attachments/assets/4b71b758-00c9-4586-a5a0-ad251696eb17)
 ![PXL_20241019_155629794](https://github.com/user-attachments/assets/f82088b8-e959-44e3-82f3-7207779cc659)
 ![PXL_20241019_155732297](https://github.com/user-attachments/assets/77a329c7-d9c2-4a33-ab07-b6f6a2bf6ded)
+![signal-2025-12-01-080516_002](https://github.com/user-attachments/assets/887de831-c33f-4646-a97f-bf88dfb396d9)
+
+The difference in size between P4 and P2.5 panel. I use P4 for the living room and P2.5 for my desk.
+
 <img width="422" height="322" alt="distance" src="https://github.com/user-attachments/assets/354cda11-9f3d-4b04-ad8e-68ddfc3ec3e5" />
 The close.txt file. Farthest.txt looks the same.
 <img width="1550" height="577" alt="Screenshot 2025-11-29 090500" src="https://github.com/user-attachments/assets/5aac37a4-c563-4312-a2c6-d63ccafe02e1" />
