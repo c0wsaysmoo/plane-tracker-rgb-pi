@@ -165,9 +165,18 @@ Make sure you select the correct timezone since that is what is displayed on the
 I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure. Can just open the files from there and edit them instead of through the cmd prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
 
 ### 3. Install the Adafruit Bonnet
-[Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/driving-matrices) by following the instructions provided by Adafruit.
+[Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/)) by following the instructions provided by Adafruit.
+
+```
+curl https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/main/rgb-matrix.sh >rgb-matrix.sh
+sudo bash rgb-matrix.sh
+```
 
 You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge. More details in the link above.
+
+For the "interface board type" it's **"Bonnet"** Option 1
+
+For "Quality" or "Convenience" it's **"Quality"** IF you soldered the jumper. If not, it's **"Convenience"**.
 
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 
