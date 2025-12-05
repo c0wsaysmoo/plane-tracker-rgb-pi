@@ -26,24 +26,31 @@ class DateScene(object):
 
 
     def moonphase(self):
-            now = datetime.now()
-            
-            #print("last fetch is", self.last_fetched_moonphase, "; now day is", now.day)
-            if self.last_fetched_moonphase != now.day:
-                #print("Fetching forecast data...")
-                forecast = grab_forecast()
+        now = datetime.now()
+
+        # Only fetch forecast if it's a new day
+        if self.last_fetched_moonphase != now.day:
+            try:
+                forecast = grab_forecast(tag="DateScene")
+                if not forecast:  # None or empty list
+                    logging.error("Forecast data missing or API error (moon phase).")
+                    # Return cached moon phase if available, otherwise None
+                    return self.today_moonphase
+
                 for day in forecast:
                     forecast_date = day['startTime'][:10]
                     if forecast_date == now.strftime('%Y-%m-%d'):
-                       utc_moonphase = int(day["values"]["moonPhase"])
-                       self.today_moonphase = utc_moonphase  # Update moon phase
-                       self.last_fetched_moonphase = now.day  # Update the last fetch date
-                       #logging.info(f"Fetched forecast data for {forecast_date}, moonphase: {utc_moonphase}")
-                       #print(f"Fetched forecast data for {forecast_date}, moonphase: {utc_moonphase}")
-                       break 
+                        utc_moonphase = int(day["values"]["moonPhase"])
+                        self.today_moonphase = utc_moonphase
+                        self.last_fetched_moonphase = now.day
+                        break
 
-          #Return the cached moon phase value
-            return self.today_moonphase
+            except Exception as e:
+                logging.error(f"Error fetching forecast for moon phase: {e}")
+                return self.today_moonphase  # Return cached if available
+
+        # Return cached value if fetch is not needed or on error
+        return self.today_moonphase
 
     def map_moon_phase_to_color(self, moonphase):
         # Define the two colors for the specific moon phases
@@ -88,37 +95,36 @@ class DateScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def date(self, count):
-        #redraws the screen at night start and end so it'll adjust the brightness
-        now = datetime.now().replace(microsecond=0).time()
-        if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
-            self._last_date = None
-            return
-    
+        now = datetime.now()
+        current_date = now.strftime("%b %d")
+
+        # Flag for forced redraw if new data arrived
         if len(self._data):
-            # Ensure redraw when there's new data
-            self._last_date = None
+            self._redraw_date = True
+            return 
+
+        # Get moon phase
+        moon_phase_value = self.moonphase()
+        if moon_phase_value is None:
+            start_color = end_color = colours.RED
         else:
-            # If there's no data to display
-            # then draw the date
-            now = datetime.now()
-            current_date = now.strftime("%b %d")
+            start_color, end_color = self.map_moon_phase_to_color(moon_phase_value)
 
-            # Get the moon phase colors based on the current moon phase
-            start_color, end_color = self.map_moon_phase_to_color(self.moonphase())
+        # Clear previous date if needed
+        if self._last_date and (self._last_date != current_date or getattr(self, "_redraw_date", False)):
+            graphics.DrawText(
+                self.canvas,
+                DATE_FONT,
+                DATE_POSITION[0],
+                DATE_POSITION[1],
+                colours.BLACK,
+                self._last_date,
+            )
 
-            # Only draw if the date needs updating
-            if self._last_date != current_date:
-                # Undraw the last date if different from the current date
-                if not self._last_date is None:
-                    _ = graphics.DrawText(
-                        self.canvas,
-                        DATE_FONT,
-                        DATE_POSITION[0],
-                        DATE_POSITION[1],
-                        colours.BLACK,
-                        self._last_date,
-                    )
-                self._last_date = current_date
+        self._last_date = current_date
 
-                # Draw the date with a gradient color
-                self.draw_gradient_text(current_date, DATE_POSITION[0], DATE_POSITION[1], start_color, end_color)
+        # Draw date unconditionally
+        self.draw_gradient_text(current_date, DATE_POSITION[0], DATE_POSITION[1], start_color, end_color)
+
+        # Reset redraw flag
+        self._redraw_date = False

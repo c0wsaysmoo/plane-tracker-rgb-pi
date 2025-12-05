@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import colorsys
 from rgbmatrix import graphics
 from utilities.animator import Animator
@@ -25,73 +25,87 @@ class TemperatureScene(object):
 
     def colour_gradient(self, colour_A, colour_B, ratio):
         return graphics.Color(
-            colour_A.red + ((colour_B.red - colour_A.red) * ratio),
-            colour_A.green + ((colour_B.green - colour_A.green) * ratio),
-            colour_A.blue + ((colour_B.blue - colour_A.blue) * ratio),
-            )
-
-        return graphics.Color(int(r), int(g), int(b))
+            int(colour_A.red + ((colour_B.red - colour_A.red) * ratio)),
+            int(colour_A.green + ((colour_B.green - colour_A.green) * ratio)),
+            int(colour_A.blue + ((colour_B.blue - colour_A.blue) * ratio)),
+        )
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def temperature(self, count):
-        #redraws the screen at night start and end so it'll adjust the brightness
+        # Redraw at night start/end to adjust brightness
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
             self._redraw_temp = True
             return  
-            
+
         # Ensure redraw when there's new data
         if len(self._data):
             self._redraw_temp = True
             return
 
-        seconds_since_update = (datetime.now() - self._last_updated).seconds if self._last_updated is not None else 0
-        if not (seconds_since_update % TEMPERATURE_REFRESH_SECONDS) or self._redraw_temp:
-            if self._cached_temp is not None and self._redraw_temp:
+        # Determine seconds since last update
+        seconds_since_update = (datetime.now() - self._last_updated).total_seconds() if self._last_updated else TEMPERATURE_REFRESH_SECONDS
+        retry_interval_on_error = 60
+
+        # Determine if we need to fetch new data
+        need_fetch = (
+            seconds_since_update >= TEMPERATURE_REFRESH_SECONDS or
+            (self._cached_temp is None and (self._last_updated is None or seconds_since_update >= retry_interval_on_error))
+        )
+
+        # Force redraw if switching back to scene and cached temp exists
+        force_draw = self._redraw_temp or (self._cached_temp is not None)
+
+        if need_fetch or force_draw:
+            # Use cached values if present and not fetching
+            if self._cached_temp and not need_fetch:
                 current_temperature, current_humidity = self._cached_temp
             else:
-                self._cached_temp = current_temperature, current_humidity = grab_temperature_and_humidity()
-                self._last_updated = datetime.now()
-                
-              # Undraw old temperature
+                # Fetch new values
+                current_temperature, current_humidity = grab_temperature_and_humidity()
+                if current_temperature is not None and current_humidity is not None:
+                    self._cached_temp = (current_temperature, current_humidity)
+                    self._last_updated = datetime.now()
+                else:
+                    # Keep ERR displayed and schedule retry in 1 minute
+                    current_temperature, current_humidity = None, None
+                    if self._cached_temp is None:
+                        # Adjust _last_updated so next fetch occurs in 1 minute
+                        self._last_updated = datetime.now() - timedelta(seconds=TEMPERATURE_REFRESH_SECONDS - retry_interval_on_error)
+
+            # Clear old temperature
             if self._last_temperature_str is not None:
                 self.draw_square(
-                    40,  # x-coordinate of top-left corner
-                    0,   # y-coordinate of top-left corner
-                    64,  # width of the rectangle
-                    5,   # height of the rectangle
-                    colours.BLACK,  # Use background color to clear the area
+                    40, 0, 64, 5, colours.BLACK
                 )
-                
-            if current_temperature is not None:
-                self._last_temperature_str = f"{round(current_temperature)}°"
-                self._last_temperature = current_temperature
-                self._redraw_temp = False
-                
-                # Get the humidity ratio (0% -> white, 100% -> blue)
-                humidity_ratio = current_humidity / 100.0
 
+            # Determine display string and color
+            if current_temperature is None or current_humidity is None:
+                display_str = "ERR"
+                temp_colour = colours.RED
+            else:
+                display_str = f"{round(current_temperature)}°"
+                humidity_ratio = current_humidity / 100.0
                 temp_colour = self.colour_gradient(colours.WHITE, colours.DARK_BLUE, humidity_ratio)
 
-                # Calculate the length of the formatted temperature string
-                font_character_width = 5
-                temperature_string_width = len(self._last_temperature_str) * font_character_width
+            # Update state
+            self._last_temperature_str = display_str
+            self._last_temperature = current_temperature
+            self._redraw_temp = False
 
-                # Calculate the starting x-coordinate for centering within the range 40 to 64
-                middle_x = (40 + 64) // 2
+            # Calculate string position (centered)
+            font_character_width = 5
+            temperature_string_width = len(display_str) * font_character_width
+            middle_x = (40 + 64) // 2
+            start_x = middle_x - temperature_string_width // 2
+            TEMPERATURE_POSITION = (start_x, TEMPERATURE_FONT_HEIGHT)
 
-                # Calculate the starting x-coordinate for centering the temperature string
-                start_x = middle_x - temperature_string_width // 2
-
-                # Define and initialize TEMPERATURE_POSITION
-                TEMPERATURE_POSITION = (start_x, TEMPERATURE_FONT_HEIGHT)
-
-                # Draw temperature
-                _ = graphics.DrawText(
-                    self.canvas,
-                    TEMPERATURE_FONT,
-                    TEMPERATURE_POSITION[0],
-                    TEMPERATURE_POSITION[1],
-                    temp_colour,
-                    self._last_temperature_str,
-                )
+            # Draw temperature/error
+            graphics.DrawText(
+                self.canvas,
+                TEMPERATURE_FONT,
+                TEMPERATURE_POSITION[0],
+                TEMPERATURE_POSITION[1],
+                temp_colour,
+                display_str,
+            )
