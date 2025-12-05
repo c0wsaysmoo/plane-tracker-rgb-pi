@@ -31,115 +31,93 @@ class DaysForecastScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
-        #redraws the screen at night start and end so it'll adjust the brightness
+        # Ensure redraw when there's new scene selection or midnight brightness events
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
             self._redraw_forecast = True
-            return    
-    
-        # Ensure redraw when there's new data
+            return
+
+        # --- SCENE SWITCH HANDLING ---
+        # If the parent system sets self._data when switching scenes:
+        # redraw immediately but DO NOT trigger a fetch
         if len(self._data):
             self._redraw_forecast = True
             return
 
-        # If there's no data to display
-        # then draw the day
         current_hour = datetime.now().hour
 
-        # Only draw if time needs updated
+        # Determine if we need to fetch BEFORE updating last_hour
+        need_fetch = False
+        if self._cached_forecast is None:
+            need_fetch = True
+        elif self._last_hour != current_hour:
+            need_fetch = True
+
+        # Draw only when hour changes or when scene is newly activated
         if self._last_hour != current_hour or self._redraw_forecast:
-            # Clear space if last day is different from current
+
+            # Clear previous area
             if self._last_hour is not None:
-                self.draw_square(
-                    0,
-                    12,  # Start from the bottom of the screen (32 - 20)
-                    64,  # Width of the area
-                    32,  # Height of the area
-                    colours.BLACK,
-                )
+                self.draw_square(0, 12, 64, 32, colours.BLACK)
+
+            # Update last_hour AFTER deciding if we need to fetch
             self._last_hour = current_hour
 
-            if self._cached_forecast is not None and self._redraw_forecast:
-                forecast = self._cached_forecast
+            # -------------------------
+            # FETCH OR USE CACHE
+            # -------------------------
+            if need_fetch:
+                forecast = grab_forecast(tag="days")
+
+                # If the API failed ? use old cache (if any)
+                if not forecast:
+                    if self._cached_forecast:
+                        forecast = self._cached_forecast
+                    else:
+                        # Nothing cached yet ? wait for next cycle
+                        return
+                else:
+                    # Valid data ? update cache
+                    self._cached_forecast = forecast
             else:
-                forecast = grab_forecast()
-                self._cached_forecast = forecast
+                # Use cached forecast
+                forecast = self._cached_forecast
 
-            if forecast is not None:
-                self._redraw_forecast = False
-                offset = 1
-                space_width = screen.WIDTH // 3  # Calculate the width of each third of the screen
+            # Done with forced redraw
+            self._redraw_forecast = False
+            # -------------------------
+            # RENDER FORECAST
+            # -------------------------
+            offset = 1
+            space_width = screen.WIDTH // 3
 
-                for day in forecast:
-                    # Extract day_name and icon
-                    day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
-                    icon = day["values"]["weatherCodeFullDay"]
+            for day in forecast:
+                day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
+                icon = day["values"]["weatherCodeFullDay"]
 
-                    # Calculate the maximum width between min and max temperature text
-                    min_temp = f"{day['values']['temperatureMin']:.0f}"
-                    max_temp = f"{day['values']['temperatureMax']:.0f}"
-                    
-                    # Calculate temperature width for min and max temperatures
-                    min_temp_width = len(min_temp) * 4
-                    max_temp_width = len(max_temp) * 4
+                min_temp = f"{day['values']['temperatureMin']:.0f}"
+                max_temp = f"{day['values']['temperatureMax']:.0f}"
 
-                    # Calculate temp_x for centering temperature text
-                    temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2 + 1
+                min_temp_width = len(min_temp) * 4
+                max_temp_width = len(max_temp) * 4
 
-                    # Calculate min_temp_x for centering min temperature text
-                    min_temp_x = temp_x + max_temp_width
+                temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2 + 1
+                max_temp_x = temp_x
+                min_temp_x = temp_x + max_temp_width
 
-                    # Calculate max_temp_x for centering max temperature text
-                    max_temp_x = temp_x
+                icon_x = offset + (space_width - ICON_SIZE) // 2
+                day_x = offset + (space_width - 12) // 2 + 1
 
-                    # Calculate icon_x for centering the icon
-                    icon_x = offset + (space_width - ICON_SIZE) // 2
+                # Draw day name
+                graphics.DrawText(self.canvas, TEXT_FONT, day_x, DAY_POSITION, DAY_COLOUR, day_name)
 
-                    # Calculate day_x for centering the day name
-                    day_x = offset + (space_width - 12) // 2 + 1
+                # Draw icon
+                image = Image.open(f"icons/{icon}.png")
+                image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
+                self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
 
-                    # Draw day
-                    _ = graphics.DrawText(
-                        self.canvas,
-                        TEXT_FONT,
-                        day_x,
-                        DAY_POSITION,
-                        DAY_COLOUR,
-                        day_name
-                    )
+                # Draw temps
+                graphics.DrawText(self.canvas, TEXT_FONT, max_temp_x, TEMP_POSITION, MAX_T_COLOUR, max_temp)
+                graphics.DrawText(self.canvas, TEXT_FONT, min_temp_x, TEMP_POSITION, MIN_T_COLOUR, min_temp)
 
-                    # Draw the icon
-                    image = Image.open(f"icons/{icon}.png")
-                    image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
-                    self.matrix.SetImage(image.convert('RGB'), icon_x, ICON_POSITION)
-                    
-                    # Clear previous temperature values
-                    self.draw_square(
-                        min_temp_x,  # Left x coordinate
-                        TEMP_POSITION - FONT_HEIGHT,  # Top y coordinate
-                        max_temp_x + max_temp_width,  # Right x coordinate
-                        TEMP_POSITION + FONT_HEIGHT,  # Bottom y coordinate
-                        colours.BLUE
-                    )
-                    
-                    # Draw min temperature
-                    _ = graphics.DrawText(
-                        self.canvas,
-                        TEXT_FONT,
-                        min_temp_x,
-                        TEMP_POSITION,
-                        MIN_T_COLOUR,
-                        min_temp
-                    )
-        
-                    # Draw max temperature
-                    _ = graphics.DrawText(
-                        self.canvas,
-                        TEXT_FONT,
-                        max_temp_x,
-                        TEMP_POSITION,
-                        MAX_T_COLOUR,
-                        max_temp
-                    )
-
-                    offset += space_width
+                offset += space_width
