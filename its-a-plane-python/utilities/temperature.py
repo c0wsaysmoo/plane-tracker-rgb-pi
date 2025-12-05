@@ -25,104 +25,104 @@ from config import TEMPERATURE_LOCATION
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
 
-def grab_temperature_and_humidity(delay=2, max_retries=None):
-    current_temp, humidity = None, None
-    retries = 0
+def grab_temperature_and_humidity():
+    try:
+        request = r.get(
+            f"{TOMORROW_API_URL}/weather/realtime",
+            params={
+                "location": TEMPERATURE_LOCATION,
+                "units": TEMPERATURE_UNITS,
+                "apikey": TOMORROW_API_KEY
+            },
+            timeout=10
+        )
 
-    while True:
-        try:
-            request = r.get(
-                f"{TOMORROW_API_URL}/weather/realtime",
-                params={
-                    "location": TEMPERATURE_LOCATION,
-                    "units": TEMPERATURE_UNITS,
-                    "apikey": TOMORROW_API_KEY
-                },
-                timeout=10  # Add timeout for the request
-            )
-            request.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
-            
-            # Safely extract data
-            data = request.json().get("data", {}).get("values", {})
-            current_temp = data.get("temperature")
-            humidity = data.get("humidity")
+        if request.status_code == 429:
+            logging.error("Rate limit reached, returning error state")
+            return None, None
 
-            # If temperature or humidity is missing, assign a default value of 0
-            if current_temp is None:
-                logging.warning("Temperature data missing, defaulting to 0.")
-                current_temp = 0
+        request.raise_for_status()
 
-            if humidity is None:
-                logging.warning("Humidity data missing, defaulting to 0.")
-                humidity = 0
+        data = request.json().get("data", {}).get("values", {})
+        temperature = data.get("temperature")
+        humidity = data.get("humidity")
 
-            # If the data is valid (including defaults), exit the loop
-            break
+        if temperature is None or humidity is None:
+            logging.error("Incomplete data from API")
+            return None, None
 
-        except (r.exceptions.RequestException, ValueError) as e:
-            logging.error(f"Request failed. Error: {e}")
-            
-            retries += 1
-            if max_retries and retries >= max_retries:
-                logging.error("Max retries reached. Exiting.")
-                break
-            
-            logging.info(f"Retrying in {delay} seconds...")
-            time.sleep(delay)
+        #print(f"[Temp] {datetime.now()}: {temperature}{TEMPERATURE_UNITS}, {humidity}% RH")
+        return temperature, humidity
 
-    return current_temp, humidity
+    except (r.exceptions.RequestException, ValueError) as e:
+        logging.error(f"Temperature request failed: {e}")
+        return None, None
+        
+        
+def grab_forecast(tag="unknown"):
+    current_time = datetime.utcnow()
+    dt = current_time + timedelta(hours=6)
 
-def grab_forecast(delay=2):
-    while True:
-        try:
-            current_time = datetime.utcnow()
-            dt = current_time + timedelta(hours=6)
-            
-            resp = r.post(
-                f"{TOMORROW_API_URL}/timelines",
-                headers={
-                    "Accept-Encoding": "gzip",
-                    "accept": "application/json",
-                    "content-type": "application/json"
-                },
-                params={"apikey": TOMORROW_API_KEY}, 
-                json={
-                    "location": TEMPERATURE_LOCATION,
-                    "units": TEMPERATURE_UNITS,
-                    "fields": [
-                        "temperatureMin",
-                        "temperatureMax",
-                        "weatherCodeFullDay",
-                        "sunriseTime",
-                        "sunsetTime",
-                        "moonPhase"
-                    ],
-                    "timesteps": [
-                        "1d"
-                    ],
-                    "startTime": dt.isoformat(),
-                    "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
-                }
-            )    
-            resp.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+    try:
+        resp = r.post(
+            f"{TOMORROW_API_URL}/timelines",
+            headers={
+                "Accept-Encoding": "gzip",
+                "accept": "application/json",
+                "content-type": "application/json"
+            },
+            params={"apikey": TOMORROW_API_KEY},
+            json={
+                "location": TEMPERATURE_LOCATION,
+                "units": TEMPERATURE_UNITS,
+                "fields": [
+                    "temperatureMin",
+                    "temperatureMax",
+                    "weatherCodeFullDay",
+                    "sunriseTime",
+                    "sunsetTime",
+                    "moonPhase"
+                ],
+                "timesteps": ["1d"],
+                "startTime": dt.isoformat(),
+                "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
+            },
+            timeout=10
+        )
 
-            # Safely access the JSON response to avoid KeyError
-            data = resp.json().get("data", {})
-            timelines = data.get("timelines", [])
+        resp.raise_for_status()
 
-            if not timelines:
-                raise KeyError("Timelines not found in response.")
+        data = resp.json().get("data", {})
+        timelines = data.get("timelines", [])
+        if not timelines:
+            logging.error(f"[Forecast:{tag}] No timelines returned from API")
+            return []
 
-            forecast = timelines[0].get("intervals", [])
+        intervals = timelines[0].get("intervals", [])
+        if not intervals:
+            logging.error(f"[Forecast:{tag}] Timelines returned but no intervals")
+            return []
 
-            if not forecast:
-                raise KeyError("Forecast intervals not found in timelines.")
+        #print(f"[Forecast:{tag}] {datetime.now()}: Retrieved {len(intervals)} days")
+        return intervals
 
-            return forecast
+    except r.exceptions.RequestException as e:
+        logging.error(f"[Forecast:{tag}] API request failed: {e}")
+        return []
+    except KeyError as e:
+        logging.error(f"[Forecast:{tag}] Unexpected data format: {e}")
+        return []
 
-        except (r.exceptions.RequestException, KeyError) as e:
-            logging.error(f"Request failed. Error: {e}")
-            logging.info(f"Retrying in {delay} seconds...")
-            time.sleep(delay)
-    
-    return None
+#forecast_data = grab_forecast()
+#if forecast_data is not None:
+#    print("Weather forecast:")
+#    for interval in forecast_data:
+#        temperature_min = interval["values"]["temperatureMin"]
+#        temperature_max = interval["values"]["temperatureMax"]
+#        weather_code_day = interval["values"]["weatherCodeFullDay"]
+#        sunrise = interval["values"]["sunriseTime"]
+#        sunset = interval["values"]["sunsetTime"]
+#        moon_phase = interval["values"]["moonPhase"]
+#        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}, Sunrise: {sunrise}, Sunset: {sunset}, Moon Phase: {moon_phase}")
+#else:
+#    print("Failed to retrieve forecast.")
