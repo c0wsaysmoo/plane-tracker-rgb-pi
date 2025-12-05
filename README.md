@@ -3,8 +3,6 @@
 
 I've updated all the weather scenes so if there is an error it'll just display ERR instead of freezing the clock. 
 
-I am having slight issues with the map drawing when it comes to extremly long distances where it draws the route going the wrong direction. I have yet to figure it out maybe someone can take a look at the map_generator.py file.
-
 Now logs the closest flights to your location and farthest destinations!
 
 1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
