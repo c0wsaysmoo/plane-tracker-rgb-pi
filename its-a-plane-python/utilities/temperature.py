@@ -23,7 +23,7 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
 from config import TEMPERATURE_LOCATION
 
 # Weather API
-TOMORROW_API_URL = "https://api.tomorrow.io/v4/"
+TOMORROW_API_URL = "https://api.tomorrow.io/v4"
 
 def grab_temperature_and_humidity():
     try:
@@ -126,3 +126,4 @@ def grab_forecast(tag="unknown"):
 #        print(f"Date: {interval['startTime'][:10]}, Min Temp: {temperature_min}, Max Temp: {temperature_max}, Weather Code: {weather_code_day}, Sunrise: {sunrise}, Sunset: {sunset}, Moon Phase: {moon_phase}")
 #else:
 #    print("Failed to retrieve forecast.")
+
