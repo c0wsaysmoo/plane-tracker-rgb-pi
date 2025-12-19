@@ -4,7 +4,8 @@ import pytz
 import time
 import json 
 import logging
-
+import socket
+from requests.exceptions import RequestException
 # Attempt to load config data
 try:
     from config import TOMORROW_API_KEY
@@ -21,6 +22,17 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
     TEMPERATURE_UNITS = "metric"
 
 from config import TEMPERATURE_LOCATION
+
+def is_dns_error(exc: Exception) -> bool:
+    """
+    Returns True if the exception was caused by DNS resolution failure
+    """
+    cause = exc
+    while cause:
+        if isinstance(cause, socket.gaierror):
+            return True
+        cause = cause.__cause__
+    return False
 
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4"
@@ -51,11 +63,21 @@ def grab_temperature_and_humidity():
             logging.error("Incomplete data from API")
             return None, None
 
-        #print(f"[Temp] {datetime.now()}: {temperature}{TEMPERATURE_UNITS}, {humidity}% RH")
+        #print(f"{datetime.now()} [Temp] {datetime.now()}: {temperature}{TEMPERATURE_UNITS}, {humidity}% RH")
         return temperature, humidity
 
-    except (r.exceptions.RequestException, ValueError) as e:
-        logging.error(f"Temperature request failed: {e}")
+    except (RequestException, ValueError) as e:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        if is_dns_error(e):
+            logging.error(
+                f"[{timestamp}] DNS failure resolving api.tomorrow.io - will retry"
+            )
+        else:
+            logging.error(
+                f"[{timestamp}] Temperature request failed: {e}"
+            )
+
         return None, None
         
         
@@ -103,12 +125,23 @@ def grab_forecast(tag="unknown"):
             logging.error(f"[Forecast:{tag}] Timelines returned but no intervals")
             return []
 
-        #print(f"[Forecast:{tag}] {datetime.now()}: Retrieved {len(intervals)} days")
+        #print(f"{datetime.now()} [Forecast:{tag}] {datetime.now()}: Retrieved {len(intervals)} days")
         return intervals
 
-    except r.exceptions.RequestException as e:
-        logging.error(f"[Forecast:{tag}] API request failed: {e}")
+    except RequestException as e:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        if is_dns_error(e):
+            logging.error(
+                f"[{timestamp}] [Forecast:{tag}] DNS failure resolving api.tomorrow.io - will retry"
+            )
+        else:
+            logging.error(
+                f"[{timestamp}] [Forecast:{tag}] API request failed: {e}"
+            )
+
         return []
+        
     except KeyError as e:
         logging.error(f"[Forecast:{tag}] Unexpected data format: {e}")
         return []
