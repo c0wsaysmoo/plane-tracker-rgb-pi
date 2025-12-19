@@ -113,11 +113,12 @@ class DaysForecastScene(object):
 
                 # Draw icon
                 image = Image.open(f"icons/{icon}.png")
-                image.thumbnail((ICON_SIZE, ICON_SIZE), Image.ANTIALIAS)
+                image.thumbnail((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
                 self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
 
                 # Draw temps
                 graphics.DrawText(self.canvas, TEXT_FONT, max_temp_x, TEMP_POSITION, MAX_T_COLOUR, max_temp)
                 graphics.DrawText(self.canvas, TEXT_FONT, min_temp_x, TEMP_POSITION, MIN_T_COLOUR, min_temp)
+
 
                 offset += space_width
