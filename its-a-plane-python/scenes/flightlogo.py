@@ -35,7 +35,9 @@ class FlightLogoScene:
 
 
         # Make image fit our screen.
-        image.thumbnail((LOGO_SIZE, LOGO_SIZE), Image.Resampling.LANCZOS)
-
+        try:
+            resample = Image.Resampling.LANCZOS  # Pillow 10+
+        except AttributeError:
+            resample = Image.ANTIALIAS          # Pillow <10
+        image.thumbnail((LOGO_SIZE, LOGO_SIZE), resample)
         self.matrix.SetImage(image.convert('RGB'))
-
