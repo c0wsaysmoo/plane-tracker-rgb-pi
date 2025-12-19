@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta
-import requests as r
-import pytz
 import time
-import json 
 import logging
 import socket
+
+from requests import Session
+from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
+from urllib3.util.retry import Retry
+
 # Attempt to load config data
 try:
     from config import TOMORROW_API_KEY
@@ -24,29 +26,55 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
 from config import TEMPERATURE_LOCATION
 
 def is_dns_error(exc: Exception) -> bool:
-    """
-    Returns True if the exception was caused by DNS resolution failure
-    """
     cause = exc
     while cause:
         if isinstance(cause, socket.gaierror):
             return True
         cause = cause.__cause__
     return False
+    
+_session = None
 
+def get_session() -> Session:
+    global _session
+    if _session is None:
+        _session = Session()
+
+        retries = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=2,
+            allowed_methods=["GET", "POST"],
+            status_forcelist=[429, 500, 502, 503, 504],
+            raise_on_status=False,
+        )
+
+        adapter = HTTPAdapter(
+            max_retries=retries,
+            pool_connections=2,
+            pool_maxsize=2,
+        )
+
+        _session.mount("https://", adapter)
+        _session.mount("http://", adapter)
+
+    return _session
+    
 # Weather API
 TOMORROW_API_URL = "https://api.tomorrow.io/v4"
 
 def grab_temperature_and_humidity():
     try:
-        request = r.get(
+        s = get_session()
+        request = s.get(
             f"{TOMORROW_API_URL}/weather/realtime",
             params={
                 "location": TEMPERATURE_LOCATION,
                 "units": TEMPERATURE_UNITS,
                 "apikey": TOMORROW_API_KEY
             },
-            timeout=10
+            timeout=(5, 20)
         )
 
         if request.status_code == 429:
@@ -86,7 +114,8 @@ def grab_forecast(tag="unknown"):
     dt = current_time + timedelta(hours=6)
 
     try:
-        resp = r.post(
+        s = get_session()
+        resp = s.post(
             f"{TOMORROW_API_URL}/timelines",
             headers={
                 "Accept-Encoding": "gzip",
@@ -109,7 +138,7 @@ def grab_forecast(tag="unknown"):
                 "startTime": dt.isoformat(),
                 "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
             },
-            timeout=10
+            timeout=(5, 20)
         )
 
         resp.raise_for_status()
