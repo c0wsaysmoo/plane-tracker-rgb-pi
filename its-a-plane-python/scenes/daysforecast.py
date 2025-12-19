@@ -113,7 +113,12 @@ class DaysForecastScene(object):
 
                 # Draw icon
                 image = Image.open(f"icons/{icon}.png")
-                image.thumbnail((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
+                try:
+                    resample = Image.Resampling.LANCZOS  # Pillow 10+
+                except AttributeError:
+                    resample = Image.ANTIALIAS          # Pillow <10
+                image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
+                
                 self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
 
                 # Draw temps
@@ -122,3 +127,4 @@ class DaysForecastScene(object):
 
 
                 offset += space_width
+
