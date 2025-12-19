@@ -24,7 +24,6 @@ JOURNEY_CODE_SELECTED = "xxx" #your home airport code ALL CAPS ie ORD
 JOURNEY_BLANK_FILLER = " ? " #what to display if theres no airport code
 HAT_PWM_ENABLED = False #only if you haven't soldered the PWM bridge use True if you did
 FORECAST_DAYS = 3 #today plus the next two days
-EMAIL = "" #insert your email address between the " ie "example@example.com" to recieve emails when there is a new closest flight on the tracker. Leave "" to recieve no emails. It will log/local webpage regardless
+EMAIL = "" #insert your email address between the " ie "example@example.com" to recieve emails when there is a new top 3 flight. Leave "" to recieve no emails. It will log/local webpage regardless
 MAX_FARTHEST = 3 #the amount of furthest flights you want in your log
 MAX_CLOSEST = 3 #the amount of closest flights to your house you want in your log
-
