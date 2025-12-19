@@ -35,5 +35,6 @@ class FlightLogoScene:
 
 
         # Make image fit our screen.
-        image.thumbnail((LOGO_SIZE, LOGO_SIZE), Image.ANTIALIAS)
+        image.thumbnail((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
+
         self.matrix.SetImage(image.convert('RGB'))
