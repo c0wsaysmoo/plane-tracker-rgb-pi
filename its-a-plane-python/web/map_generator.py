@@ -40,6 +40,28 @@ def great_circle_points(start, end, steps=50):
 
     return points
 
+ICON_COLORS = [
+    "red",
+    "blue",
+    "green",
+    "purple",
+    "darkred",
+    "darkblue",
+    "darkgreen",
+    "cadetblue",
+    "pink",
+    "black",
+    "gray",
+    "lightgray",
+    "lightblue",
+    "lightgreen",
+    "lightred",
+    "darkpurple",
+    "beige",
+    "white",
+    "yellow",
+]
+
 def normalize_longitudes(points):
     fixed = [points[0]]
     for lat, lon in points[1:]:
@@ -61,7 +83,7 @@ def align_to_reference_tile(lon, ref_lon):
 def generate_closest_map(entries, filename="closest.html"):
     m = folium.Map(location=LOCATION_HOME[:2], zoom_start=10)
     unit_label = get_unit_label()
-    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","brown"]
+    colors = ICON_COLORS
 
     # Home marker
     folium.Marker(
@@ -114,7 +136,7 @@ def generate_closest_map(entries, filename="closest.html"):
 
 def generate_farthest_map(entries, filename="farthest.html"):
     unit_label = get_unit_label()
-    colors = ["red","blue","green","purple","pink","darkred","darkblue","darkgreen","cadetblue","brown"]
+    colors = ICON_COLORS
 
     # Initialize map centered on home
     m = folium.Map(location=LOCATION_HOME[:2], zoom_start=4)
@@ -191,4 +213,3 @@ def generate_farthest_map(entries, filename="farthest.html"):
     filepath = os.path.join(MAPS_DIR, filename)
     m.save(filepath)
     return filepath
-
