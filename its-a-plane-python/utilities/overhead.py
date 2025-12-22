@@ -288,8 +288,14 @@ class Overhead:
                         plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.airline_icao or ""
                         airline = self.safe_get(d, "airline", "name", default="")
 
-                        origin = f.origin_airport_iata or ""
-                        destination = f.destination_airport_iata or ""
+                        def clean_code(val):
+                            if not val or str(val).upper() in BLANK_FIELDS:
+                                return ""
+                            return val
+
+                        origin = clean_code(f.origin_airport_iata)
+                        destination = clean_code(f.destination_airport_iata)
+
                         callsign = f.callsign or ""
 
                         # Times
@@ -393,3 +399,4 @@ if __name__ == "__main__":
         sleep(1)
 
     print(o.data)
+
