@@ -43,14 +43,19 @@ class FlightDetailsScene(object):
         # Draw flight number if available
         flight_no_text_length = 0
         callsign = self._data[self._data_index]["callsign"]
+        owner_icao = self._data[self._data_index]["owner_icao"]
 
         if callsign and callsign != "N/A":
             # Remove icao from flight number
-            flight_no = callsign[len(self._data[self._data_index]["owner_icao"]):]
+            if owner_icao and callsign.startswith(owner_icao):
+                flight_no = callsign[len(owner_icao):]
+            else:
+                flight_no = callsign
             
             # Add airline name if there is one
-            if self._data[self._data_index]["airline"] != "":
-                flight_no = f"{self._data[self._data_index]['airline']} {flight_no}"
+            airline = self._data[self._data_index]["airline"]
+            if airline:
+                flight_no = f"{airline} {flight_no}"
 
             for ch in flight_no:
                 ch_length = graphics.DrawText(
@@ -101,3 +106,4 @@ class FlightDetailsScene(object):
     @Animator.KeyFrame.add(0)
     def reset_scrolling(self):
         self.flight_position = screen.WIDTH
+
