@@ -55,7 +55,7 @@ pip3 install --user flask
 Make sure if you replace `its-a-plane.py` that you reown it
 
 ```
-chmod +x /home/path/its-a-plane-python/its-a-plane.py
+chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
 # Project Overview
