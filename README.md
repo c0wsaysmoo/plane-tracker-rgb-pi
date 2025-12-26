@@ -222,14 +222,14 @@ make
 sudo pip install . --break-system-packages
 ```
 
-### 6. Install Git and Configure Your Info
+### 6. Install Git and Git the tracker
 
 Clone the tracker:
 ```
 cd ~
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 ```
-If the bridge on the bonnet is oldered, you'll need to set HAT_PWM_ENABLED=True in the config file. It's False by default
+If the bridge on the bonnet is soldered, you'll need to set HAT_PWM_ENABLED=True in the config file. It's False by default
 
 After cloning the files, move everything to the main folder, as some files need to be in /home/path/ rather than /home/path/plane-tracker-rgb-pi/ You'll need to combine the two logos folders since Github only allows 1,000 files per folder so I had to split them.
 ```
