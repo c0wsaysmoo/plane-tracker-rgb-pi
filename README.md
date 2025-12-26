@@ -240,6 +240,8 @@ mv ~/logo2/* ~/logos/
 rmdir ~/logo ~/logo2
 ```
 
+# 7. Install Python dependencies
+
 ```
 pip install pytz requests beautifulsoup4 FlightRadarAPI folium selenium pillow flask --break-system-packages
 ```
@@ -254,18 +256,19 @@ If **Trixie**
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
-Make the Script Executable
+# 8. Make the Script Executable
+
 ```
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-Edit the config file
+# 9. Edit the Config File
 
 ```
 nano ~/its-a-plane-python/config.py
 ```
 
-Run the Script
+# 10. Run the Script
 
 ```
 ~/its-a-plane-python/its-a-plane.py
