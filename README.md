@@ -156,10 +156,9 @@ Once you get your Raspberry Pi up and running, you can follow [this guide](https
 
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** These instructions are for Bookworm
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** These instructions are for **Bookworm** AND **Trixie**
 When using the Imager make sure these settings are selected to enable SSH and make sure your WIFI information is typed in EXACTLY or else it won't connect when turned on.
 
-**Note** I can't get it working on Trixie for the time being
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
 ![wifi](https://github.com/user-attachments/assets/0669de7a-cb9c-4c2a-9129-8b044c088f9f)
@@ -174,22 +173,20 @@ I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the
 [Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/) by following the instructions provided by Adafruit.
 
 ```
-curl https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/main/rgb-matrix.sh >rgb-matrix.sh
+curl https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/main/rgb-matrix.sh > rgb-matrix.sh
 sudo bash rgb-matrix.sh
 ```
 
-You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge. More details in the link above.
+You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge.
 
-For the "interface board type" it's **"Bonnet"** Option 1
-
-For "Quality" or "Convenience" it's **"Quality"** IF you soldered the jumper. If not, it's **"Convenience"**.
+# During the script:
+# - Interface board type: Bonnet (Option 1)
+# - Quality if soldered jumper, Convenience if not
 
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 
-**"path"** is your username for the pi
-
 ```
-cd /home/path/rpi-rgb-led-matrix/examples-api-use/
+cd ~/rpi-rgb-led-matrix/examples-api-use/
 ```
 
 If you DIDN'T solder 
@@ -204,73 +201,87 @@ If you DID solder
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
+### 4. Install prerequisite software
 
-### 4. Install Git and Configure Your Info
+```sudo apt-get update
+sudo apt-get install -y \
+    git \
+    python3-pip \
+    python3-dev \
+    python3-setuptools \
+    cython3 \
+    build-essential \
+    libgraphicsmagick++-dev
+```
+
+### 5. Build and install Python bindings for RGB Matrix
+
+```
+cd ~/rpi-rgb-led-matrix/bindings/python
+make
+sudo pip install . --break-system-packages
+```
+
+### 6. Install Git and Configure Your Info
 You'll need Git for downloading the project files and other resources:
 
-```bash
-sudo apt-get install git
-git config --global user.name "YOUR USER NAME"
-git config --global user.email "YOUR EMAIL"
-```
 Clone the repository:
 ```
+cd ~
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 ```
 If the bridge on the bonnet is not soldered, you'll need to set HAT_PWM_ENABLED=False in the config file.
 
 After cloning the files, move everything to the main folder, as some files need to be in /home/path/ rather than /home/path/plane-tracker-rgb-pi/ You'll need to combine the two logos folders since Github only allows 1,000 files per folder so I had to split them.
 ```
-mv /home/path/plane-tracker-rgb-pi/* /home/path/
-mkdir /home/path/logos
-mv /home/path/logo/* /home/path/logos/
-mv /home/path/logo2/* /home/path/logos/
+mv ~/plane-tracker-rgb-pi/* ~/
+mkdir -p ~/logos
+mv ~/logo/* ~/logos/
+mv ~/logo2/* ~/logos/
+rmdir ~/logo ~/logo2
 ```
 
-For Linux Bookworm:
 ```
-sudo apt install python3-pip
-sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
-pip3 install pytz requests
-pip install beautifulsoup4
-pip3 install FlightRadarAPI
-pip install folium selenium pillow
-pip3 install --user flask
+pip install pytz requests beautifulsoup4 FlightRadarAPI folium selenium pillow flask --break-system-packages
+```
+If **Bookworm**
+```
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.11
 ```
 
-Move the RGB Module 
+If **Trixie**
+
 ```
-mv /home/path/rpi-rgb-led-matrix/bindings/python/rgbmatrix /home/path/its-a-plane-python/
+sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
 Make the Script Executable
 ```
-chmod +x /home/path/its-a-plane-python/its-a-plane.py
+chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
 Edit the config file
 
 ```
-nano /home/path/its-a-plane-python/config.py
+nano ~/its-a-plane-python/config.py
 ```
 
 Run the Script
 
 ```
-/home/path/its-a-plane-python/its-a-plane.py
+~/its-a-plane-python/its-a-plane.py
 ```
 Set Up the Script to Run on Boot
 
 To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following line:
 
 ```
-@reboot sleep 60 && /home/path/its-a-plane-python/its-a-plane.py
+@reboot sleep 60 && ~/its-a-plane-python/its-a-plane.py
 ```
 
 You can also run it like so to create a log file in case there are issues. 
 ```
-@reboot sleep 60 && /home/path/its-a-plane-python/its-a-plane.py >> /home/path/its-a-plane-python/workdammit.log 2>&1
+@reboot sleep 60 && ~/its-a-plane-python/its-a-plane.py >> ~/its-a-plane-python/workdammit.log 2>&1
 ```
 
 Optional: Add a Power Button
