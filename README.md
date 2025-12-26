@@ -201,7 +201,9 @@ sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 
 
 ### 4. Install prerequisite software
 
-```sudo apt-get update
+```
+cd ~
+sudo apt-get update
 sudo apt-get install -y \
     git \
     python3-pip \
