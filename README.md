@@ -1,8 +1,6 @@
 
 ## Update
 
-I've updated all the weather scenes so if there is an error it'll just display ERR instead of freezing the clock. 
-
 Now logs the closest flights to your location and farthest destinations!
 
 1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
