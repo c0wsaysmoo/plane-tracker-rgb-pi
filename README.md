@@ -178,8 +178,8 @@ sudo bash rgb-matrix.sh
 You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge.
 
 # During the script:
-# - Interface board type: Bonnet (Option 1)
-# - Quality if soldered jumper, Convenience if not
+ - Interface board type: Bonnet (Option 1)
+ - Quality if soldered jumper, Convenience if not
 
 **Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
 
