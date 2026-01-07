@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import time
 import logging
 import socket
+import json
 
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -110,8 +111,7 @@ def grab_temperature_and_humidity():
         
         
 def grab_forecast(tag="unknown"):
-    current_time = datetime.utcnow()
-    dt = current_time + timedelta(hours=6)
+    dt = datetime.now() - timedelta(days=1)
 
     try:
         s = get_session()
@@ -126,6 +126,8 @@ def grab_forecast(tag="unknown"):
             json={
                 "location": TEMPERATURE_LOCATION,
                 "units": TEMPERATURE_UNITS,
+                "timezone": "auto",
+                "dailyStartHour": 6,
                 "fields": [
                     "temperatureMin",
                     "temperatureMax",
@@ -135,8 +137,7 @@ def grab_forecast(tag="unknown"):
                     "moonPhase"
                 ],
                 "timesteps": ["1d"],
-                "startTime": dt.isoformat(),
-                "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat()
+                "endTime": (dt + timedelta(days=int(FORECAST_DAYS))).isoformat(), 
             },
             timeout=(5, 20)
         )
@@ -153,8 +154,11 @@ def grab_forecast(tag="unknown"):
         if not intervals:
             logging.error(f"[Forecast:{tag}] Timelines returned but no intervals")
             return []
-
-        #print(f"{datetime.now()} [Forecast:{tag}] {datetime.now()}: Retrieved {len(intervals)} days")
+        # Commented out debug prints to keep the console clean
+        #for i, day in enumerate(intervals):
+        #    print(f"Day {i}:")
+        #    print(json.dumps(day, indent=4)) 
+        
         return intervals
 
     except RequestException as e:
@@ -168,7 +172,6 @@ def grab_forecast(tag="unknown"):
             logging.error(
                 f"[{timestamp}] [Forecast:{tag}] API request failed: {e}"
             )
-
         return []
         
     except KeyError as e:
