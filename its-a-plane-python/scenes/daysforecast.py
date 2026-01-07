@@ -63,9 +63,7 @@ class DaysForecastScene(object):
             # Update last_hour AFTER deciding if we need to fetch
             self._last_hour = current_hour
 
-            # -------------------------
             # FETCH OR USE CACHE
-            # -------------------------
             if need_fetch:
                 forecast = grab_forecast(tag="days")
 
@@ -85,19 +83,34 @@ class DaysForecastScene(object):
 
             # Done with forced redraw
             self._redraw_forecast = False
-            # -------------------------
-            # RENDER FORECAST
-            # -------------------------
+            
+            # --- RENDER FORECAST ---
             offset = 1
             space_width = screen.WIDTH // 3
 
-            for day in forecast:
-                day_name = datetime.fromisoformat(day["startTime"].rstrip("Z")).strftime("%a")
-                icon = day["values"]["weatherCodeFullDay"]
+            # Get current local date for the "Midnight Switch"
+            now = datetime.now().astimezone()
+            today_local = now.date()
 
+            for day in forecast:
+                raw_start = day["startTime"]
+                # Parse the ISO timestamp including the timezone offset
+                local_time = datetime.fromisoformat(raw_start)
+                entry_date = local_time.date()
+
+                # THE SWITCH LOGIC: 
+                # If the entry date is before today, skip to next entry.
+                if entry_date < today_local:
+                    continue
+                
+                # Format the display data
+                day_name = local_time.strftime("%a")
+                icon = day["values"]["weatherCodeFullDay"]
+                
                 min_temp = f"{day['values']['temperatureMin']:.0f}"
                 max_temp = f"{day['values']['temperatureMax']:.0f}"
 
+                # --- Centering Calculations ---
                 min_temp_width = len(min_temp) * 4
                 max_temp_width = len(max_temp) * 4
 
@@ -108,23 +121,30 @@ class DaysForecastScene(object):
                 icon_x = offset + (space_width - ICON_SIZE) // 2
                 day_x = offset + (space_width - 12) // 2 + 1
 
+                # --- Draw to Matrix ---
                 # Draw day name
                 graphics.DrawText(self.canvas, TEXT_FONT, day_x, DAY_POSITION, DAY_COLOUR, day_name)
 
                 # Draw icon
-                image = Image.open(f"icons/{icon}.png")
                 try:
-                    resample = Image.Resampling.LANCZOS  # Pillow 10+
-                except AttributeError:
-                    resample = Image.ANTIALIAS          # Pillow <10
-                image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
-                
-                self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
+                    image = Image.open(f"icons/{icon}.png")
+                    try:
+                        resample = Image.Resampling.LANCZOS
+                    except AttributeError:
+                        resample = Image.ANTIALIAS
+                    image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
+                    self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
+                except FileNotFoundError:
+                    # If icon is missing, the script continues without crashing
+                    pass
 
-                # Draw temps
+                # Draw temperatures
                 graphics.DrawText(self.canvas, TEXT_FONT, max_temp_x, TEMP_POSITION, MAX_T_COLOUR, max_temp)
                 graphics.DrawText(self.canvas, TEXT_FONT, min_temp_x, TEMP_POSITION, MIN_T_COLOUR, min_temp)
 
-
+                # Move to the next column
                 offset += space_width
-
+                
+                # Safety: Stop drawing if we run out of screen space
+                if offset >= screen.WIDTH:
+                    break
