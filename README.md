@@ -1,6 +1,6 @@
 
-## Changes!
-I had to change the address for the map uploads in the email. With this change I shouldn't have to do it again. However if you have already made the clock and are recieving emails with the map links you will HAVE to change address
+## Action Required!
+I have migrated the server to a new, permanent domain. If you have already set up your clock, you must update your upload_helper.py file to point to the new address, or your maps will fail to upload in the email.
 
 ```
 nano ~/its-a-plane-python/web/upload_helper.py
@@ -8,7 +8,7 @@ nano ~/its-a-plane-python/web/upload_helper.py
 
 Change line 5 to 
 
-SERVER_URL = "http://c0wsaysmoo.ddnsgeek.com:8081"
+SERVER_URL = "https://c0wsaysmoo.ddnsgeek.com"
 
 and change line 41 to
 
@@ -49,10 +49,10 @@ This setup lets you stay updated without watching the clock, in addition to rece
 If you would like to manually view the log files they are located here
 
 ```
-nano /home/path/its-a-plane-python/close.txt
+nano ~/its-a-plane-python/close.txt
 ```
 ```
-nano /home/path/its-a-plane-python/farthest.txt
+nano ~/its-a-plane-python/farthest.txt
 ```
 
 **Please read if you already have a tracker setup** 
