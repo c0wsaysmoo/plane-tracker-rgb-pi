@@ -1,5 +1,18 @@
 
-## Update
+## Changes!
+I had to change the address for the map uploads in the email. With this change I shouldn't have to do it again. However if you have already made the clock and are recieving emails with the map links you will HAVE to change address
+
+```
+nano ~/its-a-plane-python/web/upload_helper.py
+```
+
+Change line 5 to 
+
+SERVER_URL = "http://c0wsaysmoo.ddnsgeek.com:8081"
+
+and change line 41 to
+
+return f"https://c0wsaysmoo.ddnsgeek.com/maps/{uploaded_name}"
 
 Now logs the closest flights to your location and farthest destinations!
 
