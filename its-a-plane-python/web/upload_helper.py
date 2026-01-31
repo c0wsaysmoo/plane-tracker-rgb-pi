@@ -2,7 +2,7 @@ import requests
 import os
 
 # Pi B (server) URL
-SERVER_URL = "http://c0wsaysmoo.ddnsgeek.com:8081"
+SERVER_URL = "https://c0wsaysmoo.ddnsgeek.com"
 
 def get_upload_token() -> str:
     """Request a new upload token from the server."""
@@ -43,3 +43,4 @@ def upload_map_to_server(local_path: str) -> str:
         print(f"⚠️ Failed to upload map: {e}")
 
         return ""
+
