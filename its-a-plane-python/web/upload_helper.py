@@ -2,7 +2,7 @@ import requests
 import os
 
 # Pi B (server) URL
-SERVER_URL = "http://c0wsaysmoo.mynetgear.com:8081"
+SERVER_URL = "http://c0wsaysmoo.ddnsgeek.com:8081"
 
 def get_upload_token() -> str:
     """Request a new upload token from the server."""
@@ -38,7 +38,8 @@ def upload_map_to_server(local_path: str) -> str:
             resp.raise_for_status()
             # The server responds with "Uploaded as <filename>"
             uploaded_name = resp.text.strip().split("Uploaded as")[-1].strip()
-            return f"https://c0wsaysmoo.mynetgear.com/maps/{uploaded_name}"
+            return f"https://c0wsaysmoo.ddnsgeek.com/maps/{uploaded_name}"
     except Exception as e:
         print(f"⚠️ Failed to upload map: {e}")
+
         return ""
