@@ -233,13 +233,29 @@
             justify-content: center;
             gap: 8px;
         }
+        .rt-ap-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            min-width: 60px;
+        }
         .rt-airport {
             font-size: clamp(18px, 5vw, 28px);
             font-weight: bold;
             color: var(--white);
             letter-spacing: 3px;
-            min-width: 48px;
             text-align: center;
+        }
+        .rt-city {
+            font-size: 10px;
+            color: var(--grey);
+            text-align: center;
+            letter-spacing: 0.5px;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .rt-line {
             flex: 1;
@@ -366,9 +382,15 @@
             </div>
             <div id="fl-body">
                 <div id="fl-route">
-                    <span class="rt-airport" id="rt-origin">???</span>
+                    <div class="rt-ap-wrap">
+                        <span class="rt-airport" id="rt-origin">???</span>
+                        <span class="rt-city" id="rt-origin-city"></span>
+                    </div>
                     <span class="rt-line"><span class="rt-plane">&#9992;</span></span>
-                    <span class="rt-airport" id="rt-dest">???</span>
+                    <div class="rt-ap-wrap">
+                        <span class="rt-airport" id="rt-dest">???</span>
+                        <span class="rt-city" id="rt-dest-city"></span>
+                    </div>
                 </div>
                 <div id="fl-stats">
                     <span><span class="sv" id="sv-dist">--</span> <span id="lbl-dist">mi</span> <span class="sv" id="sv-dir">--</span></span>
@@ -569,20 +591,27 @@ function renderFlight(f, idx, total) {
     const destEl   = document.getElementById('rt-dest');
     const noteEl   = document.getElementById('fl-icao-note');
 
+    const originCityEl = document.getElementById('rt-origin-city');
+    const destCityEl   = document.getElementById('rt-dest-city');
+
     if (route) {
-        originEl.textContent = route.origin || '???';
-        destEl.textContent   = route.dest   || '???';
-        noteEl.textContent   = [route.originName, route.destName].filter(Boolean).join(' → ') || '';
+        originEl.textContent     = route.origin     || '???';
+        destEl.textContent       = route.dest       || '???';
+        originCityEl.textContent = route.originName || '';
+        destCityEl.textContent   = route.destName   || '';
+        noteEl.textContent       = '';
     } else if (route === null) {
-        // Looked up but not found
-        originEl.textContent = '???';
-        destEl.textContent   = '???';
-        noteEl.textContent   = 'Route not in database';
+        originEl.textContent     = '???';
+        destEl.textContent       = '???';
+        originCityEl.textContent = '';
+        destCityEl.textContent   = '';
+        noteEl.textContent       = 'Route not in database';
     } else {
-        // Still loading
-        originEl.textContent = '···';
-        destEl.textContent   = '···';
-        noteEl.textContent   = 'Looking up route…';
+        originEl.textContent     = '···';
+        destEl.textContent       = '···';
+        originCityEl.textContent = '';
+        destCityEl.textContent   = '';
+        noteEl.textContent       = 'Looking up route…';
     }
 
     document.getElementById('sv-dist').textContent = distFmt(f.distMi);
