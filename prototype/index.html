@@ -40,12 +40,78 @@
             justify-content: center;
             height: 100vh;
             gap: 14px;
+            padding: 24px;
         }
         #loading .logo   { font-size: 20px; color: var(--blue); letter-spacing: 4px; }
         #loading .msg    { font-size: 13px; color: var(--grey); }
-        #loading .hint   { font-size: 11px; color: var(--dim);  max-width: 280px; text-align: center; line-height: 1.5; }
+        #loading .hint   { font-size: 11px; color: var(--dim);  max-width: 300px; text-align: center; line-height: 1.6; }
         @keyframes blink { 50% { opacity: 0; } }
         .blink { animation: blink 1s step-end infinite; }
+
+        /* ── Manual location form ────────────────────────────────── */
+        #loc-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+        }
+        #loc-form .lf-title {
+            font-size: 13px;
+            color: var(--orange);
+            letter-spacing: 1px;
+            text-align: center;
+        }
+        #loc-form .lf-sub {
+            font-size: 10px;
+            color: var(--dim);
+            text-align: center;
+            line-height: 1.6;
+        }
+        #loc-form .lf-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+        #loc-form label {
+            font-size: 11px;
+            color: var(--grey);
+            width: 28px;
+            flex-shrink: 0;
+        }
+        #loc-form input[type=text] {
+            flex: 1;
+            background: #111;
+            border: 1px solid #333;
+            color: var(--white);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            padding: 6px 10px;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        #loc-form input[type=text]:focus { border-color: var(--blue); }
+        #loc-form .lf-err {
+            font-size: 11px;
+            color: var(--red);
+            min-height: 14px;
+        }
+        #loc-form button {
+            background: var(--blue);
+            color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-top: 4px;
+        }
 
         /* ── App shell ───────────────────────────────────────────── */
         #app {
@@ -237,6 +303,27 @@
     <div class="logo">&#9992; PLANE TRACKER</div>
     <div class="msg" id="load-msg">Requesting location<span class="blink">_</span></div>
     <div class="hint" id="load-hint">Allow location access when your browser asks — it's used only to find flights near you.</div>
+
+    <!-- Shown if GPS is blocked (insecure context or denied) -->
+    <div id="loc-form" class="hidden">
+        <div class="lf-title">ENTER YOUR LOCATION</div>
+        <div class="lf-sub">
+            GPS requires HTTPS. To use automatic location,
+            host this file on a web server.<br><br>
+            Or enter your coordinates manually:<br>
+            Open Google Maps &rarr; long-press your location &rarr; copy the numbers at the top.
+        </div>
+        <div class="lf-row">
+            <label>LAT</label>
+            <input type="text" id="in-lat" placeholder="e.g. 51.5074" inputmode="decimal">
+        </div>
+        <div class="lf-row">
+            <label>LON</label>
+            <input type="text" id="in-lon" placeholder="e.g. -0.1278" inputmode="decimal">
+        </div>
+        <div class="lf-err" id="loc-err"></div>
+        <button id="loc-go">GO &#9992;</button>
+    </div>
 </div>
 
 <!-- App -->
@@ -573,14 +660,39 @@ function startApp() {
     setInterval(doWeatherRefresh, WEATHER_REFRESH_MS);
 }
 
-function setLoadMsg(msg, hint) {
+function setLoadMsg(msg) {
     document.getElementById('load-msg').textContent = msg;
-    if (hint !== undefined) document.getElementById('load-hint').textContent = hint;
 }
 
-// Request GPS
-if (!navigator.geolocation) {
-    setLoadMsg('Geolocation not supported by this browser.', '');
+function showManualForm(reason) {
+    setLoadMsg(reason);
+    document.getElementById('load-hint').classList.add('hidden');
+    document.getElementById('loc-form').classList.remove('hidden');
+}
+
+// Manual coordinate form handler
+document.getElementById('loc-go').addEventListener('click', () => {
+    const rawLat = document.getElementById('in-lat').value.trim();
+    const rawLon = document.getElementById('in-lon').value.trim();
+    const lat = parseFloat(rawLat);
+    const lon = parseFloat(rawLon);
+    const errEl = document.getElementById('loc-err');
+
+    if (isNaN(lat) || lat < -90  || lat > 90)  { errEl.textContent = 'Latitude must be between -90 and 90';   return; }
+    if (isNaN(lon) || lon < -180 || lon > 180)  { errEl.textContent = 'Longitude must be between -180 and 180'; return; }
+    errEl.textContent = '';
+
+    userLat = lat;
+    userLon = lon;
+    startApp();
+});
+
+// Request GPS — requires a secure context (HTTPS or localhost)
+if (!window.isSecureContext) {
+    // Running from a local file or HTTP — GPS will be blocked
+    showManualForm('GPS unavailable (file:// or HTTP)');
+} else if (!navigator.geolocation) {
+    showManualForm('Geolocation not supported by this browser.');
 } else {
     navigator.geolocation.getCurrentPosition(
         pos => {
@@ -589,10 +701,8 @@ if (!navigator.geolocation) {
             startApp();
         },
         err => {
-            setLoadMsg(
-                'Location access denied.',
-                'Please allow location access in your browser settings and refresh the page.'
-            );
+            // Denied or timed out — fall back to manual entry
+            showManualForm('Location access denied.');
         },
         { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
