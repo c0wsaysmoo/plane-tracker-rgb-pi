@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Plane Tracker</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #0a0a0a;
+            --orange:      #ff8c00;
+            --purple:      #b080ff;
+            --blue:        #5090ff;
+            --pink:        #ff90b0;
+            --grey:        #888;
+            --white:       #e8e8e8;
+            --green:       #40c060;
+            --red:         #ff4040;
+            --dark-orange: #ff7030;
+            --mid-blue:    #6080ff;
+            --dim:         #3a3a3a;
+            --border:      #1e1e1e;
+        }
+
+        html, body {
+            width: 100%; height: 100%;
+            background: var(--bg);
+            color: var(--white);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* ── Loading ─────────────────────────────────────────────── */
+        #loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 14px;
+        }
+        #loading .logo   { font-size: 20px; color: var(--blue); letter-spacing: 4px; }
+        #loading .msg    { font-size: 13px; color: var(--grey); }
+        #loading .hint   { font-size: 11px; color: var(--dim);  max-width: 280px; text-align: center; line-height: 1.5; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .blink { animation: blink 1s step-end infinite; }
+
+        /* ── App shell ───────────────────────────────────────────── */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Header */
+        #header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 14px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        #hd-logo { font-size: 12px; color: var(--grey); letter-spacing: 3px; }
+        #hd-right { display: flex; align-items: baseline; gap: 10px; }
+        #hd-time  { font-size: 18px; color: var(--blue); font-weight: bold; }
+        #hd-date  { font-size: 11px; color: var(--grey); }
+
+        /* Main */
+        #main { flex: 1; display: flex; overflow: hidden; }
+
+        /* ── Clock mode ──────────────────────────────────────────── */
+        #clock-mode {
+            display: flex;
+            width: 100%;
+        }
+        #clock-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 8px 20px;
+            border-right: 1px solid var(--border);
+            gap: 8px;
+        }
+        #big-time {
+            font-size: clamp(28px, 9vw, 52px);
+            color: var(--blue);
+            font-weight: bold;
+            letter-spacing: 3px;
+        }
+        #weather-line { font-size: 13px; color: var(--grey); }
+        #temp-val     { color: var(--white); }
+        #hum-val      { color: var(--grey); }
+        #no-flights   { font-size: 10px; color: var(--dim); letter-spacing: 2px; margin-top: 4px; }
+
+        #clock-right {
+            width: 52%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8px 14px;
+            gap: 6px;
+        }
+        #forecast-label {
+            font-size: 9px;
+            color: var(--dim);
+            letter-spacing: 2px;
+        }
+        #forecast-grid {
+            display: flex;
+            gap: 6px;
+            justify-content: space-around;
+        }
+        .fc-day {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            flex: 1;
+        }
+        .fc-name  { font-size: 10px; color: var(--pink); letter-spacing: 1px; }
+        .fc-icon  { font-size: 18px; }
+        .fc-temps { font-size: 11px; }
+        .fc-max   { color: var(--dark-orange); }
+        .fc-min   { color: var(--mid-blue); }
+
+        /* ── Flight mode ─────────────────────────────────────────── */
+        #flight-mode {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 8px 18px 6px;
+        }
+        #fl-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 7px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+        #fl-callsign-row { display: flex; align-items: baseline; gap: 10px; }
+        #fl-callsign     { font-size: 22px; font-weight: bold; }
+        .cs-alpha   { color: var(--purple); }
+        .cs-numeric { color: var(--orange); }
+        #fl-country  { font-size: 12px; color: var(--grey); }
+        #fl-page     { font-size: 11px; color: var(--dim); }
+
+        #fl-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Route row */
+        #fl-route {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .rt-airport {
+            font-size: clamp(18px, 5vw, 28px);
+            font-weight: bold;
+            color: var(--white);
+            letter-spacing: 3px;
+            min-width: 48px;
+            text-align: center;
+        }
+        .rt-line {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--dim);
+            font-size: 14px;
+            letter-spacing: -1px;
+            position: relative;
+        }
+        .rt-line::before,
+        .rt-line::after {
+            content: '';
+            flex: 1;
+            border-top: 1px solid var(--dim);
+        }
+        .rt-plane { padding: 0 4px; font-size: 16px; }
+
+        /* Stats row */
+        #fl-stats {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 14px;
+            font-size: 12px;
+            color: var(--grey);
+        }
+        .sv { color: var(--white); }
+        #sv-vs.up   { color: var(--green); }
+        #sv-vs.down { color: var(--red);   }
+        #sv-vs.lvl  { color: var(--grey);  }
+
+        /* ICAO note */
+        #fl-icao-note {
+            font-size: 9px;
+            color: var(--dim);
+            text-align: center;
+        }
+
+        /* ── Footer ──────────────────────────────────────────────── */
+        #footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 3px 14px;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        #ft-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--dim); }
+        #ft-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+        #ft-count  { font-size: 10px; color: var(--dim); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+    <div class="logo">&#9992; PLANE TRACKER</div>
+    <div class="msg" id="load-msg">Requesting location<span class="blink">_</span></div>
+    <div class="hint" id="load-hint">Allow location access when your browser asks — it's used only to find flights near you.</div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+
+    <div id="header">
+        <div id="hd-logo">&#9992; PLANE TRACKER</div>
+        <div id="hd-right">
+            <span id="hd-time">--:--</span>
+            <span id="hd-date">---</span>
+        </div>
+    </div>
+
+    <div id="main">
+
+        <!-- Clock / weather mode (no planes overhead) -->
+        <div id="clock-mode" class="hidden">
+            <div id="clock-left">
+                <div id="big-time">--:--</div>
+                <div id="weather-line">
+                    <span id="temp-val">--</span>
+                    <span id="hum-val"> &middot; --%</span>
+                </div>
+                <div id="no-flights">NO FLIGHTS OVERHEAD</div>
+            </div>
+            <div id="clock-right">
+                <div id="forecast-label">3&#8209;DAY FORECAST</div>
+                <div id="forecast-grid"><!-- filled by JS --></div>
+            </div>
+        </div>
+
+        <!-- Flight mode -->
+        <div id="flight-mode" class="hidden">
+            <div id="fl-header">
+                <div id="fl-callsign-row">
+                    <span id="fl-callsign">---</span>
+                    <span id="fl-country"></span>
+                </div>
+                <span id="fl-page"></span>
+            </div>
+            <div id="fl-body">
+                <div id="fl-route">
+                    <span class="rt-airport" id="rt-origin">???</span>
+                    <span class="rt-line"><span class="rt-plane">&#9992;</span></span>
+                    <span class="rt-airport" id="rt-dest">???</span>
+                </div>
+                <div id="fl-stats">
+                    <span><span class="sv" id="sv-dist">--</span> <span id="lbl-dist">mi</span> <span class="sv" id="sv-dir">--</span></span>
+                    <span><span class="sv" id="sv-alt">--</span> ft</span>
+                    <span><span class="sv" id="sv-spd">--</span> <span id="lbl-spd">mph</span></span>
+                    <span id="sv-vs" class="lvl">&#8594; Level</span>
+                </div>
+                <div id="fl-icao-note">Origin &amp; destination not available from free API &mdash; shows ICAO callsign only</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="footer">
+        <div id="ft-status">
+            <span id="ft-dot"></span>
+            <span id="ft-msg">Starting&hellip;</span>
+        </div>
+        <span id="ft-count"></span>
+    </div>
+
+</div>
+
+<script>
+// ─── Configuration ────────────────────────────────────────────────────────────
+const UNITS             = 'imperial';  // 'imperial' | 'metric'
+const FLIGHT_REFRESH_MS = 60_000;      // OpenSky free tier: ~400 req/day anon; 60s = 1440/day, sign up for more
+const WEATHER_REFRESH_MS = 600_000;   // 10 min
+const FLIGHT_CYCLE_MS   = 12_000;     // seconds per flight when multiple overhead
+const BOX_RADIUS_MILES  = 50;         // search radius
+const MIN_ALT_FT        = 1000;       // ignore anything below this (helicopters, etc.)
+
+// ─── WMO weather code → emoji ─────────────────────────────────────────────────
+const WMO = {
+    0:'☀️', 1:'🌤️', 2:'⛅', 3:'☁️',
+    45:'🌫️', 48:'🌫️',
+    51:'🌦️', 53:'🌦️', 55:'🌧️',
+    61:'🌧️', 63:'🌧️', 65:'🌧️',
+    71:'🌨️', 73:'❄️',  75:'❄️',
+    77:'🌨️',
+    80:'🌦️', 81:'🌧️', 82:'⛈️',
+    85:'🌨️', 86:'❄️',
+    95:'⛈️', 96:'⛈️', 99:'⛈️',
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let userLat = null, userLon = null;
+let flights  = [];
+let fidx     = 0;
+let cycleTimer = null;
+
+// ─── Unit helpers ─────────────────────────────────────────────────────────────
+const mToFt    = m  => Math.round(m  * 3.28084);
+const mpsToMph = v  => Math.round(v  * 2.23694);
+const mpsToKph = v  => Math.round(v  * 3.6);
+const kmToMi   = km => (km * 0.621371).toFixed(1);
+
+function speed(mps) { return UNITS === 'imperial' ? mpsToMph(mps) : mpsToKph(mps); }
+function distFmt(miles) { return UNITS === 'imperial' ? miles.toFixed(1) : (miles * 1.60934).toFixed(1); }
+const distLbl = () => UNITS === 'imperial' ? 'mi'  : 'km';
+const spdLbl  = () => UNITS === 'imperial' ? 'mph' : 'km/h';
+const tempLbl = () => UNITS === 'imperial' ? '°F'  : '°C';
+
+// ─── Maths ────────────────────────────────────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2
+            + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); // miles
+}
+
+function toCardinal(deg) {
+    return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45) % 8];
+}
+
+function boundingBox(lat, lon, radiusMi) {
+    const dLat = radiusMi / 69;
+    const dLon = radiusMi / (69 * Math.cos(lat * Math.PI / 180));
+    return { lamin: lat-dLat, lomin: lon-dLon, lamax: lat+dLat, lomax: lon+dLon };
+}
+
+// ─── Time / date ──────────────────────────────────────────────────────────────
+function fmtTime(d) {
+    let h = d.getHours(), m = String(d.getMinutes()).padStart(2,'0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ap}`;
+}
+function fmtDate(d) {
+    return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+}
+function fmtDayShort(isoStr) {
+    return new Date(isoStr + 'T12:00:00')
+        .toLocaleDateString('en-GB', { weekday:'short' })
+        .toUpperCase();
+}
+
+// ─── Clock tick ───────────────────────────────────────────────────────────────
+function tickClock() {
+    const now = new Date();
+    const t = fmtTime(now), d = fmtDate(now);
+    document.getElementById('hd-time').textContent  = t;
+    document.getElementById('hd-date').textContent  = d;
+    document.getElementById('big-time').textContent = t;
+}
+
+// ─── Fetch flights (OpenSky) ──────────────────────────────────────────────────
+async function fetchFlights() {
+    const bb  = boundingBox(userLat, userLon, BOX_RADIUS_MILES);
+    const url = `https://opensky-network.org/api/states/all`
+              + `?lamin=${bb.lamin.toFixed(4)}&lomin=${bb.lomin.toFixed(4)}`
+              + `&lamax=${bb.lamax.toFixed(4)}&lomax=${bb.lomax.toFixed(4)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`OpenSky ${res.status}`);
+    const json = await res.json();
+    if (!json.states) return [];
+
+    // OpenSky state vector indices:
+    // [0]icao24 [1]callsign [2]country [5]lon [6]lat [7]baro_alt(m)
+    // [8]on_ground [9]velocity(m/s) [10]heading [11]vert_rate(m/s)
+    return json.states
+        .filter(s => !s[8] && s[6] != null && s[5] != null)
+        .map(s => {
+            const altFt  = mToFt(s[7] || s[13] || 0);
+            const distMi = haversine(userLat, userLon, s[6], s[5]);
+            return {
+                icao24:   s[0],
+                callsign: (s[1] || '').trim() || s[0].toUpperCase(),
+                country:  s[2]  || '',
+                lat: s[6], lon: s[5],
+                altFt,
+                spd:     speed(s[9] || 0),
+                dir:     toCardinal(s[10] || 0),
+                vrateFpm: Math.round((s[11] || 0) * 196.85),
+                distMi,
+            };
+        })
+        .filter(f => f.altFt >= MIN_ALT_FT)
+        .sort((a, b) => a.distMi - b.distMi)
+        .slice(0, 5);
+}
+
+// ─── Fetch weather (Open-Meteo) ───────────────────────────────────────────────
+async function fetchWeather() {
+    const tu = UNITS === 'imperial' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
+    const url = `https://api.open-meteo.com/v1/forecast`
+              + `?latitude=${userLat.toFixed(4)}&longitude=${userLon.toFixed(4)}`
+              + `&current=temperature_2m,relative_humidity_2m,weather_code`
+              + `&daily=weather_code,temperature_2m_max,temperature_2m_min`
+              + `&forecast_days=3&timezone=auto${tu}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    return await res.json();
+}
+
+// ─── Render helpers ───────────────────────────────────────────────────────────
+function coloredCallsign(cs) {
+    const m = cs.match(/^([A-Z]+)(\d[\dA-Z]*)$/);
+    if (m) return `<span class="cs-alpha">${m[1]}</span><span class="cs-numeric">${m[2]}</span>`;
+    return `<span class="cs-alpha">${cs}</span>`;
+}
+
+function renderFlight(f, idx, total) {
+    document.getElementById('fl-callsign').innerHTML = coloredCallsign(f.callsign);
+    document.getElementById('fl-country').textContent = f.country;
+    document.getElementById('fl-page').textContent    = total > 1 ? `${idx+1} / ${total}` : '';
+
+    document.getElementById('sv-dist').textContent = distFmt(f.distMi);
+    document.getElementById('sv-dir').textContent  = f.dir;
+    document.getElementById('sv-alt').textContent  = f.altFt.toLocaleString();
+    document.getElementById('sv-spd').textContent  = f.spd;
+    document.getElementById('lbl-dist').textContent = distLbl();
+    document.getElementById('lbl-spd').textContent  = spdLbl();
+
+    const vsEl = document.getElementById('sv-vs');
+    if (f.vrateFpm > 200) {
+        vsEl.className = 'up';   vsEl.textContent = '\u2191 Climbing';
+    } else if (f.vrateFpm < -200) {
+        vsEl.className = 'down'; vsEl.textContent = '\u2193 Descending';
+    } else {
+        vsEl.className = 'lvl';  vsEl.textContent = '\u2192 Level';
+    }
+}
+
+function renderWeather(data) {
+    const cur = data.current;
+    document.getElementById('temp-val').textContent = `${Math.round(cur.temperature_2m)}${tempLbl()}`;
+    document.getElementById('hum-val').textContent  = ` \u00b7 ${Math.round(cur.relative_humidity_2m)}% RH`;
+
+    const grid = document.getElementById('forecast-grid');
+    grid.innerHTML = '';
+    const d = data.daily;
+    for (let i = 0; i < Math.min(3, d.time.length); i++) {
+        const el = document.createElement('div');
+        el.className = 'fc-day';
+        el.innerHTML = `
+            <span class="fc-name">${fmtDayShort(d.time[i])}</span>
+            <span class="fc-icon">${WMO[d.weather_code[i]] || '🌡️'}</span>
+            <div class="fc-temps">
+                <span class="fc-max">${Math.round(d.temperature_2m_max[i])}°</span>
+                <span class="fc-min"> ${Math.round(d.temperature_2m_min[i])}°</span>
+            </div>`;
+        grid.appendChild(el);
+    }
+}
+
+// ─── Display mode switching ───────────────────────────────────────────────────
+function showClock() {
+    document.getElementById('clock-mode').classList.remove('hidden');
+    document.getElementById('flight-mode').classList.add('hidden');
+}
+function showFlight() {
+    document.getElementById('clock-mode').classList.add('hidden');
+    document.getElementById('flight-mode').classList.remove('hidden');
+}
+
+function updateDisplay() {
+    clearTimeout(cycleTimer);
+
+    if (flights.length === 0) {
+        showClock();
+        document.getElementById('ft-count').textContent = 'No flights overhead';
+        return;
+    }
+
+    showFlight();
+    if (fidx >= flights.length) fidx = 0;
+    renderFlight(flights[fidx], fidx, flights.length);
+    document.getElementById('ft-count').textContent =
+        `${flights.length} flight${flights.length !== 1 ? 's' : ''} overhead`;
+
+    if (flights.length > 1) {
+        cycleTimer = setTimeout(() => {
+            fidx = (fidx + 1) % flights.length;
+            renderFlight(flights[fidx], fidx, flights.length);
+            // re-arm cycle
+            cycleTimer = setTimeout(function cycle() {
+                fidx = (fidx + 1) % flights.length;
+                renderFlight(flights[fidx], fidx, flights.length);
+                cycleTimer = setTimeout(cycle, FLIGHT_CYCLE_MS);
+            }, FLIGHT_CYCLE_MS);
+        }, FLIGHT_CYCLE_MS);
+    }
+}
+
+// ─── Refresh loops ────────────────────────────────────────────────────────────
+function setStatus(msg, ok = true) {
+    document.getElementById('ft-msg').textContent = msg;
+    document.getElementById('ft-dot').style.background = ok ? 'var(--green)' : 'var(--red)';
+}
+
+async function doFlightRefresh() {
+    try {
+        setStatus('Scanning\u2026');
+        flights = await fetchFlights();
+        fidx = 0;
+        updateDisplay();
+        setStatus(`Updated ${fmtTime(new Date())}`);
+    } catch (e) {
+        setStatus(`Error: ${e.message}`, false);
+        console.error('Flight fetch:', e);
+    }
+}
+
+async function doWeatherRefresh() {
+    try {
+        renderWeather(await fetchWeather());
+    } catch (e) {
+        console.warn('Weather fetch:', e);
+    }
+}
+
+// ─── Startup ──────────────────────────────────────────────────────────────────
+function startApp() {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    doFlightRefresh();
+    doWeatherRefresh();
+
+    setInterval(doFlightRefresh,  FLIGHT_REFRESH_MS);
+    setInterval(doWeatherRefresh, WEATHER_REFRESH_MS);
+}
+
+function setLoadMsg(msg, hint) {
+    document.getElementById('load-msg').textContent = msg;
+    if (hint !== undefined) document.getElementById('load-hint').textContent = hint;
+}
+
+// Request GPS
+if (!navigator.geolocation) {
+    setLoadMsg('Geolocation not supported by this browser.', '');
+} else {
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            userLat = pos.coords.latitude;
+            userLon = pos.coords.longitude;
+            startApp();
+        },
+        err => {
+            setLoadMsg(
+                'Location access denied.',
+                'Please allow location access in your browser settings and refresh the page.'
+            );
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+    );
+}
+</script>
+</body>
+</html>
