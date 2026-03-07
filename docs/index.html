@@ -95,7 +95,7 @@
         /* ── Header ─────────────────────────────────────────────── */
         #header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 5px 14px;
+            padding: 4px 16px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
         }
@@ -176,14 +176,14 @@
 
         /* ── Route section ───────────────────────────────────────── */
         #fl-route-section {
-            padding: 10px 14px 8px;
+            padding: 12px 16px 8px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
         }
 
         #fl-airports {
             display: flex; justify-content: space-between;
-            align-items: flex-end; margin-bottom: 10px;
+            align-items: flex-end; margin-bottom: 8px;
         }
         .ap-block { display: flex; flex-direction: column; gap: 1px; }
         .ap-block.dest { align-items: flex-end; }
@@ -196,8 +196,9 @@
         #ap-dest-iata   { color: var(--dest);   text-shadow: 0 0 12px rgba(255,64,96,0.4); }
 
         .ap-city {
-            font-size: 11px; color: var(--grey); letter-spacing: 0.5px;
-            max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 13px; color: #999; letter-spacing: 1.5px;
+            text-transform: uppercase;
+            max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .ap-block.dest .ap-city { text-align: right; }
 
@@ -226,34 +227,82 @@
         }
 
         /* ── Stats section ───────────────────────────────────────── */
+        /*
+         * Three equal rows: altitude / speed / (distance | climb-rate)
+         * Each row flex:1 so they share the available height evenly.
+         * A small-caps label sits below each number for instant readability.
+         */
         #fl-stats-section {
-            flex: 1; display: flex; flex-direction: column;
-            justify-content: center; padding: 0 14px; gap: 2px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
 
-        .stat-row { display: flex; align-items: baseline; gap: 6px; line-height: 1.2; }
+        .stat-block {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .stat-block:last-child { border-bottom: none; }
 
+        /* Bottom row splits into two equal halves */
+        .stat-block.stat-split {
+            flex-direction: row;
+            padding: 0;
+        }
+        .stat-half {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8px 16px;
+        }
+        .stat-half + .stat-half { border-left: 1px solid var(--border); }
+
+        .stat-numrow { display: flex; align-items: baseline; gap: 5px; }
+
+        /* Hero numbers */
         .stat-val {
-            font-size: clamp(28px, 8.5vw, 42px);
-            font-weight: bold; letter-spacing: 1px;
+            font-size: clamp(34px, 10.5vw, 48px);
+            font-weight: bold; letter-spacing: 1px; line-height: 1;
         }
+        /* Smaller variant for the split row */
+        .stat-val-sm {
+            font-size: clamp(22px, 7vw, 32px);
+            font-weight: bold; letter-spacing: 1px; line-height: 1;
+        }
+
         .stat-unit { font-size: 13px; color: var(--grey); letter-spacing: 1px; }
-        .stat-sep  { font-size: 16px; color: var(--dim); }
 
-        #sv-alt  { color: var(--amber);  text-shadow: 0 0 16px rgba(255,170,51,0.35); }
-        #sv-spd  { color: var(--sky);    text-shadow: 0 0 16px rgba(68,204,255,0.35); }
-        #sv-dist { color: var(--lilac);  text-shadow: 0 0 16px rgba(204,136,255,0.35); font-size: clamp(22px, 6vw, 32px); }
-        #sv-dir  { font-size: 15px; color: var(--grey); }
+        /* Small-caps row label — the "departure board" touch */
+        .stat-lbl {
+            font-size: 9px; letter-spacing: 3px;
+            color: var(--dim); margin-top: 4px;
+        }
 
-        #sv-vs { font-size: 15px; letter-spacing: 1px; margin-top: 6px; }
+        /* Per-stat colours */
+        #sv-alt  { color: var(--amber); text-shadow: 0 0 20px rgba(255,170,51,0.3); }
+        #sv-spd  { color: var(--sky);   text-shadow: 0 0 20px rgba(68,204,255,0.3); }
+        #sv-dist { color: var(--lilac); text-shadow: 0 0 20px rgba(204,136,255,0.3); }
+        #sv-dir  { font-size: 13px; color: var(--grey); }
+
+        #sv-vs {
+            font-size: clamp(20px, 6.5vw, 28px);
+            font-weight: bold; letter-spacing: 0.5px; line-height: 1;
+        }
         #sv-vs.up   { color: var(--green); }
         #sv-vs.down { color: var(--red); }
         #sv-vs.lvl  { color: var(--grey); }
 
+        .stat-vfpm { font-size: 12px; color: var(--grey); margin-top: 3px; letter-spacing: 0.5px; }
+
         /* ── Footer ──────────────────────────────────────────────── */
         #footer {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 4px 14px; border-top: 1px solid var(--border); flex-shrink: 0;
+            padding: 4px 16px; border-top: 1px solid var(--border); flex-shrink: 0;
         }
         #ft-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--dim); }
         #ft-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
@@ -358,21 +407,44 @@
                 </div>
             </div>
 
-            <!-- Stats -->
+            <!-- Stats: 3 equal rows -->
             <div id="fl-stats-section">
-                <div class="stat-row">
-                    <span class="stat-val" id="sv-alt">--</span>
-                    <span class="stat-unit">ft</span>
+
+                <!-- Row 1: Altitude -->
+                <div class="stat-block" id="sb-alt">
+                    <div class="stat-numrow">
+                        <span class="stat-val" id="sv-alt">--</span>
+                        <span class="stat-unit">ft</span>
+                    </div>
+                    <div class="stat-lbl">ALTITUDE</div>
                 </div>
-                <div class="stat-row">
-                    <span class="stat-val" id="sv-spd">--</span>
-                    <span class="stat-unit" id="lbl-spd">mph</span>
-                    <span class="stat-sep">&middot;</span>
-                    <span class="stat-val" id="sv-dist">--</span>
-                    <span class="stat-unit" id="lbl-dist">mi</span>
-                    <span id="sv-dir" class="stat-unit"></span>
+
+                <!-- Row 2: Speed -->
+                <div class="stat-block" id="sb-spd">
+                    <div class="stat-numrow">
+                        <span class="stat-val" id="sv-spd">--</span>
+                        <span class="stat-unit" id="lbl-spd">mph</span>
+                    </div>
+                    <div class="stat-lbl">SPEED</div>
                 </div>
-                <div id="sv-vs" class="lvl">&#8594; Level</div>
+
+                <!-- Row 3: Distance | Climb rate -->
+                <div class="stat-block stat-split">
+                    <div class="stat-half">
+                        <div class="stat-numrow">
+                            <span class="stat-val stat-val-sm" id="sv-dist">--</span>
+                            <span class="stat-unit" id="lbl-dist">mi</span>
+                            <span id="sv-dir" class="stat-unit"></span>
+                        </div>
+                        <div class="stat-lbl">DISTANCE</div>
+                    </div>
+                    <div class="stat-half" id="sh-vs">
+                        <div id="sv-vs" class="lvl">&#8594; Level</div>
+                        <div id="sv-vfpm" class="stat-vfpm"></div>
+                        <div class="stat-lbl">CLIMB RATE</div>
+                    </div>
+                </div>
+
             </div>
 
         </div><!-- /flight-mode -->
@@ -616,10 +688,23 @@ function renderFlight(f, idx, total) {
     document.getElementById('lbl-dist').textContent = distLbl();
     document.getElementById('lbl-spd').textContent  = spdLbl();
 
-    const vsEl = document.getElementById('sv-vs');
-    if      (f.vrateFpm >  200) { vsEl.className = 'up';   vsEl.textContent = '↑ Climbing'; }
-    else if (f.vrateFpm < -200) { vsEl.className = 'down'; vsEl.textContent = '↓ Descending'; }
-    else                        { vsEl.className = 'lvl';  vsEl.textContent = '→ Level'; }
+    const vsEl   = document.getElementById('sv-vs');
+    const vfpmEl = document.getElementById('sv-vfpm');
+    const shVs   = document.getElementById('sh-vs');
+    const absFpm = Math.abs(f.vrateFpm);
+    if (f.vrateFpm > 200) {
+        vsEl.className = 'up';   vsEl.textContent = '↑ Climbing';
+        vfpmEl.textContent = `+${absFpm.toLocaleString()} fpm`;
+        shVs.style.borderLeftColor = 'var(--green)';
+    } else if (f.vrateFpm < -200) {
+        vsEl.className = 'down'; vsEl.textContent = '↓ Descending';
+        vfpmEl.textContent = `\u2212${absFpm.toLocaleString()} fpm`;
+        shVs.style.borderLeftColor = 'var(--red)';
+    } else {
+        vsEl.className = 'lvl';  vsEl.textContent = '→ Level';
+        vfpmEl.textContent = '';
+        shVs.style.borderLeftColor = '';
+    }
 }
 
 // ─── Render: weather ─────────────────────────────────────────────────────────
