@@ -4,24 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Plane Tracker</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg:          #0a0a0a;
-            --orange:      #ff8c00;
-            --purple:      #b080ff;
-            --blue:        #5090ff;
-            --pink:        #ff90b0;
-            --grey:        #888;
-            --white:       #e8e8e8;
-            --green:       #40c060;
-            --red:         #ff4040;
+            --bg:       #06060e;
+            --origin:   #00e5a0;
+            --dest:     #ff4060;
+            --amber:    #ffaa33;
+            --sky:      #44ccff;
+            --lilac:    #cc88ff;
+            --white:    #f0f0f8;
+            --grey:     #666;
+            --dim:      #252535;
+            --border:   #111122;
+            --orange:   #ff8c00;
+            --purple:   #b080ff;
+            --blue:     #4488ff;
+            --pink:     #ff90b0;
+            --green:    #40c060;
+            --red:      #ff4040;
             --dark-orange: #ff7030;
-            --mid-blue:    #6080ff;
-            --dim:         #3a3a3a;
-            --border:      #1e1e1e;
+            --mid-blue: #6080ff;
         }
 
         html, body {
@@ -32,278 +39,221 @@
             overflow: hidden;
         }
 
+        /* Subtle scanline texture — gives it that "panel display" quality */
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 2px,
+                rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 3px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
         /* ── Loading ─────────────────────────────────────────────── */
         #loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            gap: 14px;
-            padding: 24px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; gap: 14px; padding: 24px;
         }
-        #loading .logo   { font-size: 20px; color: var(--blue); letter-spacing: 4px; }
-        #loading .msg    { font-size: 13px; color: var(--grey); }
-        #loading .hint   { font-size: 11px; color: var(--dim);  max-width: 300px; text-align: center; line-height: 1.6; }
+        #loading .logo { font-size: 20px; color: var(--blue); letter-spacing: 4px; }
+        #loading .msg  { font-size: 13px; color: var(--grey); }
+        #loading .hint { font-size: 11px; color: var(--dim); max-width: 300px; text-align: center; line-height: 1.6; }
         @keyframes blink { 50% { opacity: 0; } }
         .blink { animation: blink 1s step-end infinite; }
 
         /* ── Manual location form ────────────────────────────────── */
         #loc-form {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            width: 100%;
-            max-width: 300px;
+            display: flex; flex-direction: column;
+            align-items: center; gap: 10px;
+            width: 100%; max-width: 300px;
         }
-        #loc-form .lf-title {
-            font-size: 13px;
-            color: var(--orange);
-            letter-spacing: 1px;
-            text-align: center;
-        }
-        #loc-form .lf-sub {
-            font-size: 10px;
-            color: var(--dim);
-            text-align: center;
-            line-height: 1.6;
-        }
-        #loc-form .lf-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-        }
-        #loc-form label {
-            font-size: 11px;
-            color: var(--grey);
-            width: 28px;
-            flex-shrink: 0;
-        }
+        #loc-form .lf-title { font-size: 13px; color: var(--orange); letter-spacing: 1px; text-align: center; }
+        #loc-form .lf-sub   { font-size: 10px; color: var(--dim); text-align: center; line-height: 1.6; }
+        #loc-form .lf-row   { display: flex; align-items: center; gap: 8px; width: 100%; }
+        #loc-form label     { font-size: 11px; color: var(--grey); width: 28px; flex-shrink: 0; }
         #loc-form input[type=text] {
-            flex: 1;
-            background: #111;
-            border: 1px solid #333;
-            color: var(--white);
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 14px;
-            padding: 6px 10px;
-            border-radius: 3px;
-            outline: none;
-            -webkit-appearance: none;
+            flex: 1; background: #0e0e1a; border: 1px solid #2a2a40;
+            color: var(--white); font-family: 'Courier New', Courier, monospace;
+            font-size: 14px; padding: 6px 10px; border-radius: 3px;
+            outline: none; -webkit-appearance: none;
         }
         #loc-form input[type=text]:focus { border-color: var(--blue); }
-        #loc-form .lf-err {
-            font-size: 11px;
-            color: var(--red);
-            min-height: 14px;
-        }
+        #loc-form .lf-err { font-size: 11px; color: var(--red); min-height: 14px; }
         #loc-form button {
-            background: var(--blue);
-            color: #000;
+            background: var(--blue); color: #000;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 13px;
-            font-weight: bold;
-            letter-spacing: 2px;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 3px;
-            cursor: pointer;
-            margin-top: 4px;
+            font-size: 13px; font-weight: bold; letter-spacing: 2px;
+            border: none; padding: 10px 28px; border-radius: 3px;
+            cursor: pointer; margin-top: 4px;
         }
 
         /* ── App shell ───────────────────────────────────────────── */
-        #app {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100vw;
-        }
+        #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
 
-        /* Header */
+        /* ── Header ─────────────────────────────────────────────── */
         #header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            display: flex; align-items: center; justify-content: space-between;
             padding: 5px 14px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
         }
-        #hd-logo { font-size: 12px; color: var(--grey); letter-spacing: 3px; }
-        #hd-right { display: flex; align-items: baseline; gap: 10px; }
-        #hd-time  { font-size: 18px; color: var(--blue); font-weight: bold; }
-        #hd-date  { font-size: 11px; color: var(--grey); }
+        #hd-logo  { font-size: 10px; color: var(--dim); letter-spacing: 4px; }
+        #hd-right { display: flex; align-items: baseline; gap: 8px; }
+        #hd-time  { font-size: 17px; color: var(--blue); font-weight: bold; letter-spacing: 1px; }
+        #hd-date  { font-size: 10px; color: var(--grey); }
 
-        /* Main */
+        /* ── Main ────────────────────────────────────────────────── */
         #main { flex: 1; display: flex; overflow: hidden; }
 
         /* ── Clock mode ──────────────────────────────────────────── */
-        #clock-mode {
-            display: flex;
-            width: 100%;
-        }
+        #clock-mode { display: flex; width: 100%; }
         #clock-left {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 8px 20px;
-            border-right: 1px solid var(--border);
-            gap: 8px;
+            flex: 1; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: 8px 20px; border-right: 1px solid var(--border); gap: 8px;
         }
-        #big-time {
-            font-size: clamp(28px, 9vw, 52px);
-            color: var(--blue);
-            font-weight: bold;
-            letter-spacing: 3px;
-        }
+        #big-time     { font-size: clamp(32px, 10vw, 58px); color: var(--blue); font-weight: bold; letter-spacing: 2px; }
         #weather-line { font-size: 13px; color: var(--grey); }
         #temp-val     { color: var(--white); }
-        #hum-val      { color: var(--grey); }
-        #no-flights   { font-size: 10px; color: var(--dim); letter-spacing: 2px; margin-top: 4px; }
-
-        #clock-right {
-            width: 52%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 8px 14px;
-            gap: 6px;
+        #no-flights   { font-size: 9px; color: var(--dim); letter-spacing: 3px; margin-top: 6px; }
+        #clock-right  {
+            width: 52%; display: flex; flex-direction: column;
+            justify-content: center; padding: 8px 14px; gap: 6px;
         }
-        #forecast-label {
-            font-size: 9px;
-            color: var(--dim);
-            letter-spacing: 2px;
-        }
-        #forecast-grid {
-            display: flex;
-            gap: 6px;
-            justify-content: space-around;
-        }
-        .fc-day {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-            flex: 1;
-        }
-        .fc-name  { font-size: 10px; color: var(--pink); letter-spacing: 1px; }
-        .fc-icon  { font-size: 18px; }
+        #forecast-label { font-size: 8px; color: var(--dim); letter-spacing: 3px; }
+        #forecast-grid  { display: flex; gap: 6px; justify-content: space-around; }
+        .fc-day  { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+        .fc-name { font-size: 10px; color: var(--pink); letter-spacing: 1px; }
+        .fc-icon { font-size: 18px; }
         .fc-temps { font-size: 11px; }
-        .fc-max   { color: var(--dark-orange); }
-        .fc-min   { color: var(--mid-blue); }
+        .fc-max  { color: var(--dark-orange); }
+        .fc-min  { color: var(--mid-blue); }
 
         /* ── Flight mode ─────────────────────────────────────────── */
         #flight-mode {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            padding: 8px 18px 6px;
+            display: flex; flex-direction: column;
+            width: 100%; overflow: hidden;
         }
-        #fl-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 7px;
+
+        /* ── Airline band ────────────────────────────────────────── */
+        #fl-airline {
+            display: flex; align-items: center; gap: 12px;
+            padding: 8px 14px;
             border-bottom: 1px solid var(--border);
-            margin-bottom: 8px;
             flex-shrink: 0;
         }
-        #fl-callsign-row { display: flex; align-items: baseline; gap: 10px; }
-        #fl-callsign     { font-size: 22px; font-weight: bold; }
+        #airline-logo {
+            width: 44px; height: 44px;
+            object-fit: contain; flex-shrink: 0;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+        }
+        #airline-logo.no-logo { display: none; }
+
+        #fl-airline-text { flex: 1; overflow: hidden; min-width: 0; }
+
+        /* Scrolling airline name */
+        #airline-name-wrap { overflow: hidden; white-space: nowrap; }
+        #airline-name {
+            display: inline-block;
+            font-size: 21px; font-weight: bold;
+            color: var(--white); letter-spacing: 0.5px;
+        }
+        @keyframes marquee {
+            0%, 15%  { transform: translateX(0); }
+            85%, 100% { transform: translateX(var(--marquee-dist, -50%)); }
+        }
+        #airline-name.scrolling { animation: marquee 8s ease-in-out infinite alternate; }
+
+        #fl-sub { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; }
+        #fl-callsign { font-size: 15px; }
         .cs-alpha   { color: var(--purple); }
         .cs-numeric { color: var(--orange); }
-        #fl-country  { font-size: 12px; color: var(--grey); }
-        #fl-page     { font-size: 11px; color: var(--dim); }
+        #fl-country { font-size: 11px; color: var(--grey); }
+        #fl-page    { font-size: 11px; color: var(--dim); margin-left: auto; padding-right: 2px; }
 
-        #fl-body {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 10px;
+        /* ── Route section ───────────────────────────────────────── */
+        #fl-route-section {
+            padding: 10px 14px 8px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
-        /* Route row */
-        #fl-route {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+        #fl-airports {
+            display: flex; justify-content: space-between;
+            align-items: flex-end; margin-bottom: 10px;
         }
-        .rt-ap-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 3px;
-            min-width: 60px;
+        .ap-block { display: flex; flex-direction: column; gap: 1px; }
+        .ap-block.dest { align-items: flex-end; }
+
+        .ap-iata {
+            font-size: clamp(30px, 9vw, 44px);
+            font-weight: bold; letter-spacing: 4px; line-height: 1;
         }
-        .rt-airport {
-            font-size: clamp(18px, 5vw, 28px);
-            font-weight: bold;
-            color: var(--white);
-            letter-spacing: 3px;
-            text-align: center;
+        #ap-origin-iata { color: var(--origin); text-shadow: 0 0 12px rgba(0,229,160,0.4); }
+        #ap-dest-iata   { color: var(--dest);   text-shadow: 0 0 12px rgba(255,64,96,0.4); }
+
+        .ap-city {
+            font-size: 11px; color: var(--grey); letter-spacing: 0.5px;
+            max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .rt-city {
-            font-size: 10px;
-            color: var(--grey);
-            text-align: center;
-            letter-spacing: 0.5px;
-            max-width: 90px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        .ap-block.dest .ap-city { text-align: right; }
+
+        /* Progress bar */
+        #prog-bar {
+            display: flex; align-items: center; gap: 8px;
+            height: 28px; opacity: 1; transition: opacity 0.3s;
         }
-        .rt-line {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--dim);
-            font-size: 14px;
-            letter-spacing: -1px;
+        #prog-bar.no-data { opacity: 0; pointer-events: none; }
+
+        .pb-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .pb-dot.origin { background: var(--origin); box-shadow: 0 0 8px var(--origin); }
+        .pb-dot.dest   { background: var(--dest);   box-shadow: 0 0 8px var(--dest); }
+
+        #pb-track {
+            flex: 1; height: 2px;
+            background: linear-gradient(to right, var(--origin), #334, var(--dest));
             position: relative;
         }
-        .rt-line::before,
-        .rt-line::after {
-            content: '';
-            flex: 1;
-            border-top: 1px solid var(--dim);
+        #pb-plane {
+            position: absolute; top: 50%;
+            transform: translateX(-50%) translateY(-50%);
+            font-size: 18px;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.8));
+            transition: left 3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
-        .rt-plane { padding: 0 4px; font-size: 16px; }
 
-        /* Stats row */
-        #fl-stats {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 14px;
-            font-size: 12px;
-            color: var(--grey);
+        /* ── Stats section ───────────────────────────────────────── */
+        #fl-stats-section {
+            flex: 1; display: flex; flex-direction: column;
+            justify-content: center; padding: 0 14px; gap: 2px;
         }
-        .sv { color: var(--white); }
+
+        .stat-row { display: flex; align-items: baseline; gap: 6px; line-height: 1.2; }
+
+        .stat-val {
+            font-size: clamp(28px, 8.5vw, 42px);
+            font-weight: bold; letter-spacing: 1px;
+        }
+        .stat-unit { font-size: 13px; color: var(--grey); letter-spacing: 1px; }
+        .stat-sep  { font-size: 16px; color: var(--dim); }
+
+        #sv-alt  { color: var(--amber);  text-shadow: 0 0 16px rgba(255,170,51,0.35); }
+        #sv-spd  { color: var(--sky);    text-shadow: 0 0 16px rgba(68,204,255,0.35); }
+        #sv-dist { color: var(--lilac);  text-shadow: 0 0 16px rgba(204,136,255,0.35); font-size: clamp(22px, 6vw, 32px); }
+        #sv-dir  { font-size: 15px; color: var(--grey); }
+
+        #sv-vs { font-size: 15px; letter-spacing: 1px; margin-top: 6px; }
         #sv-vs.up   { color: var(--green); }
-        #sv-vs.down { color: var(--red);   }
-        #sv-vs.lvl  { color: var(--grey);  }
-
-        /* ICAO note */
-        #fl-icao-note {
-            font-size: 9px;
-            color: var(--dim);
-            text-align: center;
-        }
+        #sv-vs.down { color: var(--red); }
+        #sv-vs.lvl  { color: var(--grey); }
 
         /* ── Footer ──────────────────────────────────────────────── */
         #footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 3px 14px;
-            border-top: 1px solid var(--border);
-            flex-shrink: 0;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 4px 14px; border-top: 1px solid var(--border); flex-shrink: 0;
         }
         #ft-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--dim); }
         #ft-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
@@ -319,15 +269,12 @@
     <div class="logo">&#9992; PLANE TRACKER</div>
     <div class="msg" id="load-msg">Requesting location<span class="blink">_</span></div>
     <div class="hint" id="load-hint">Allow location access when your browser asks — it's used only to find flights near you.</div>
-
-    <!-- Shown if GPS is blocked (insecure context or denied) -->
     <div id="loc-form" class="hidden">
         <div class="lf-title">ENTER YOUR LOCATION</div>
         <div class="lf-sub">
-            GPS requires HTTPS. To use automatic location,
-            host this file on a web server.<br><br>
-            Or enter your coordinates manually:<br>
-            Open Google Maps &rarr; long-press your location &rarr; copy the numbers at the top.
+            GPS requires HTTPS.<br><br>
+            Or enter coordinates manually:<br>
+            Open Google Maps &rarr; long-press your spot &rarr; copy the numbers at the top.
         </div>
         <div class="lf-row">
             <label>LAT</label>
@@ -355,7 +302,7 @@
 
     <div id="main">
 
-        <!-- Clock / weather mode (no planes overhead) -->
+        <!-- Clock / weather mode -->
         <div id="clock-mode" class="hidden">
             <div id="clock-left">
                 <div id="big-time">--:--</div>
@@ -367,42 +314,70 @@
             </div>
             <div id="clock-right">
                 <div id="forecast-label">3&#8209;DAY FORECAST</div>
-                <div id="forecast-grid"><!-- filled by JS --></div>
+                <div id="forecast-grid"></div>
             </div>
         </div>
 
         <!-- Flight mode -->
         <div id="flight-mode" class="hidden">
-            <div id="fl-header">
-                <div id="fl-callsign-row">
-                    <span id="fl-callsign">---</span>
-                    <span id="fl-country"></span>
-                </div>
-                <span id="fl-page"></span>
-            </div>
-            <div id="fl-body">
-                <div id="fl-route">
-                    <div class="rt-ap-wrap">
-                        <span class="rt-airport" id="rt-origin">???</span>
-                        <span class="rt-city" id="rt-origin-city"></span>
-                    </div>
-                    <span class="rt-line"><span class="rt-plane">&#9992;</span></span>
-                    <div class="rt-ap-wrap">
-                        <span class="rt-airport" id="rt-dest">???</span>
-                        <span class="rt-city" id="rt-dest-city"></span>
-                    </div>
-                </div>
-                <div id="fl-stats">
-                    <span><span class="sv" id="sv-dist">--</span> <span id="lbl-dist">mi</span> <span class="sv" id="sv-dir">--</span></span>
-                    <span><span class="sv" id="sv-alt">--</span> ft</span>
-                    <span><span class="sv" id="sv-spd">--</span> <span id="lbl-spd">mph</span></span>
-                    <span id="sv-vs" class="lvl">&#8594; Level</span>
-                </div>
-                <div id="fl-icao-note">Origin &amp; destination not available from free API &mdash; shows ICAO callsign only</div>
-            </div>
-        </div>
 
-    </div>
+            <!-- Airline: logo + name + flight number -->
+            <div id="fl-airline">
+                <img id="airline-logo" src="" alt="" class="no-logo"
+                     onerror="this.classList.add('no-logo')">
+                <div id="fl-airline-text">
+                    <div id="airline-name-wrap">
+                        <span id="airline-name">&nbsp;</span>
+                    </div>
+                    <div id="fl-sub">
+                        <span id="fl-callsign">---</span>
+                        <span id="fl-country"></span>
+                        <span id="fl-page"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Route + progress bar -->
+            <div id="fl-route-section">
+                <div id="fl-airports">
+                    <div class="ap-block">
+                        <span class="ap-iata" id="ap-origin-iata">???</span>
+                        <span class="ap-city"  id="ap-origin-city"></span>
+                    </div>
+                    <div class="ap-block dest">
+                        <span class="ap-iata" id="ap-dest-iata">???</span>
+                        <span class="ap-city"  id="ap-dest-city"></span>
+                    </div>
+                </div>
+                <div id="prog-bar" class="no-data">
+                    <span class="pb-dot origin"></span>
+                    <div id="pb-track">
+                        <span id="pb-plane">&#9992;</span>
+                    </div>
+                    <span class="pb-dot dest"></span>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div id="fl-stats-section">
+                <div class="stat-row">
+                    <span class="stat-val" id="sv-alt">--</span>
+                    <span class="stat-unit">ft</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-val" id="sv-spd">--</span>
+                    <span class="stat-unit" id="lbl-spd">mph</span>
+                    <span class="stat-sep">&middot;</span>
+                    <span class="stat-val" id="sv-dist">--</span>
+                    <span class="stat-unit" id="lbl-dist">mi</span>
+                    <span id="sv-dir" class="stat-unit"></span>
+                </div>
+                <div id="sv-vs" class="lvl">&#8594; Level</div>
+            </div>
+
+        </div><!-- /flight-mode -->
+
+    </div><!-- /main -->
 
     <div id="footer">
         <div id="ft-status">
@@ -412,16 +387,16 @@
         <span id="ft-count"></span>
     </div>
 
-</div>
+</div><!-- /app -->
 
 <script>
 // ─── Configuration ────────────────────────────────────────────────────────────
-const UNITS             = 'imperial';  // 'imperial' | 'metric'
-const FLIGHT_REFRESH_MS = 60_000;      // OpenSky free tier: ~400 req/day anon; 60s = 1440/day, sign up for more
-const WEATHER_REFRESH_MS = 600_000;   // 10 min
-const FLIGHT_CYCLE_MS   = 12_000;     // seconds per flight when multiple overhead
-const BOX_RADIUS_MILES  = 50;         // search radius
-const MIN_ALT_FT        = 1000;       // ignore anything below this (helicopters, etc.)
+const UNITS              = 'imperial'; // 'imperial' | 'metric'
+const FLIGHT_REFRESH_MS  = 60_000;
+const WEATHER_REFRESH_MS = 600_000;
+const FLIGHT_CYCLE_MS    = 12_000;
+const BOX_RADIUS_MILES   = 50;
+const MIN_ALT_FT         = 1000;
 
 // ─── WMO weather code → emoji ─────────────────────────────────────────────────
 const WMO = {
@@ -429,8 +404,7 @@ const WMO = {
     45:'🌫️', 48:'🌫️',
     51:'🌦️', 53:'🌦️', 55:'🌧️',
     61:'🌧️', 63:'🌧️', 65:'🌧️',
-    71:'🌨️', 73:'❄️',  75:'❄️',
-    77:'🌨️',
+    71:'🌨️', 73:'❄️', 75:'❄️', 77:'🌨️',
     80:'🌦️', 81:'🌧️', 82:'⛈️',
     85:'🌨️', 86:'❄️',
     95:'⛈️', 96:'⛈️', 99:'⛈️',
@@ -441,16 +415,15 @@ let userLat = null, userLon = null;
 let flights  = [];
 let fidx     = 0;
 let cycleTimer = null;
-const routeCache = new Map(); // callsign → { origin, dest } or null
+const routeCache = new Map(); // callsign → route object | null
 
 // ─── Unit helpers ─────────────────────────────────────────────────────────────
-const mToFt    = m  => Math.round(m  * 3.28084);
-const mpsToMph = v  => Math.round(v  * 2.23694);
-const mpsToKph = v  => Math.round(v  * 3.6);
-const kmToMi   = km => (km * 0.621371).toFixed(1);
+const mToFt    = m  => Math.round(m * 3.28084);
+const mpsToMph = v  => Math.round(v * 2.23694);
+const mpsToKph = v  => Math.round(v * 3.6);
 
 function speed(mps) { return UNITS === 'imperial' ? mpsToMph(mps) : mpsToKph(mps); }
-function distFmt(miles) { return UNITS === 'imperial' ? miles.toFixed(1) : (miles * 1.60934).toFixed(1); }
+function distFmt(mi) { return UNITS === 'imperial' ? mi.toFixed(1) : (mi * 1.60934).toFixed(1); }
 const distLbl = () => UNITS === 'imperial' ? 'mi'  : 'km';
 const spdLbl  = () => UNITS === 'imperial' ? 'mph' : 'km/h';
 const tempLbl = () => UNITS === 'imperial' ? '°F'  : '°C';
@@ -462,16 +435,14 @@ function haversine(lat1, lon1, lat2, lon2) {
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2)**2
             + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); // miles
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-
 function toCardinal(deg) {
     return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45) % 8];
 }
-
-function boundingBox(lat, lon, radiusMi) {
-    const dLat = radiusMi / 69;
-    const dLon = radiusMi / (69 * Math.cos(lat * Math.PI / 180));
+function boundingBox(lat, lon, r) {
+    const dLat = r / 69;
+    const dLon = r / (69 * Math.cos(lat * Math.PI / 180));
     return { lamin: lat-dLat, lomin: lon-dLon, lamax: lat+dLat, lomax: lon+dLon };
 }
 
@@ -485,10 +456,8 @@ function fmtTime(d) {
 function fmtDate(d) {
     return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
 }
-function fmtDayShort(isoStr) {
-    return new Date(isoStr + 'T12:00:00')
-        .toLocaleDateString('en-GB', { weekday:'short' })
-        .toUpperCase();
+function fmtDayShort(iso) {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short' }).toUpperCase();
 }
 
 // ─── Clock tick ───────────────────────────────────────────────────────────────
@@ -506,15 +475,10 @@ async function fetchFlights() {
     const url = `https://opensky-network.org/api/states/all`
               + `?lamin=${bb.lamin.toFixed(4)}&lomin=${bb.lomin.toFixed(4)}`
               + `&lamax=${bb.lamax.toFixed(4)}&lomax=${bb.lomax.toFixed(4)}`;
-
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OpenSky ${res.status}`);
     const json = await res.json();
     if (!json.states) return [];
-
-    // OpenSky state vector indices:
-    // [0]icao24 [1]callsign [2]country [5]lon [6]lat [7]baro_alt(m)
-    // [8]on_ground [9]velocity(m/s) [10]heading [11]vert_rate(m/s)
     return json.states
         .filter(s => !s[8] && s[6] != null && s[5] != null)
         .map(s => {
@@ -523,11 +487,11 @@ async function fetchFlights() {
             return {
                 icao24:   s[0],
                 callsign: (s[1] || '').trim() || s[0].toUpperCase(),
-                country:  s[2]  || '',
+                country:  s[2] || '',
                 lat: s[6], lon: s[5],
                 altFt,
-                spd:     speed(s[9] || 0),
-                dir:     toCardinal(s[10] || 0),
+                spd:      speed(s[9] || 0),
+                dir:      toCardinal(s[10] || 0),
                 vrateFpm: Math.round((s[11] || 0) * 196.85),
                 distMi,
             };
@@ -537,7 +501,7 @@ async function fetchFlights() {
         .slice(0, 5);
 }
 
-// ─── Fetch route (adsbdb.com) ─────────────────────────────────────────────────
+// ─── Fetch route + airline (adsbdb.com) ──────────────────────────────────────
 async function fetchRoute(callsign) {
     if (routeCache.has(callsign)) return routeCache.get(callsign);
     try {
@@ -547,10 +511,16 @@ async function fetchRoute(callsign) {
         const fr = json?.response?.flightroute;
         if (!fr) { routeCache.set(callsign, null); return null; }
         const route = {
-            origin: fr.origin?.iata_code || fr.origin?.icao_code || null,
-            dest:   fr.destination?.iata_code || fr.destination?.icao_code || null,
-            originName: fr.origin?.municipality || fr.origin?.name || null,
-            destName:   fr.destination?.municipality || fr.destination?.name || null,
+            origin:      fr.origin?.iata_code      || fr.origin?.icao_code      || null,
+            dest:        fr.destination?.iata_code || fr.destination?.icao_code || null,
+            originName:  fr.origin?.municipality   || fr.origin?.name           || null,
+            destName:    fr.destination?.municipality || fr.destination?.name   || null,
+            originLat:   fr.origin?.latitude       || null,
+            originLon:   fr.origin?.longitude      || null,
+            destLat:     fr.destination?.latitude  || null,
+            destLon:     fr.destination?.longitude || null,
+            airlineName: fr.airline?.name          || null,
+            airlineIata: fr.airline?.iata          || null,
         };
         routeCache.set(callsign, route);
         return route;
@@ -562,80 +532,101 @@ async function fetchRoute(callsign) {
 
 // ─── Fetch weather (Open-Meteo) ───────────────────────────────────────────────
 async function fetchWeather() {
-    const tu = UNITS === 'imperial' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
+    const tu  = UNITS === 'imperial' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
     const url = `https://api.open-meteo.com/v1/forecast`
               + `?latitude=${userLat.toFixed(4)}&longitude=${userLon.toFixed(4)}`
               + `&current=temperature_2m,relative_humidity_2m,weather_code`
               + `&daily=weather_code,temperature_2m_max,temperature_2m_min`
               + `&forecast_days=3&timezone=auto${tu}`;
-
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-    return await res.json();
+    return res.json();
 }
 
-// ─── Render helpers ───────────────────────────────────────────────────────────
+// ─── Render: airline name (with scroll if too long) ───────────────────────────
+function setAirlineName(name) {
+    const el   = document.getElementById('airline-name');
+    const wrap = document.getElementById('airline-name-wrap');
+    el.classList.remove('scrolling');
+    el.style.removeProperty('--marquee-dist');
+    el.textContent = name || '';
+    requestAnimationFrame(() => {
+        const overflow = el.scrollWidth - wrap.clientWidth;
+        if (overflow > 8) {
+            el.style.setProperty('--marquee-dist', `-${overflow + 24}px`);
+            el.classList.add('scrolling');
+        }
+    });
+}
+
+// ─── Render: progress bar ────────────────────────────────────────────────────
+function renderProgress(f, route) {
+    const bar = document.getElementById('prog-bar');
+    if (!route?.originLat || !route?.destLat) { bar.classList.add('no-data'); return; }
+    const total = haversine(route.originLat, route.originLon, route.destLat, route.destLon);
+    if (total < 10) { bar.classList.add('no-data'); return; }
+    const flown = haversine(route.originLat, route.originLon, f.lat, f.lon);
+    const pct   = Math.max(3, Math.min(97, (flown / total) * 100));
+    document.getElementById('pb-plane').style.left = pct + '%';
+    bar.classList.remove('no-data');
+}
+
+// ─── Render: callsign with coloured letters/numbers ──────────────────────────
 function coloredCallsign(cs) {
     const m = cs.match(/^([A-Z]+)(\d[\dA-Z]*)$/);
     if (m) return `<span class="cs-alpha">${m[1]}</span><span class="cs-numeric">${m[2]}</span>`;
     return `<span class="cs-alpha">${cs}</span>`;
 }
 
+// ─── Render: full flight card ────────────────────────────────────────────────
 function renderFlight(f, idx, total) {
+    const route = routeCache.get(f.callsign);
+
+    // Airline logo + name
+    const logoEl = document.getElementById('airline-logo');
+    if (route?.airlineIata) {
+        logoEl.src = `https://pics.avs.io/80/80/${route.airlineIata}.png`;
+        logoEl.classList.remove('no-logo');
+    } else {
+        logoEl.classList.add('no-logo');
+    }
+    setAirlineName(route?.airlineName || f.country || '');
+
+    // Flight number + paging
     document.getElementById('fl-callsign').innerHTML = coloredCallsign(f.callsign);
-    document.getElementById('fl-country').textContent = f.country;
+    document.getElementById('fl-country').textContent = (route?.airlineName && f.country) ? f.country : '';
     document.getElementById('fl-page').textContent    = total > 1 ? `${idx+1} / ${total}` : '';
 
-    const route = routeCache.get(f.callsign);
-    const originEl = document.getElementById('rt-origin');
-    const destEl   = document.getElementById('rt-dest');
-    const noteEl   = document.getElementById('fl-icao-note');
+    // Route airports
+    const loading = route === undefined;
+    const unknown = route === null;
+    document.getElementById('ap-origin-iata').textContent = loading ? '···' : (route?.origin     || '???');
+    document.getElementById('ap-dest-iata').textContent   = loading ? '···' : (route?.dest       || '???');
+    document.getElementById('ap-origin-city').textContent = route?.originName || '';
+    document.getElementById('ap-dest-city').textContent   = route?.destName   || '';
 
-    const originCityEl = document.getElementById('rt-origin-city');
-    const destCityEl   = document.getElementById('rt-dest-city');
+    // Progress bar
+    renderProgress(f, route);
 
-    if (route) {
-        originEl.textContent     = route.origin     || '???';
-        destEl.textContent       = route.dest       || '???';
-        originCityEl.textContent = route.originName || '';
-        destCityEl.textContent   = route.destName   || '';
-        noteEl.textContent       = '';
-    } else if (route === null) {
-        originEl.textContent     = '???';
-        destEl.textContent       = '???';
-        originCityEl.textContent = '';
-        destCityEl.textContent   = '';
-        noteEl.textContent       = 'Route not in database';
-    } else {
-        originEl.textContent     = '···';
-        destEl.textContent       = '···';
-        originCityEl.textContent = '';
-        destCityEl.textContent   = '';
-        noteEl.textContent       = 'Looking up route…';
-    }
-
-    document.getElementById('sv-dist').textContent = distFmt(f.distMi);
-    document.getElementById('sv-dir').textContent  = f.dir;
+    // Stats
     document.getElementById('sv-alt').textContent  = f.altFt.toLocaleString();
     document.getElementById('sv-spd').textContent  = f.spd;
+    document.getElementById('sv-dist').textContent = distFmt(f.distMi);
+    document.getElementById('sv-dir').textContent  = f.dir;
     document.getElementById('lbl-dist').textContent = distLbl();
     document.getElementById('lbl-spd').textContent  = spdLbl();
 
     const vsEl = document.getElementById('sv-vs');
-    if (f.vrateFpm > 200) {
-        vsEl.className = 'up';   vsEl.textContent = '\u2191 Climbing';
-    } else if (f.vrateFpm < -200) {
-        vsEl.className = 'down'; vsEl.textContent = '\u2193 Descending';
-    } else {
-        vsEl.className = 'lvl';  vsEl.textContent = '\u2192 Level';
-    }
+    if      (f.vrateFpm >  200) { vsEl.className = 'up';   vsEl.textContent = '↑ Climbing'; }
+    else if (f.vrateFpm < -200) { vsEl.className = 'down'; vsEl.textContent = '↓ Descending'; }
+    else                        { vsEl.className = 'lvl';  vsEl.textContent = '→ Level'; }
 }
 
+// ─── Render: weather ─────────────────────────────────────────────────────────
 function renderWeather(data) {
     const cur = data.current;
     document.getElementById('temp-val').textContent = `${Math.round(cur.temperature_2m)}${tempLbl()}`;
     document.getElementById('hum-val').textContent  = ` \u00b7 ${Math.round(cur.relative_humidity_2m)}% RH`;
-
     const grid = document.getElementById('forecast-grid');
     grid.innerHTML = '';
     const d = data.daily;
@@ -654,7 +645,7 @@ function renderWeather(data) {
 }
 
 // ─── Display mode switching ───────────────────────────────────────────────────
-function showClock() {
+function showClock()  {
     document.getElementById('clock-mode').classList.remove('hidden');
     document.getElementById('flight-mode').classList.add('hidden');
 }
@@ -665,29 +656,21 @@ function showFlight() {
 
 function updateDisplay() {
     clearTimeout(cycleTimer);
-
     if (flights.length === 0) {
         showClock();
         document.getElementById('ft-count').textContent = 'No flights overhead';
         return;
     }
-
     showFlight();
     if (fidx >= flights.length) fidx = 0;
     renderFlight(flights[fidx], fidx, flights.length);
     document.getElementById('ft-count').textContent =
         `${flights.length} flight${flights.length !== 1 ? 's' : ''} overhead`;
-
     if (flights.length > 1) {
-        cycleTimer = setTimeout(() => {
+        cycleTimer = setTimeout(function cycle() {
             fidx = (fidx + 1) % flights.length;
             renderFlight(flights[fidx], fidx, flights.length);
-            // re-arm cycle
-            cycleTimer = setTimeout(function cycle() {
-                fidx = (fidx + 1) % flights.length;
-                renderFlight(flights[fidx], fidx, flights.length);
-                cycleTimer = setTimeout(cycle, FLIGHT_CYCLE_MS);
-            }, FLIGHT_CYCLE_MS);
+            cycleTimer = setTimeout(cycle, FLIGHT_CYCLE_MS);
         }, FLIGHT_CYCLE_MS);
     }
 }
@@ -705,12 +688,9 @@ async function doFlightRefresh() {
         fidx = 0;
         updateDisplay();
         setStatus(`Updated ${fmtTime(new Date())}`);
-
-        // Fetch routes for any callsigns not yet cached
         const uncached = flights.filter(f => !routeCache.has(f.callsign));
         if (uncached.length) {
             await Promise.all(uncached.map(f => fetchRoute(f.callsign)));
-            // Re-render current flight to show newly loaded route
             if (flights.length > 0) renderFlight(flights[fidx], fidx, flights.length);
         }
     } catch (e) {
@@ -720,72 +700,47 @@ async function doFlightRefresh() {
 }
 
 async function doWeatherRefresh() {
-    try {
-        renderWeather(await fetchWeather());
-    } catch (e) {
-        console.warn('Weather fetch:', e);
-    }
+    try { renderWeather(await fetchWeather()); }
+    catch (e) { console.warn('Weather fetch:', e); }
 }
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 function startApp() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-
     tickClock();
     setInterval(tickClock, 1000);
-
     doFlightRefresh();
     doWeatherRefresh();
-
     setInterval(doFlightRefresh,  FLIGHT_REFRESH_MS);
     setInterval(doWeatherRefresh, WEATHER_REFRESH_MS);
 }
 
-function setLoadMsg(msg) {
-    document.getElementById('load-msg').textContent = msg;
-}
-
 function showManualForm(reason) {
-    setLoadMsg(reason);
+    document.getElementById('load-msg').textContent = reason;
     document.getElementById('load-hint').classList.add('hidden');
     document.getElementById('loc-form').classList.remove('hidden');
 }
 
-// Manual coordinate form handler
 document.getElementById('loc-go').addEventListener('click', () => {
-    const rawLat = document.getElementById('in-lat').value.trim();
-    const rawLon = document.getElementById('in-lon').value.trim();
-    const lat = parseFloat(rawLat);
-    const lon = parseFloat(rawLon);
-    const errEl = document.getElementById('loc-err');
-
-    if (isNaN(lat) || lat < -90  || lat > 90)  { errEl.textContent = 'Latitude must be between -90 and 90';   return; }
-    if (isNaN(lon) || lon < -180 || lon > 180)  { errEl.textContent = 'Longitude must be between -180 and 180'; return; }
-    errEl.textContent = '';
-
-    userLat = lat;
-    userLon = lon;
+    const lat = parseFloat(document.getElementById('in-lat').value.trim());
+    const lon = parseFloat(document.getElementById('in-lon').value.trim());
+    const err = document.getElementById('loc-err');
+    if (isNaN(lat) || lat < -90  || lat > 90)  { err.textContent = 'Latitude must be −90 to 90';   return; }
+    if (isNaN(lon) || lon < -180 || lon > 180)  { err.textContent = 'Longitude must be −180 to 180'; return; }
+    err.textContent = '';
+    userLat = lat; userLon = lon;
     startApp();
 });
 
-// Request GPS — requires a secure context (HTTPS or localhost)
 if (!window.isSecureContext) {
-    // Running from a local file or HTTP — GPS will be blocked
     showManualForm('GPS unavailable (file:// or HTTP)');
 } else if (!navigator.geolocation) {
     showManualForm('Geolocation not supported by this browser.');
 } else {
     navigator.geolocation.getCurrentPosition(
-        pos => {
-            userLat = pos.coords.latitude;
-            userLon = pos.coords.longitude;
-            startApp();
-        },
-        err => {
-            // Denied or timed out — fall back to manual entry
-            showManualForm('Location access denied.');
-        },
+        pos => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; startApp(); },
+        ()  => showManualForm('Location access denied.'),
         { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
 }
