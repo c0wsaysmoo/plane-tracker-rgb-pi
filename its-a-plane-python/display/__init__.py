@@ -1,4 +1,6 @@
 import sys
+import json
+import os
 from datetime import datetime
 from setup import frames
 from utilities.animator import Animator
@@ -13,6 +15,9 @@ from scenes.clock import ClockScene
 from scenes.planedetails import PlaneDetailsScene
 from scenes.daysforecast import DaysForecastScene
 from scenes.date import DateScene
+from scenes.trackedroute import TrackedRouteScene
+from scenes.trackedprogress import TrackedProgressScene
+from scenes.trackedstats import TrackedStatsScene
 
 from rgbmatrix import graphics
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
@@ -22,12 +27,10 @@ def flight_updated(flights_a, flights_b):
     get_callsigns = lambda flights: [(f["callsign"], f["direction"]) for f in flights]
     updatable_a = set(get_callsigns(flights_a))
     updatable_b = set(get_callsigns(flights_b))
-
     return updatable_a == updatable_b
 
 
 try:
-    # Attempt to load config data
     from config import (
         BRIGHTNESS,
         GPIO_SLOWDOWN,
@@ -37,37 +40,33 @@ try:
         NIGHT_END,
         NIGHT_BRIGHTNESS,
     )
-    # Parse NIGHT_START and NIGHT_END from strings to datetime objects
     NIGHT_START = datetime.strptime(NIGHT_START, "%H:%M")
     NIGHT_END = datetime.strptime(NIGHT_END, "%H:%M")
 
 except (ModuleNotFoundError, NameError):
-    # If there's no config data
     BRIGHTNESS = 100
     GPIO_SLOWDOWN = 1
     HAT_PWM_ENABLED = True
     NIGHT_BRIGHTNESS = False
 
+
 def adjust_brightness(matrix):
     if NIGHT_BRIGHTNESS is False:
-        return  # Do nothing if NIGHT_BRIGHTNESS is False
-        
-    # Redraw screen every frame
-    now = datetime.now().time().replace(second=0, microsecond=0)  # Extract only hours and minutes
+        return
+
+    now = datetime.now().time().replace(second=0, microsecond=0)
     night_start_time = NIGHT_START.time().replace(second=0, microsecond=0)
     night_end_time = NIGHT_END.time().replace(second=0, microsecond=0)
 
-    # Check if current time is after NIGHT_END and before NIGHT_START
     if night_end_time <= now < night_start_time:
         new_brightness = BRIGHTNESS
     else:
         new_brightness = BRIGHTNESS_NIGHT
-        
-    # Check if the brightness has changed
+
     if matrix.brightness != new_brightness:
-        # Update the brightness
         matrix.brightness = new_brightness
-        
+
+
 class Display(
     TemperatureScene,
     FlightDetailsScene,
@@ -77,11 +76,13 @@ class Display(
     PlaneDetailsScene,
     ClockScene,
     DaysForecastScene,
+    TrackedRouteScene,
+    TrackedProgressScene,
+    TrackedStatsScene,
     DateScene,
     Animator,
 ):
     def __init__(self):
-        # Setup Display
         options = RGBMatrixOptions()
         options.hardware_mapping = "adafruit-hat-pwm" if HAT_PWM_ENABLED else "adafruit-hat"
         options.rows = 32
@@ -92,57 +93,43 @@ class Display(
         options.multiplexing = 0
         options.pwm_bits = 11
         options.brightness = BRIGHTNESS
-        options.pwm_lsb_nanoseconds = 130
+        options.pwm_lsb_nanoseconds = 160
         options.led_rgb_sequence = "RGB"
         options.pixel_mapper_config = ""
         options.show_refresh_rate = 0
         options.gpio_slowdown = GPIO_SLOWDOWN
         options.disable_hardware_pulsing = True
         options.drop_privileges = True
+        options.limit_refresh_rate_hz = 120
         self.matrix = RGBMatrix(options=options)
 
-        # Setup canvas
         self.canvas = self.matrix.CreateFrameCanvas()
         self.canvas.Clear()
 
-        # Data to render
         self._data_index = 0
         self._data = []
 
-        # Start Looking for planes
+        # Single Overhead instance handles both zone and tracked flight
         self.overhead = Overhead()
         self.overhead.grab_data()
 
-        # Initalise animator and scenes
         super().__init__()
 
-        # Overwrite any default settings from
-        # Animator or Scenes
         self.delay = frames.PERIOD
 
     def draw_square(self, x0, y0, x1, y1, colour):
         for x in range(x0, x1):
             _ = graphics.DrawLine(self.canvas, x, y0, x, y1, colour)
-            
 
     @Animator.KeyFrame.add(0)
     def clear_screen(self):
-        # First operation after
-        # a screen reset
         self.canvas.Clear()
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 5)
     def check_for_loaded_data(self, count):
         if self.overhead.new_data:
-            # Check if there's data
             there_is_data = len(self._data) > 0 or not self.overhead.data_is_empty
-
-            # this marks self.overhead.data as no longer new
             new_data = self.overhead.data
-
-            # See if this matches the data already on the screen
-            # This test only checks if it's 2 lists with the same
-            # callsigns, regardless or order
             data_is_different = not flight_updated(self._data, new_data)
 
             if data_is_different:
@@ -150,10 +137,6 @@ class Display(
                 self._data_all_looped = False
                 self._data = new_data
 
-            # Only reset if there's flight data already
-            # on the screen, of if there's some new
-            # data available to draw which is different
-            # from the current data
             reset_required = there_is_data and data_is_different
 
             if reset_required:
@@ -161,24 +144,13 @@ class Display(
 
     @Animator.KeyFrame.add(1)
     def sync(self, count):
-        # Redraw screen every frame
         _ = self.matrix.SwapOnVSync(self.canvas)
-        
-    
-        # Adjust brightness
         adjust_brightness(self.matrix)
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 30)
     def grab_new_data(self, count):
-        # Only grab data if we're not already searching
-        # for planes, or if there's new data available
-        # which hasn't been displayed.
-        #
-        # We also need wait until all previously grabbed
-        # data has been looped through the display.
-        #
-        # Last, if our internal store of the data
-        # is empty, try and grab data
+        # One call to overhead.grab_data() handles both zone scan
+        # and tracked flight lookup (tracked only if zone is empty)
         if not (self.overhead.processing and self.overhead.new_data) and (
             self._data_all_looped or len(self._data) <= 1
         ):
@@ -186,10 +158,8 @@ class Display(
 
     def run(self):
         try:
-            # Start loop
             print("Press CTRL-C to stop")
             self.play()
-
         except KeyboardInterrupt:
             print("Exiting\n")
             sys.exit(0)
