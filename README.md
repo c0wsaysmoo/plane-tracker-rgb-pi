@@ -1,3 +1,4 @@
+
 ## Real-Time Flight Tracking Added
 
 You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
@@ -106,9 +107,17 @@ The close.txt file. Farthest.txt looks the same.
 
 Map will show the top 3 farthest flights, and the closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses estimated flight path based on curve of the Earth
 
-<img width="362" height="361" alt="Screenshot 2025-11-05 045843" src="https://github.com/user-attachments/assets/2309c292-02f2-4db3-8075-4cf1726c8039" />
+![email](https://github.com/user-attachments/assets/491c5725-9c3d-413e-bee3-54d88ab9d696)
 
 The email
+
+![web](https://github.com/user-attachments/assets/a61177a2-b2ee-4720-bc50-3ba89a95bc61)
+
+The local webpage to track flights or to look at your maps/logs
+
+![tracked](https://github.com/user-attachments/assets/dbe96bff-2bd7-4933-a89e-8a0aab463128)
+
+How the display looks while it is tracking a flight
 
 ---
 
