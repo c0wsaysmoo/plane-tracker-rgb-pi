@@ -1,77 +1,24 @@
+## Real-Time Flight Tracking Added
 
-## Action Required!
-I have migrated the server to a new, permanent domain. If you have already set up your clock, you must update your upload_helper.py file to point to the new address, or your maps will fail to upload in the email.
+You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
 
-```
-nano ~/its-a-plane-python/web/upload_helper.py
-```
+Note: Use the hostname you chose during setup (e.g., if your Pi is flight@tracker, go to tracker.local:8080).
 
-Change line 5 to 
+How to Track
 
-SERVER_URL = "https://c0wsaysmoo.ddnsgeek.com"
+- Search & Save: Enter a flight number to track it immediately. The system will verify if the flight is currently active; if it is not, you will have the option to save it so that tracking begins as soon as it departs. Please note that if an active flight returns a "Not Found" error, it is likely due to current tracking limitations.
 
-and change line 41 to
+- Callsign Format: You must use the 3-digit ICAO airline code (e.g., UAL1134 instead of UA1134).
+- Limitations: Due to API constraints, tracking is currently limited to mainline carriers; regional flights may not be supported at this time.
 
-return f"https://c0wsaysmoo.ddnsgeek.com/maps/{uploaded_name}"
+Display Features
 
-Now logs the closest flights to your location and farthest destinations!
+When tracking begins, the flight data will temporarily replace your three-day forecast with the following:
 
-1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
-2. **Top N farthest flights** based on origin or destination (`MAX_FARTHEST`)  
-
-Each time a flight is detected:  
-
-- Calculates the **distance from home**  
-- Updates `close.txt` and `farthest.txt` if a **new closest flight** or a **new top-N farthest flight** is found  
-- Sends an **automatic email alert** when these changes occur with flight details and map 
-
-**Email notifications:**  
-
-- Sent from `flight.tracker.alerts2025@gmail.com`  
-- Includes a **link to an interactive map** showing flight positions (Link is good for 30 days. You can always view the maps on your local IP page)  
-
-**Key details:**  
-
-- Adjustable limits with `MAX_CLOSEST` and `MAX_FARTHEST`  
-- Closest flights to your house are always updated in `close.txt`  
-- Farthest destination/origin flights are maintained in `farthest.txt` independently  
-- Alerts taper off as flight positions stabilize  
-- Emails can be **turned off** while still keeping the log files and local wegpage. 
-
-**New features:**  
-
-- Generates **interactive maps** for showing closest and farthest flights with generated curved Earth paths; solid for flown, dashed for remaining.
- 
-- Maps and log files can be viewed via your Pi’s local IP at `http://<Pi_IP>:8080` (The local IP address of your flight tracker ie 192.168.x.x:8080 etc) 
-
-This setup lets you stay updated without watching the clock, in addition to receiving email summaries with distance and map information.
-
-If you would like to manually view the log files they are located here
-
-```
-nano ~/its-a-plane-python/close.txt
-```
-```
-nano ~/its-a-plane-python/farthest.txt
-```
-
-**Please read if you already have a tracker setup** 
-
-It won't work if you are using "sudo" to run the code (if you set this up on Bullseye). You'll have to go into crontab and take "sudo" out if you are using it. 
-
-If you already have a tracker setup and want to do these additions you'll have to install these. 
-
-```
-pip install folium selenium pillow
-pip3 install --user flask
-```
-Make sure if you replace `its-a-plane.py` that you reown it
-
-```
-chmod +x ~/its-a-plane-python/its-a-plane.py
-```
-
-# Project Overview
+- Status Header: Displays the callsign and route. The text is color-coded to indicate if the flight is on time or delayed.
+- Progress Visual: A dynamic progress bar with a moving aircraft icon.
+- Flight Telemetry: The bottom line shows remaining time and distance, aircraft type, airspeed, and altitude (with an arrow indicating climbing or descending).
+Once the flight reaches its destination, the display will automatically switch back to the weather forecast. In the meantime, the clock will continue to show overhead flights as usual.
 
 This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/its-a-plane-python), with some additional features I’ve added.
 
@@ -108,6 +55,30 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 - An arrow between the airport codes acts as a progress bar for the flight, starting red (just left) and turning green (almost complete).
 - Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
 - The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
+
+Logs the closest flights to your location and farthest destinations
+
+1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
+2. **Top N farthest flights** based on origin or destination (`MAX_FARTHEST`)  
+
+Each time a flight is detected:  
+
+- Calculates the **distance from home**  
+- Updates `close.txt` and `farthest.txt` if a **new closest flight** or a **new top-N farthest flight** is found  
+- Sends an **automatic email alert** when these changes occur with flight details and map 
+
+**Email notifications:**  
+
+- Sent from `flight.tracker.alerts2025@gmail.com`  
+- Includes a **link to an interactive map** showing flight positions (Link is good for 30 days. You can always view the maps on your local IP page)  
+
+**Key details:**  
+
+- Adjustable limits with `MAX_CLOSEST` and `MAX_FARTHEST`  
+- Closest flights to your house are always updated in `close.txt`  
+- Farthest destination/origin flights are maintained in `farthest.txt` independently  
+- Alerts taper off as flight positions stabilize  
+- Emails can be **turned off** while still keeping the log files and local wegpage. 
 
 I've put a LOT of my time and effort into this project. If you'd like to show your appreciation (especially if I help you troubleshoot), consider getting me a coffee! I've shared this project in good faith—please don't take advantage of it.
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
