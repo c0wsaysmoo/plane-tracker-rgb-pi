@@ -22,7 +22,6 @@ AIRCRAFT_COLOUR = colours.LIGHT_PINK
 
 
 def _format_altitude(altitude):
-    """Format altitude as 35000ft or metres with unit label."""
     if not altitude:
         return None, None
     if DISTANCE_UNITS == "metric":
@@ -33,7 +32,6 @@ def _format_altitude(altitude):
 
 
 def _format_speed(ground_speed):
-    """Format speed with correct unit label based on SPEED_UNITS config."""
     if not ground_speed:
         return None, None
     if SPEED_UNITS == "imperial":
@@ -41,7 +39,7 @@ def _format_speed(ground_speed):
         return f"{int(mph)}", "mph"
     elif SPEED_UNITS == "metric":
         kph = ground_speed * 1.852
-        return f"{int(kph)}", "kmph"
+        return f"{int(kph)}", "km/h"
     else:  # knots default
         return f"{int(ground_speed)}", "knts"
 

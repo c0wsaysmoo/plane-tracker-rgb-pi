@@ -38,9 +38,14 @@ class DaysForecastScene(object):
             return
 
         # --- SCENE SWITCH HANDLING ---
-        # If the parent system sets self._data when switching scenes:
-        # redraw immediately but DO NOT trigger a fetch
+        # Plane overhead — clear and yield
         if len(self._data):
+            self._redraw_forecast = True
+            return
+
+        # Tracked flight is live — clear this area and yield to TrackedFlightScene
+        if self.overhead.tracked_data is not None:
+            self.draw_square(0, 12, 64, 32, colours.BLACK)
             self._redraw_forecast = True
             return
 
@@ -67,15 +72,15 @@ class DaysForecastScene(object):
             if need_fetch:
                 forecast = grab_forecast(tag="days")
 
-                # If the API failed ? use old cache (if any)
+                # If the API failed — use old cache (if any)
                 if not forecast:
                     if self._cached_forecast:
                         forecast = self._cached_forecast
                     else:
-                        # Nothing cached yet ? wait for next cycle
+                        # Nothing cached yet — wait for next cycle
                         return
                 else:
-                    # Valid data ? update cache
+                    # Valid data — update cache
                     self._cached_forecast = forecast
             else:
                 # Use cached forecast
@@ -83,7 +88,7 @@ class DaysForecastScene(object):
 
             # Done with forced redraw
             self._redraw_forecast = False
-            
+
             # --- RENDER FORECAST ---
             offset = 1
             space_width = screen.WIDTH // 3
@@ -98,15 +103,14 @@ class DaysForecastScene(object):
                 local_time = datetime.fromisoformat(raw_start)
                 entry_date = local_time.date()
 
-                # THE SWITCH LOGIC: 
-                # If the entry date is before today, skip to next entry.
+                # If the entry date is before today, skip to next entry
                 if entry_date < today_local:
                     continue
-                
+
                 # Format the display data
                 day_name = local_time.strftime("%a")
                 icon = day["values"]["weatherCodeFullDay"]
-                
+
                 min_temp = f"{day['values']['temperatureMin']:.0f}"
                 max_temp = f"{day['values']['temperatureMax']:.0f}"
 
@@ -122,10 +126,8 @@ class DaysForecastScene(object):
                 day_x = offset + (space_width - 12) // 2 + 1
 
                 # --- Draw to Matrix ---
-                # Draw day name
                 graphics.DrawText(self.canvas, TEXT_FONT, day_x, DAY_POSITION, DAY_COLOUR, day_name)
 
-                # Draw icon
                 try:
                     image = Image.open(f"icons/{icon}.png")
                     try:
@@ -135,16 +137,12 @@ class DaysForecastScene(object):
                     image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
                     self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
                 except FileNotFoundError:
-                    # If icon is missing, the script continues without crashing
                     pass
 
-                # Draw temperatures
                 graphics.DrawText(self.canvas, TEXT_FONT, max_temp_x, TEMP_POSITION, MAX_T_COLOUR, max_temp)
                 graphics.DrawText(self.canvas, TEXT_FONT, min_temp_x, TEMP_POSITION, MIN_T_COLOUR, min_temp)
 
-                # Move to the next column
                 offset += space_width
-                
-                # Safety: Stop drawing if we run out of screen space
+
                 if offset >= screen.WIDTH:
                     break
