@@ -10,7 +10,6 @@ ARROW_COLOUR   = colours.WHITE
 
 
 def _delay_colour(real, scheduled, is_arrival=False):
-    """Return colour based on delay minutes, matching JourneyScene logic."""
     if real is None or scheduled in (None, 0):
         return colours.LIGHT_GREY
 
@@ -68,7 +67,6 @@ class TrackedRouteScene(object):
         origin      = tracked.get("origin", "???")
         destination = tracked.get("destination", "???")
 
-        # Delay colours matching JourneyScene
         origin_colour = _delay_colour(
             tracked.get("time_real_departure"),
             tracked.get("time_scheduled_departure"),
@@ -81,12 +79,6 @@ class TrackedRouteScene(object):
         )
 
         # Build per-character colour list for the line
-        # Format: "UA1583 ORD>MDT"
-        # number  = numeric orange, alpha purple
-        # space   = grey
-        # origin  = origin_colour
-        # >       = grey arrow
-        # dest    = destination_colour
         chars = []
         for ch in number:
             chars.append((ch, NUMERIC_COLOUR if ch.isnumeric() else colours.LIGHT_PURPLE))
