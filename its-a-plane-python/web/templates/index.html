@@ -3,20 +3,228 @@
 <head>
     <title>Flight Tracker Web</title>
     <style>
-        body { font-family: Arial; padding: 20px; }
-        a { display: block; margin: 10px 0; font-size: 20px; }
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        h1 { margin-bottom: 10px; }
+        a { display: block; margin: 10px 0; font-size: 20px; color: #0066cc; }
+        .track-box {
+            margin: 24px 0;
+            padding: 18px 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            max-width: 460px;
+        }
+        .track-box h2 { margin: 0 0 12px 0; font-size: 18px; }
+        #current-tracked { color: #555; font-size: 15px; margin-bottom: 12px; }
+        .track-row { display: flex; gap: 8px; align-items: center; }
+        .track-row input {
+            font-size: 18px;
+            padding: 6px 10px;
+            width: 160px;
+            text-transform: uppercase;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .track-row button {
+            font-size: 15px;
+            padding: 7px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #0066cc;
+            color: white;
+        }
+        .track-row button.clear {
+            background: #888;
+        }
+        .track-row button:disabled {
+            background: #aaa;
+            cursor: wait;
+        }
+        #track-status {
+            margin-top: 12px;
+            font-size: 14px;
+            min-height: 18px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        #track-status.found {
+            background: #e6f4ea;
+            border: 1px solid #a8d5b5;
+            color: #2d6a4f;
+            display: block;
+        }
+        #track-status.not-found {
+            background: #fff3e0;
+            border: 1px solid #ffcc80;
+            color: #7f4f00;
+            display: block;
+        }
+        #track-status.error {
+            background: #fdecea;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            display: block;
+        }
+        #track-status.saved {
+            background: #e8f0fe;
+            border: 1px solid #90b4f7;
+            color: #1a3c87;
+            display: block;
+        }
+        .confirm-row {
+            margin-top: 10px;
+            display: none;
+            gap: 8px;
+        }
+        .confirm-row button {
+            font-size: 14px;
+            padding: 6px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+        }
+        .confirm-row .btn-save { background: #e07000; color: white; }
+        .confirm-row .btn-cancel { background: #ccc; color: #333; }
+        hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+        .note { font-size: 13px; color: #888; margin-top: 10px; }
     </style>
 </head>
 <body>
     <h1>Flight Tracker Dashboard</h1>
 
+    <div class="track-box">
+        <h2>Track a Flight</h2>
+        <div id="current-tracked">Loading...</div>
+        <div class="track-row">
+            <input type="text" id="callsign-input" placeholder="e.g. UAL1134" maxlength="10" />
+            <button id="btn-track" onclick="lookupAndTrack()">Track</button>
+            <button class="clear" onclick="clearTracked()">Clear</button>
+        </div>
+        <div id="track-status"></div>
+        <div class="confirm-row" id="confirm-row">
+            <button class="btn-save" onclick="saveAnyway()">Save anyway</button>
+            <button class="btn-cancel" onclick="cancelSave()">Cancel</button>
+        </div>
+        <p class="note">Enter the ICAO callsign (e.g. UAL1134, AAL1234, DAL1234). If the flight isn't found, it may not be supported by the data source.</p>
+    </div>
+
+    <hr>
+
     <a href="/closest">Closest Flight (Map)</a>
     <a href="/closest/json">Closest Flight (Logs)</a>
-
     <br>
-
     <a href="/farthest">Farthest Flights (Map)</a>
     <a href="/farthest/json">Farthest Flights (Logs)</a>
+
+    <script>
+        let pendingCallsign = "";
+
+        async function loadCurrent() {
+            try {
+                const res = await fetch("/tracked/json");
+                const data = await res.json();
+                document.getElementById("current-tracked").textContent = data.callsign
+                    ? `Currently tracking: ${data.callsign}`
+                    : "Not currently tracking any flight.";
+            } catch (e) {
+                document.getElementById("current-tracked").textContent = "Could not load status.";
+            }
+        }
+
+        function setStatus(msg, type) {
+            const el = document.getElementById("track-status");
+            el.textContent = msg;
+            el.className = type;
+        }
+
+        function showConfirm(show) {
+            document.getElementById("confirm-row").style.display = show ? "flex" : "none";
+        }
+
+        async function lookupAndTrack() {
+            const val = document.getElementById("callsign-input").value.trim().toUpperCase();
+            if (!val) return;
+
+            const btn = document.getElementById("btn-track");
+            btn.disabled = true;
+            btn.textContent = "Looking up...";
+            showConfirm(false);
+            setStatus("Searching for " + val + "...", "found");
+
+            try {
+                const res = await fetch("/tracked/lookup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ callsign: val })
+                });
+                const data = await res.json();
+
+                if (data.found) {
+                    // Flight found — save automatically using the actual callsign
+                    await saveCallsign(data.callsign);
+                    setStatus(`✓ Found & saved: ${data.summary}`, "found");
+                    document.getElementById("callsign-input").value = "";
+                    showConfirm(false);
+                } else {
+                    // Not found — prompt to save anyway
+                    pendingCallsign = val;
+                    setStatus(`Flight "${val}" not found — it may not be airborne yet, or may not be supported. You can save it anyway and it will appear when the flight goes live.`, "not-found");
+                    showConfirm(true);
+                }
+            } catch (e) {
+                setStatus("Lookup failed — check your connection.", "error");
+                showConfirm(false);
+            }
+
+            btn.disabled = false;
+            btn.textContent = "Track";
+        }
+
+        async function saveAnyway() {
+            if (!pendingCallsign) return;
+            await saveCallsign(pendingCallsign);
+            setStatus(`Saved ${pendingCallsign} — will track when the flight goes live.`, "saved");
+            document.getElementById("callsign-input").value = "";
+            showConfirm(false);
+            pendingCallsign = "";
+        }
+
+        function cancelSave() {
+            showConfirm(false);
+            setStatus("", "");
+            pendingCallsign = "";
+        }
+
+        async function saveCallsign(callsign) {
+            await fetch("/tracked/set", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ callsign: callsign })
+            });
+            loadCurrent();
+        }
+
+        async function clearTracked() {
+            await fetch("/tracked/set", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ callsign: "" })
+            });
+            document.getElementById("callsign-input").value = "";
+            setStatus("Tracking cleared.", "saved");
+            showConfirm(false);
+            pendingCallsign = "";
+            loadCurrent();
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("callsign-input").addEventListener("keydown", e => {
+                if (e.key === "Enter") lookupAndTrack();
+            });
+            loadCurrent();
+        });
+    </script>
 </body>
 </html>
-
