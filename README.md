@@ -1,8 +1,4 @@
 
-
-https://github.com/user-attachments/assets/cd453e65-dc59-40ec-b2da-7c3cde1a8c30
-
-
 ## Real-Time Flight Tracking Added
 
 You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
@@ -20,7 +16,7 @@ Display Features
 
 When tracking begins, the flight data will temporarily replace your three-day forecast with the following:
 
-- Status Header: Displays the callsign and route. The text is color-coded to indicate if the flight is on time or delayed.
+- Status Header: Displays the logo, airline name, and route. The text is color-coded to indicate if the flight is on time or delayed.
 - Progress Visual: A dynamic progress bar with a moving aircraft icon.
 - Flight Telemetry: The bottom line shows remaining time and distance, aircraft type, airspeed, and altitude (with an arrow indicating climbing or descending).
 Once the flight reaches its destination, the display will automatically switch back to the weather forecast. In the meantime, the clock will continue to show overhead flights as usual.
@@ -100,7 +96,7 @@ Had to remount the Pi since the display ribbon bumped into the panel
 ![PXL_20241019_155605121](https://github.com/user-attachments/assets/4b71b758-00c9-4586-a5a0-ad251696eb17)
 ![PXL_20241019_155629794](https://github.com/user-attachments/assets/f82088b8-e959-44e3-82f3-7207779cc659)
 ![PXL_20241019_155732297](https://github.com/user-attachments/assets/77a329c7-d9c2-4a33-ab07-b6f6a2bf6ded)
-![signal-2025-12-01-080516_002](https://github.com/user-attachments/assets/887de831-c33f-4646-a97f-bf88dfb396d9)
+https://github.com/user-attachments/assets/cd453e65-dc59-40ec-b2da-7c3cde1a8c30
 
 The difference in size between P4 and P2.5 panel. I use P4 for the living room and P2.5 for my desk.
 
