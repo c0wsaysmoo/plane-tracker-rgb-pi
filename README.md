@@ -1,4 +1,8 @@
 
+
+https://github.com/user-attachments/assets/cd453e65-dc59-40ec-b2da-7c3cde1a8c30
+
+
 ## Real-Time Flight Tracking Added
 
 You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
