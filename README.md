@@ -106,7 +106,7 @@ The close.txt file. Farthest.txt looks the same.
 <img width="807" height="1022" alt="flight_path" src="https://github.com/user-attachments/assets/01c5ba22-3228-4f26-b91b-caa4a0a1f9e9" />
 
 
-Map will show the top 3 (by default) farthest flights, and the top 3 closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses actual flight path travelled (if available) then uses calculated Great-circle distance for the remainder. If no flight path travelled available then uses Great-circle distance for both. 
+Map will show the top 3 (by default) farthest flights, and the top 3 closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses actual flight path travelled (if available) then uses calculated Great-circle distance for the remainder. If no flight path travelled available then uses Great-circle distance for both. (If you want to reset your maps to take advantage of the newer flight path data, delete the farthest.txt file and reboot)
 
 ![email](https://github.com/user-attachments/assets/491c5725-9c3d-413e-bee3-54d88ab9d696)
 
