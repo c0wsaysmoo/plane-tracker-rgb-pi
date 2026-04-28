@@ -17,7 +17,7 @@ Display Features
 When tracking begins, the flight data will temporarily replace your three-day forecast with the following:
 
 - Status Header: Displays the logo, airline name, and route. The text is color-coded to indicate if the flight is on time or delayed.
-- Progress Visual: A dynamic progress bar with a moving aircraft icon.
+- Progress Visual: A dynamic progress bar with a moving arrow icon. If there isn't current live data during the flight such as crossing the ocean then the arrow icon will turn red. When there is no live data the tracker will calculate time and distance remaining until it refreshes with live data. 
 - Flight Telemetry: The bottom line shows remaining time and distance, aircraft type, airspeed, and altitude (with an arrow indicating climbing or descending).
 Once the flight reaches its destination, the display will automatically switch back to the weather forecast. In the meantime, the clock will continue to show overhead flights as usual.
 
@@ -103,9 +103,10 @@ The difference in size between P4 and P2.5 panel. I use P4 for the living room a
 <img width="422" height="322" alt="distance" src="https://github.com/user-attachments/assets/354cda11-9f3d-4b04-ad8e-68ddfc3ec3e5" />
 
 The close.txt file. Farthest.txt looks the same.
-<img width="1752" height="810" alt="Screenshot 2025-12-01 154128" src="https://github.com/user-attachments/assets/587f8e87-a28e-4b46-97e4-3216cfb81702" />
+<img width="807" height="1022" alt="flight_path" src="https://github.com/user-attachments/assets/01c5ba22-3228-4f26-b91b-caa4a0a1f9e9" />
 
-Map will show the top 3 farthest flights, and the closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses estimated flight path based on curve of the Earth
+
+Map will show the top 3 (by default) farthest flights, and the top 3 closest ping'd flights to your location. Solid lines is the flown section and dashed is unflown. Uses actual flight path travelled (if available) then uses calculated Great-circle distance for the remainder. If no flight path travelled available then uses Great-circle distance for both. 
 
 ![email](https://github.com/user-attachments/assets/491c5725-9c3d-413e-bee3-54d88ab9d696)
 
