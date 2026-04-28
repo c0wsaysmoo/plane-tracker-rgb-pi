@@ -43,10 +43,12 @@ class DaysForecastScene(object):
             self._redraw_forecast = True
             return
 
-        # Tracked flight is live — clear this area and yield to TrackedFlightScene
+        # Tracked flight is live — yield to TrackedFlightScene
+        # Only clear once when transitioning from forecast to tracked
         if self.overhead.tracked_data is not None:
-            self.draw_square(0, 12, 64, 32, colours.BLACK)
-            self._redraw_forecast = True
+            if not self._redraw_forecast:
+                self.draw_square(0, 12, 64, 32, colours.BLACK)
+                self._redraw_forecast = True
             return
 
         current_hour = datetime.now().hour
