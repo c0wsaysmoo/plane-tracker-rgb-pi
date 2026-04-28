@@ -81,6 +81,56 @@ def haversine(lat1, lon1, lat2, lon2):
     return miles * 1.609 if DISTANCE_UNITS == "metric" else miles
 
 
+def estimate_stale_data(last_data):
+    data = dict(last_data)
+    data["is_live"] = False
+
+    speed_kts = data.get("ground_speed", 0)
+    last_ts   = data.get("last_seen_ts")
+
+    if not last_ts:
+        return data
+
+    elapsed_hrs  = (time() - last_ts) / 3600
+    elapsed_mins = elapsed_hrs * 60
+
+    # --- Time remaining: subtract elapsed time from last known ---
+    last_time_str = data.get("time_remaining", "")
+    if last_time_str:
+        # Parse "H:MM" or "Mm" format
+        try:
+            if ":" in last_time_str:
+                parts = last_time_str.split(":")
+                last_mins = int(parts[0]) * 60 + int(parts[1])
+            else:
+                last_mins = int(last_time_str.replace("m", ""))
+            est_mins = max(0, last_mins - int(elapsed_mins))
+            h = est_mins // 60
+            m = est_mins % 60
+            data["time_remaining"] = f"{h}:{m:02d}" if h > 0 else f"{m}m"
+        except (ValueError, IndexError):
+            pass
+
+    # --- Distance remaining: subtract distance covered ---
+    last_dist = data.get("dist_remaining")
+    if last_dist is not None and speed_kts > 0:
+        # Convert knots to display units per hour
+        if DISTANCE_UNITS == "metric":
+            speed_display = speed_kts * 1.852      # knots -> kph
+        else:
+            speed_display = speed_kts * 1.15078    # knots -> mph
+        dist_covered = speed_display * elapsed_hrs
+        data["dist_remaining"] = max(0, last_dist - dist_covered)
+
+    # --- Update progress bar position using estimated dist_remaining ---
+    total = data.get("total_distance")
+    if total and total > 0 and data.get("dist_remaining") is not None:
+        # total_distance is in display units, dist_remaining now estimated
+        pass  # progress bar uses dist_remaining/total_distance automatically
+
+    return data
+
+
 def degrees_to_cardinal(deg):
     dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     idx = int((deg + 22.5) / 45)
@@ -166,8 +216,8 @@ def log_flight_data(entry: dict):
 
 def log_farthest_flight(entry: dict):
     try:
-        d_o = entry.get("distance_origin", -1)
-        d_d = entry.get("distance_destination", -1)
+        d_o = entry.get("distance_origin") or -1
+        d_d = entry.get("distance_destination") or -1
 
         if d_o < 0 and d_d < 0:
             return
@@ -192,7 +242,7 @@ def log_farthest_flight(entry: dict):
         updated = False
 
         if existing:
-            if entry["distance"] < existing.get("distance", 9e9):
+            if (entry.get("distance") or 9e9) < existing.get("distance", 9e9):
                 lst = [entry if f["_airport"] == airport else f for f in lst]
                 updated = True
             else:
@@ -222,7 +272,9 @@ def log_farthest_flight(entry: dict):
             email_alerts.send_flight_summary(subject, entry, reason, map_url=url)
 
     except Exception as e:
+        import traceback
         print("Failed to log farthest flight:", e)
+        traceback.print_exc()
 
 
 # Overhead Class
@@ -237,8 +289,10 @@ class Overhead:
         self._processing = False
         self._tracked_was_live = False       # was the flight live last poll?
         self._tracked_miss_count = 0         # consecutive polls with no result
-        self._TRACKED_MISS_THRESHOLD = 3     # misses before auto-wipe
+        self._TRACKED_MISS_THRESHOLD = 3     # fallback miss threshold (no ETA)
         self._tracked_last_callsign = ""     # last callsign we polled for
+        self._tracked_last_eta = None        # last known estimated arrival (unix ts)
+        self._tracked_last_data = None       # last known good tracked data
 
     def grab_data(self):
         Thread(target=self._grab, daemon=True).start()
@@ -297,6 +351,14 @@ class Overhead:
                         dist_o = distance_to_point(f, origin_lat, origin_lon) if origin_lat else 0
                         dist_d = distance_to_point(f, dest_lat, dest_lon) if dest_lat else 0
 
+                        # Extract airborne trail points only (alt > 0)
+                        raw_trail = self.safe_get(d, "trail", default=[]) or []
+                        trail = [
+                            [pt["lat"], pt["lng"]]
+                            for pt in raw_trail
+                            if isinstance(pt, dict) and pt.get("alt", 0) > 0
+                        ]
+
                         entry = {
                             "airline": airline,
                             "plane": plane,
@@ -320,6 +382,7 @@ class Overhead:
                             "distance_destination": dist_d,
                             "distance": distance_from_flight_to_home(f),
                             "direction": degrees_to_cardinal(plane_bearing(f)),
+                            "trail": trail,
                         }
 
                         overhead_data.append(entry)
@@ -340,29 +403,46 @@ class Overhead:
                         self._tracked_last_callsign = tracked_callsign
                         self._tracked_was_live = False
                         self._tracked_miss_count = 0
+                        self._tracked_last_eta = None
+                        self._tracked_last_data = None
 
                     tracked_data = self._grab_tracked(tracked_callsign)
 
                     if tracked_data:
-                        # Flight found — reset miss counter
+                        # Flight found — reset miss counter, store latest ETA and data
                         self._tracked_was_live = True
                         self._tracked_miss_count = 0
+                        self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
+                        self._tracked_last_data = tracked_data
                     else:
                         if self._tracked_was_live:
-                            # Was live before, now missing — increment miss counter
-                            self._tracked_miss_count += 1
-                            if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
-                                # Flight has landed — auto-wipe tracked_flight.json
-                                try:
-                                    with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-                                        import json as _json
-                                        _json.dump({"callsign": ""}, f)
-                                    print("Tracked flight landed — auto-cleared.")
-                                except Exception as e:
-                                    print(f"Failed to auto-clear tracked flight: {e}")
-                                self._tracked_was_live = False
-                                self._tracked_miss_count = 0
-                        # If it was never live, miss count stays at 0 (pre-flight)
+                            # Was live before, now missing
+                            now_ts = time()
+                            eta    = self._tracked_last_eta
+
+                            if eta is not None:
+                                mins_since_eta = (now_ts - eta) / 60
+                                if mins_since_eta > 0:
+                                    # ETA has passed — use miss counter to confirm
+                                    # before wiping (avoids false wipe on brief API hiccup)
+                                    self._tracked_miss_count += 1
+                                    if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                        self._do_auto_wipe()
+                                    elif self._tracked_last_data:
+                                        tracked_data = estimate_stale_data(self._tracked_last_data)
+                                else:
+                                    # ETA still in future — oceanic gap, serve estimated data
+                                    self._tracked_miss_count = 0
+                                    if self._tracked_last_data:
+                                        tracked_data = estimate_stale_data(self._tracked_last_data)
+                            else:
+                                # No ETA data — fall back to miss counter
+                                self._tracked_miss_count += 1
+                                if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                    self._do_auto_wipe()
+                                elif self._tracked_last_data:
+                                    tracked_data = estimate_stale_data(self._tracked_last_data)
+                        # If never live, don't increment — pre-flight waiting
 
             with self._lock:
                 self._data = overhead_data
@@ -375,13 +455,22 @@ class Overhead:
                 self._new_data = False
                 self._processing = False
 
+    def _do_auto_wipe(self):
+        """Wipe tracked_flight.json and reset all tracking state."""
+        try:
+            with open(TRACKED_FILE, "w", encoding="utf-8") as f:
+                import json as _json
+                _json.dump({"callsign": ""}, f)
+            print("Tracked flight ended — auto-cleared.")
+        except Exception as e:
+            print(f"Failed to auto-clear tracked flight: {e}")
+        self._tracked_was_live = False
+        self._tracked_miss_count = 0
+        self._tracked_last_eta = None
+        self._tracked_last_data = None
+        self._tracked_last_callsign = ""
+
     def _grab_tracked(self, flight_input):
-        """
-        Search for a tracked flight by flight number or callsign.
-        Accepts IATA flight number (AA5056), ICAO callsign (AAL1583),
-        or operator callsign (JIA5056).
-        Matches on f.number first (catches regionals), then f.callsign.
-        """
         flight_input = flight_input.strip().upper()
         airline_icao = flight_input[:3] if len(flight_input) >= 3 and flight_input[:3].isalpha() else None
         match = None
@@ -421,7 +510,18 @@ class Overhead:
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
 
-            # Calculate time remaining from estimated arrival
+            origin_lat = match.origin_airport_latitude
+            origin_lon = match.origin_airport_longitude
+            dest_lat = match.destination_airport_latitude
+            dest_lon = match.destination_airport_longitude
+
+            # dist_remaining in display units (miles or km) for the stats line
+            dist_remaining = (
+                haversine(match.latitude, match.longitude, dest_lat, dest_lon)
+                if dest_lat else None
+            )
+
+            # Calculate time remaining from estimated arrival (most accurate when live)
             time_remaining = None
             est_arr = self.safe_get(flight_details, "time", "estimated", "arrival")
             if est_arr:
@@ -430,18 +530,20 @@ class Overhead:
                     h = mins_left // 60
                     m = mins_left % 60
                     time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
+            # Fallback: calculate from distance/speed if no ETA available
+            if not time_remaining and dist_remaining and match.ground_speed:
+                if DISTANCE_UNITS == "metric":
+                    dist_nm = dist_remaining * 0.539957
+                else:
+                    dist_nm = dist_remaining * 0.868976
+                hrs_left = dist_nm / match.ground_speed
+                mins_left = int(hrs_left * 60)
+                if mins_left > 0:
+                    h = mins_left // 60
+                    m = mins_left % 60
+                    time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
 
-            origin_lat = match.origin_airport_latitude
-            origin_lon = match.origin_airport_longitude
-            dest_lat = match.destination_airport_latitude
-            dest_lon = match.destination_airport_longitude
-
-            dist_remaining = (
-                haversine(match.latitude, match.longitude, dest_lat, dest_lon)
-                if dest_lat else None
-            )
-
-            # Total route distance origin -> destination for progress bar
+            # Total route distance in same display units for progress bar
             total_distance = (
                 haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 if origin_lat and dest_lat else None
@@ -458,16 +560,21 @@ class Overhead:
                 "callsign": flight_input,
                 "number": match.number or flight_input,
                 "airline_name": match.airline_name or "",
+                "is_live": True,
                 "origin": match.origin_airport_iata or "",
                 "destination": match.destination_airport_iata or "",
+                "dest_lat": dest_lat,
+                "dest_lon": dest_lon,
                 "aircraft_type": match.aircraft_code or "",
                 "altitude": match.altitude,
                 "ground_speed": match.ground_speed or 0,
+                "heading": match.heading or 0,
                 "dist_remaining": dist_remaining,
                 "total_distance": total_distance,
                 "time_remaining": time_remaining,
                 "latitude": match.latitude,
                 "longitude": match.longitude,
+                "last_seen_ts": time(),
                 "vertical_speed": match.vertical_speed or 0,
                 "time_scheduled_departure": time_sched_dep,
                 "time_scheduled_arrival": time_sched_arr,
