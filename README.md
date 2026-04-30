@@ -1,3 +1,4 @@
+## Looks like fr24 ended their free api that thr clock relies on. I may have to switch to the 9$ tier that would provide overhead information but not allow live flight tracking. If anyone has any ideas let me know.
 
 ## Real-Time Flight Tracking Added
 
