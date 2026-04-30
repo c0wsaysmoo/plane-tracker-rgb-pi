@@ -1,4 +1,4 @@
-## Looks like fr24 ended their free api that thr clock relies on. I may have to switch to the 9$ tier that would provide overhead information but not allow live flight tracking. If anyone has any ideas let me know.
+## Looks like fr24 ended their free api that thr clock relies on. I think I'm going to try with an adsb antenna by using flight aware and openskies it should work vs a subscription service. If anyone has any ideas let me know.
 
 ## Real-Time Flight Tracking Added
 
