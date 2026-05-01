@@ -1,5 +1,7 @@
 ## Looks like fr24 ended their free api that thr clock relies on. I think I'm going to try with an adsb antenna by using flight aware and openskies it should work vs a subscription service. If anyone has any ideas let me know.
 
+Upon thinking about it i may try snd pair openskies witu the 9$ a month fr24 since that would give me more than enough api calls for the flights overhead whereas flight aware id be pretty limited ¯⁠\⁠_⁠(⁠ツ⁠)⁠_⁠/⁠¯
+
 ## Real-Time Flight Tracking Added
 
 You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
