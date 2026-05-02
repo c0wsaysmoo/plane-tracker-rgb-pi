@@ -1,6 +1,4 @@
-## Looks like fr24 ended their free api that thr clock relies on. I think I'm going to try with an adsb antenna by using flight aware and openskies it should work vs a subscription service. If anyone has any ideas let me know.
-
-Upon thinking about it i may try snd pair openskies witu the 9$ a month fr24 since that would give me more than enough api calls for the flights overhead whereas flight aware id be pretty limited ¯⁠\⁠_⁠(⁠ツ⁠)⁠_⁠/⁠¯
+## Looks like fr24 ended their free api that the clock relies on. I think my long term solution is going to be a mixture of using opensky to find the flights overhead and then use a paid fr24 subscription (9$) a month to look up the callsign information. In the meantime I am working on a way to still use fr24 for free, but I want to wait a few days to see how things play out. I have yet to find an accurate legit free way to find airline route information nevermind the schedule. 
 
 ## Real-Time Flight Tracking Added
 
