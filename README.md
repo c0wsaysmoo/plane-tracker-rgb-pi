@@ -71,7 +71,6 @@ Each time a flight is detected:
 
 **Email notifications:**  
 
-- Sent from `flight.tracker.alerts2025@gmail.com`  
 - Includes a **link to an interactive map** showing flight positions (Link is good for 30 days. You can always view the maps on your local IP page)  
 
 **Key details:**  
