@@ -9,7 +9,12 @@ python-dotenv>=1.0.0
 
 # Web interface
 flask
+folium
 
 # Protobuf (dependency of fr24)
 protobuf
 grpcio
+
+# Maps, images, HTTP utilities
+Pillow
+requests
