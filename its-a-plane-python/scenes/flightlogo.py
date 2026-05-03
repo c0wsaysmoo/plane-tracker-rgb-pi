@@ -40,4 +40,9 @@ class FlightLogoScene:
         except AttributeError:
             resample = Image.ANTIALIAS          # Pillow <10
         image.thumbnail((LOGO_SIZE, LOGO_SIZE), resample)
-        self.matrix.SetImage(image.convert('RGB'))
+
+        # Convert to RGB and rebuild to avoid Pillow/rgbmatrix incompatibility
+        # (newer Pillow's ImagingCore lacks 'unsafe_ptrs' expected by old rgbmatrix)
+        rgb = image.convert('RGB')
+        rgb = Image.frombytes('RGB', rgb.size, rgb.tobytes())
+        self.matrix.SetImage(rgb)
