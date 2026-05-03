@@ -2,12 +2,17 @@
 from flask import Flask, render_template, jsonify, send_from_directory, request
 import json
 import os
+import sys
 
-from FlightRadar24.api import FlightRadar24API
+# Ensure the parent directory is on sys.path so `config` and `utilities` resolve
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from utilities.fr24_client import FR24Client
 
 # /web is the folder that this file lives in
 WEB_DIR = os.path.dirname(__file__)
-BASE_DIR = os.path.abspath(os.path.join(WEB_DIR, ".."))
 
 app = Flask(
     __name__,
@@ -39,10 +44,10 @@ def lookup_flight(callsign):
     airline_icao = callsign[:3] if len(callsign) >= 3 and callsign[:3].isalpha() else None
 
     try:
-        api = FlightRadar24API()
+        api = FR24Client()
         match = None
 
-        # Strategy 1: airline filter (fast, works for mainline)
+        # Strategy 1: airline filter (post-filter on callsign)
         if airline_icao:
             try:
                 flights = api.get_flights(airline=airline_icao)
@@ -53,13 +58,12 @@ def lookup_flight(callsign):
             except Exception:
                 pass
 
-        # Strategy 2: global search matching on number or callsign
+        # Strategy 2: global live feed search matching on callsign
         if not match:
             flights = api.get_flights()
             match = next(
-                (f for f in flights if
-                 (f.number or "").upper() == callsign or
-                 (f.callsign or "").upper() == callsign),
+                (f for f in flights
+                 if (f.callsign or "").upper() == callsign),
                 None,
             )
 

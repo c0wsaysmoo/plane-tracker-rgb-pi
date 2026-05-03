@@ -4,9 +4,8 @@ import math
 from time import sleep, time
 from threading import Thread, Lock
 
-from FlightRadar24.api import FlightRadar24API
-from requests.exceptions import ConnectionError
-from urllib3.exceptions import NewConnectionError, MaxRetryError
+from utilities.fr24_client import FR24Client, LiveFlight
+from httpx import ConnectError, TimeoutException
 
 from config import (
     DISTANCE_UNITS,
@@ -281,7 +280,7 @@ def log_farthest_flight(entry: dict):
 
 class Overhead:
     def __init__(self):
-        self._api = FlightRadar24API()
+        self._api = FR24Client()
         self._lock = Lock()
         self._data = []           # overhead flights
         self._tracked_data = None # tracked flight or None
@@ -314,8 +313,7 @@ class Overhead:
 
         try:
             # --- STEP 1: Check zone for overhead flights ---
-            bounds = self._api.get_bounds(ZONE_DEFAULT)
-            flights = self._api.get_flights(bounds=bounds)
+            flights = self._api.get_flights(bounds=ZONE_DEFAULT)
             flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
             flights.sort(key=lambda f: distance_from_flight_to_home(f))
             flights = flights[:MAX_FLIGHT_LOOKUP]
@@ -450,7 +448,7 @@ class Overhead:
                 self._new_data = True
                 self._processing = False
 
-        except (ConnectionError, NewConnectionError, MaxRetryError):
+        except (ConnectionError, ConnectError, TimeoutException, OSError):
             with self._lock:
                 self._new_data = False
                 self._processing = False
@@ -484,22 +482,14 @@ class Overhead:
                     None,
                 )
 
-            # Strategy 2: high-limit global search matching on flight NUMBER
-            # This catches regionals where callsign differs from flight number
-            # e.g. user enters AA5056, actual callsign is JIA5056
-            # but f.number == "AA5056" on both
+            # Strategy 2: global live feed search matching on callsign
+            # The official API doesn't support airline filtering server-side,
+            # so we fetch the full live feed (up to 2000) and filter locally.
             if not match:
-                config = self._api.get_flight_tracker_config()
-                config.limit = 10000
-                self._api.set_flight_tracker_config(config)
                 flights = self._api.get_flights()
-                # Reset limit back to default
-                config.limit = 1500
-                self._api.set_flight_tracker_config(config)
                 match = next(
-                    (f for f in flights if
-                     (f.number or "").upper() == flight_input or
-                     (f.callsign or "").upper() == flight_input),
+                    (f for f in flights
+                     if (f.callsign or "").upper() == flight_input),
                     None,
                 )
 

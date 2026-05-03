@@ -1,0 +1,15 @@
+# FlightRadar24 official Python SDK
+fr24>=0.3.0
+
+# HTTP client (dependency of fr24, but listed explicitly)
+httpx[http2]
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Web interface
+flask
+
+# Protobuf (dependency of fr24)
+protobuf
+grpcio
