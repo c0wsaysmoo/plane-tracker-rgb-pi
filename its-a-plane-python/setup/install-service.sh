@@ -24,11 +24,29 @@ if systemctl list-unit-files "$OLD_SERVICE" &>/dev/null && systemctl cat "$OLD_S
     echo ""
 fi
 
-echo "==> Installing environment file to $ENV_DEST (root-only, mode 0600)"
-cp "$ENV_SRC" "$ENV_DEST"
-chown root:root "$ENV_DEST"
-chmod 0600 "$ENV_DEST"
+# --- Install environment file with secrets ---
+if [ ! -f "$ENV_DEST" ]; then
+    if [ -f "$ENV_SRC" ]; then
+        echo "==> Copying environment file to $ENV_DEST"
+        cp "$ENV_SRC" "$ENV_DEST"
+    else
+        echo "==> Creating $ENV_DEST (enter your API keys)"
+        echo ""
+        read -p "  FR24 API Key (subscription_key|token): " FR24_KEY
+        read -p "  Tomorrow.io API Key: " TOMORROW_KEY
+        cat > "$ENV_DEST" <<EOF
+FR24_API_KEY=${FR24_KEY}
+TOMORROW_API_KEY=${TOMORROW_KEY}
+EOF
+    fi
+    chown root:root "$ENV_DEST"
+    chmod 0600 "$ENV_DEST"
+    echo "  → Saved to $ENV_DEST (mode 0600, root-only)"
+else
+    echo "==> $ENV_DEST already exists — keeping existing keys"
+fi
 
+echo ""
 echo "==> Installing systemd service to $SERVICE_DEST"
 cp "$SERVICE_SRC" "$SERVICE_DEST"
 chmod 0644 "$SERVICE_DEST"
@@ -40,8 +58,14 @@ echo "==> Enabling plane-tracker service to start on boot"
 systemctl enable plane-tracker.service
 
 echo ""
-echo "Done. To start now:  sudo systemctl start plane-tracker"
-echo "To view logs:        sudo journalctl -u plane-tracker -f"
+echo "============================================"
+echo "  Done!"
+echo "============================================"
 echo ""
-echo "IMPORTANT: Edit /etc/plane-tracker.env if you need to change API keys."
-echo "           After editing, restart:  sudo systemctl restart plane-tracker"
+echo "  Start:     sudo systemctl start plane-tracker"
+echo "  Status:    sudo systemctl status plane-tracker"
+echo "  Logs:      sudo journalctl -u plane-tracker -f"
+echo ""
+echo "  Edit keys: sudo nano /etc/plane-tracker.env"
+echo "  Then:      sudo systemctl restart plane-tracker"
+echo ""
