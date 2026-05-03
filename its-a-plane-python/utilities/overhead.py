@@ -44,9 +44,16 @@ EARTH_RADIUS_M = 3958.8
 BLANK_FIELDS = ["", "N/A", "NONE"]
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "close.txt")
-LOG_FILE_FARTHEST = os.path.join(BASE_DIR, "farthest.txt")
-TRACKED_FILE = os.path.join(BASE_DIR, "tracked_flight.json")
+
+# Writable data directory — outside home dir to avoid systemd ProtectHome issues
+DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", "/var/lib/plane-tracker")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+LOG_FILE = os.path.join(DATA_DIR, "close.txt")
+LOG_FILE_FARTHEST = os.path.join(DATA_DIR, "farthest.txt")
+TRACKED_FILE = os.path.join(DATA_DIR, "tracked_flight.json")
+MAPS_DIR = os.path.join(DATA_DIR, "maps")
+os.makedirs(MAPS_DIR, exist_ok=True)
 
 
 # Utility Functions
