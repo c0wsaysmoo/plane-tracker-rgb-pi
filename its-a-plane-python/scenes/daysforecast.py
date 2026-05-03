@@ -137,7 +137,10 @@ class DaysForecastScene(object):
                     except AttributeError:
                         resample = Image.ANTIALIAS
                     image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
-                    self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
+                    # Rebuild image to avoid Pillow/rgbmatrix unsafe_ptrs incompatibility
+                    rgb = image.convert("RGB")
+                    rgb = Image.frombytes("RGB", rgb.size, rgb.tobytes())
+                    self.matrix.SetImage(rgb, icon_x, ICON_POSITION)
                 except FileNotFoundError:
                     pass
 

@@ -380,18 +380,18 @@ class Overhead:
                         time_est_arr = self.safe_get(t, "estimated", "arrival")
 
                         # Airport coordinates: NOT available from gRPC FlightDetails.
-                        # Use flight_progress distances instead (server-calculated, in km).
+                        # Use flight_progress distances instead (server-calculated, in METERS).
                         fp = self.safe_get(d, "flight_progress") or {}
-                        traversed_km = fp.get("traversed_distance", 0) or 0
-                        remaining_km = fp.get("remaining_distance", 0) or 0
+                        traversed_m = fp.get("traversed_distance", 0) or 0
+                        remaining_m = fp.get("remaining_distance", 0) or 0
 
-                        # Convert km to display units (miles or km)
+                        # Convert meters to display units (miles or km)
                         if DISTANCE_UNITS == "metric":
-                            dist_o = traversed_km
-                            dist_d = remaining_km
+                            dist_o = traversed_m / 1000.0   # meters → km
+                            dist_d = remaining_m / 1000.0
                         else:
-                            dist_o = traversed_km * 0.621371
-                            dist_d = remaining_km * 0.621371
+                            dist_o = traversed_m / 1609.344  # meters → miles
+                            dist_d = remaining_m / 1609.344
 
                         origin_lat = None
                         origin_lon = None
@@ -552,20 +552,19 @@ class Overhead:
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
 
-            # Use flight_progress from the API for distances (km)
+            # Use flight_progress from the API for distances (in METERS)
             fp = self.safe_get(flight_details, "flight_progress") or {}
-            remaining_km = fp.get("remaining_distance", 0) or 0
-            total_km = fp.get("great_circle_distance", 0) or 0
+            remaining_m = fp.get("remaining_distance", 0) or 0
+            total_m = fp.get("great_circle_distance", 0) or 0
             eta = fp.get("eta", 0) or 0
 
-            # Convert km to display units
+            # Convert meters to display units
             if DISTANCE_UNITS == "metric":
-                dist_remaining = remaining_km if remaining_km else None
-                total_distance = total_km if total_km else None
+                dist_remaining = (remaining_m / 1000.0) if remaining_m else None  # → km
+                total_distance = (total_m / 1000.0) if total_m else None
             else:
-                # km to miles
-                dist_remaining = remaining_km * 0.621371 if remaining_km else None
-                total_distance = total_km * 0.621371 if total_km else None
+                dist_remaining = (remaining_m / 1609.344) if remaining_m else None  # → miles
+                total_distance = (total_m / 1609.344) if total_m else None
 
             # Calculate time remaining from ETA
             time_remaining = None
