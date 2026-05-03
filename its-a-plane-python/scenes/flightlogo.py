@@ -6,6 +6,18 @@ from setup import colours
 LOGO_SIZE = 16
 DEFAULT_IMAGE = "default"
 
+
+def _draw_image_on_canvas(canvas, image, x_offset=0, y_offset=0):
+    """Draw a PIL image pixel-by-pixel (avoids Pillow/rgbmatrix unsafe_ptrs crash)."""
+    rgb = image.convert("RGB")
+    pixels = rgb.load()
+    width, height = rgb.size
+    for y in range(height):
+        for x in range(width):
+            r, g, b = pixels[x, y]
+            canvas.SetPixel(x + x_offset, y + y_offset, r, g, b)
+
+
 class FlightLogoScene:
     @Animator.KeyFrame.add(0)
     def logo_details(self):
@@ -33,7 +45,6 @@ class FlightLogoScene:
         except FileNotFoundError:
             image = Image.open(f"logos/{DEFAULT_IMAGE}.png")
 
-
         # Make image fit our screen.
         try:
             resample = Image.Resampling.LANCZOS  # Pillow 10+
@@ -41,8 +52,5 @@ class FlightLogoScene:
             resample = Image.ANTIALIAS          # Pillow <10
         image.thumbnail((LOGO_SIZE, LOGO_SIZE), resample)
 
-        # Convert to RGB and rebuild to avoid Pillow/rgbmatrix incompatibility
-        # (newer Pillow's ImagingCore lacks 'unsafe_ptrs' expected by old rgbmatrix)
-        rgb = image.convert('RGB')
-        rgb = Image.frombytes('RGB', rgb.size, rgb.tobytes())
-        self.matrix.SetImage(rgb)
+        # Draw pixel-by-pixel (avoids Pillow/rgbmatrix SetImage incompatibility)
+        _draw_image_on_canvas(self.canvas, image)
