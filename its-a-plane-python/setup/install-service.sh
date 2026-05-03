@@ -11,6 +11,18 @@ SERVICE_SRC="$SCRIPT_DIR/plane-tracker.service"
 
 ENV_DEST="/etc/plane-tracker.env"
 SERVICE_DEST="/etc/systemd/system/plane-tracker.service"
+OLD_SERVICE="flighttracker.service"
+
+# --- Remove old service if it exists ---
+if systemctl list-unit-files "$OLD_SERVICE" &>/dev/null && systemctl cat "$OLD_SERVICE" &>/dev/null; then
+    echo "==> Stopping and removing old service: $OLD_SERVICE"
+    systemctl stop "$OLD_SERVICE" 2>/dev/null || true
+    systemctl disable "$OLD_SERVICE" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$OLD_SERVICE"
+    systemctl daemon-reload
+    echo "    Old service removed."
+    echo ""
+fi
 
 echo "==> Installing environment file to $ENV_DEST (root-only, mode 0600)"
 cp "$ENV_SRC" "$ENV_DEST"
