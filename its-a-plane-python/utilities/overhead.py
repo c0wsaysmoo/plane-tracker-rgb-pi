@@ -1,11 +1,14 @@
 import os
 import json
 import math
+import logging
 from time import sleep, time
 from threading import Thread, Lock
 
 from utilities.fr24_client import FR24Client, LiveFlight
 from httpx import ConnectError, TimeoutException
+
+logger = logging.getLogger(__name__)
 
 from config import (
     DISTANCE_UNITS,
@@ -292,6 +295,7 @@ class Overhead:
         self._tracked_last_callsign = ""     # last callsign we polled for
         self._tracked_last_eta = None        # last known estimated arrival (unix ts)
         self._tracked_last_data = None       # last known good tracked data
+        self._first_flight_logged = False    # log first flight details as JSON
 
     def grab_data(self):
         Thread(target=self._grab, daemon=True).start()
@@ -325,8 +329,25 @@ class Overhead:
                     try:
                         d = self._api.get_flight_details(f)
 
-                        plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.airline_icao or ""
-                        airline = self.safe_get(d, "airline", "name", default="")
+                        if not d:
+                            retries -= 1
+                            continue
+
+                        # Log first flight details as pretty JSON for debugging
+                        if not self._first_flight_logged:
+                            self._first_flight_logged = True
+                            logger.info(
+                                "First flight API response:\n%s",
+                                json.dumps(d, indent=2, default=str),
+                            )
+
+                        # Aircraft type from details, fallback to live feed
+                        plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.aircraft_code or ""
+
+                        # Airline name: not available from gRPC API,
+                        # use flight number prefix as display name
+                        flight_number = self.safe_get(d, "schedule_info", "flight_number", default="")
+                        airline = flight_number or f.callsign or ""
 
                         origin = f.origin_airport_iata or ""
                         destination = f.destination_airport_iata or ""
@@ -338,16 +359,15 @@ class Overhead:
                         time_real_dep = self.safe_get(t, "real", "departure")
                         time_est_arr = self.safe_get(t, "estimated", "arrival")
 
-                        o = self.safe_get(d, "airport", "origin")
-                        origin_lat = self.safe_get(o, "position", "latitude")
-                        origin_lon = self.safe_get(o, "position", "longitude")
+                        # Airport coordinates: NOT available from gRPC FlightDetails
+                        # (the official API only provides airport IDs/ICAO codes)
+                        origin_lat = None
+                        origin_lon = None
+                        dest_lat = None
+                        dest_lon = None
 
-                        dest = self.safe_get(d, "airport", "destination")
-                        dest_lat = self.safe_get(dest, "position", "latitude")
-                        dest_lon = self.safe_get(dest, "position", "longitude")
-
-                        dist_o = distance_to_point(f, origin_lat, origin_lon) if origin_lat else 0
-                        dist_d = distance_to_point(f, dest_lat, dest_lon) if dest_lat else 0
+                        dist_o = 0
+                        dist_d = 0
 
                         # Extract airborne trail points only (alt > 0)
                         raw_trail = self.safe_get(d, "trail", default=[]) or []
@@ -360,6 +380,7 @@ class Overhead:
                         entry = {
                             "airline": airline,
                             "plane": plane,
+                            "flight_number": flight_number,
                             "origin": origin,
                             "origin_latitude": origin_lat,
                             "origin_longitude": origin_lon,
@@ -369,7 +390,7 @@ class Overhead:
                             "plane_latitude": f.latitude,
                             "plane_longitude": f.longitude,
                             "owner_iata": f.airline_iata or "N/A",
-                            "owner_icao": self.safe_get(d, "owner", "code", "icao", default="") or f.airline_icao or "",
+                            "owner_icao": f.airline_icao or "",
                             "time_scheduled_departure": time_sched_dep,
                             "time_scheduled_arrival": time_sched_arr,
                             "time_real_departure": time_real_dep,
@@ -390,6 +411,8 @@ class Overhead:
 
                     except Exception as e:
                         retries -= 1
+                        if retries == 0:
+                            logger.warning(f"Failed to get details for {f.callsign}: {e}")
 
             # --- STEP 2: Only look for tracked flight if sky is clear ---
             if not overhead_data:
@@ -500,27 +523,38 @@ class Overhead:
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
 
-            origin_lat = match.origin_airport_latitude
-            origin_lon = match.origin_airport_longitude
-            dest_lat = match.destination_airport_latitude
-            dest_lon = match.destination_airport_longitude
+            # Use flight_progress from the API for distances (km)
+            fp = self.safe_get(flight_details, "flight_progress") or {}
+            remaining_km = fp.get("remaining_distance", 0) or 0
+            total_km = fp.get("great_circle_distance", 0) or 0
+            eta = fp.get("eta", 0) or 0
 
-            # dist_remaining in display units (miles or km) for the stats line
-            dist_remaining = (
-                haversine(match.latitude, match.longitude, dest_lat, dest_lon)
-                if dest_lat else None
-            )
+            # Convert km to display units
+            if DISTANCE_UNITS == "metric":
+                dist_remaining = remaining_km if remaining_km else None
+                total_distance = total_km if total_km else None
+            else:
+                # km to miles
+                dist_remaining = remaining_km * 0.621371 if remaining_km else None
+                total_distance = total_km * 0.621371 if total_km else None
 
-            # Calculate time remaining from estimated arrival (most accurate when live)
+            # Calculate time remaining from ETA
             time_remaining = None
-            est_arr = self.safe_get(flight_details, "time", "estimated", "arrival")
-            if est_arr:
-                mins_left = int((est_arr - time()) / 60)
+            if eta and eta > time():
+                mins_left = int((eta - time()) / 60)
                 if mins_left > 0:
                     h = mins_left // 60
                     m = mins_left % 60
                     time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
-            # Fallback: calculate from distance/speed if no ETA available
+            # Fallback: use remaining_time from flight_progress (seconds)
+            if not time_remaining:
+                remaining_secs = fp.get("remaining_time", 0) or 0
+                if remaining_secs > 0:
+                    mins_left = remaining_secs // 60
+                    h = mins_left // 60
+                    m = mins_left % 60
+                    time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
+            # Last fallback: distance/speed
             if not time_remaining and dist_remaining and match.ground_speed:
                 if DISTANCE_UNITS == "metric":
                     dist_nm = dist_remaining * 0.539957
@@ -533,18 +567,12 @@ class Overhead:
                     m = mins_left % 60
                     time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
 
-            # Total route distance in same display units for progress bar
-            total_distance = (
-                haversine(origin_lat, origin_lon, dest_lat, dest_lon)
-                if origin_lat and dest_lat else None
-            )
-
-            # Time fields for delay colour coding (same as JourneyScene)
+            # Time fields for delay colour coding
             time_details = self.safe_get(flight_details, "time") or {}
             time_sched_dep = self.safe_get(time_details, "scheduled", "departure")
             time_sched_arr = self.safe_get(time_details, "scheduled", "arrival")
             time_real_dep  = self.safe_get(time_details, "real", "departure")
-            time_est_arr   = self.safe_get(time_details, "estimated", "arrival")
+            time_est_arr   = self.safe_get(time_details, "estimated", "arrival") or eta or None
 
             return {
                 "callsign": flight_input,
@@ -553,8 +581,8 @@ class Overhead:
                 "is_live": True,
                 "origin": match.origin_airport_iata or "",
                 "destination": match.destination_airport_iata or "",
-                "dest_lat": dest_lat,
-                "dest_lon": dest_lon,
+                "dest_lat": 0,
+                "dest_lon": 0,
                 "aircraft_type": match.aircraft_code or "",
                 "altitude": match.altitude,
                 "ground_speed": match.ground_speed or 0,
@@ -573,7 +601,7 @@ class Overhead:
             }
 
         except Exception as e:
-            print(f"Failed to grab tracked flight: {e}")
+            logger.error(f"Failed to grab tracked flight: {e}")
             return None
 
     # Properties
