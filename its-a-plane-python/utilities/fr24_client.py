@@ -23,6 +23,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _is_jwt(token: str) -> bool:
+    """Check if a string looks like a valid JWT (3 dot-separated base64 parts)."""
+    parts = token.split(".")
+    return len(parts) == 3 and all(len(p) > 0 for p in parts)
+
+
 def _ensure_env_credentials() -> None:
     """
     Read FR24_API_KEY from config (if available) and set the environment
@@ -43,7 +49,10 @@ def _ensure_env_credentials() -> None:
     if "|" in FR24_API_KEY:
         sub_key, token = FR24_API_KEY.split("|", 1)
         os.environ.setdefault("fr24_subscription_key", sub_key)
-        os.environ.setdefault("fr24_token", token)
+        # Only set token if it's actually a JWT; otherwise token auth will
+        # fail silently and fall back to anonymous anyway
+        if _is_jwt(token):
+            os.environ.setdefault("fr24_token", token)
     else:
         os.environ.setdefault("fr24_subscription_key", FR24_API_KEY)
 
@@ -178,16 +187,20 @@ class FR24Client:
             # World bounds
             bbox = BoundingBox(south=-90, north=90, west=-180, east=180)
 
-        # Include vspeed field for authenticated users
-        fields = {"flight", "reg", "route", "type", "vspeed"}
+        # Max 4 fields for unauthenticated users; vspeed requires auth
+        fields = {"flight", "reg", "route", "type"}
 
         result = await fr24.live_feed.fetch(
             bounding_box=bbox,
-            limit=2000,
+            limit=1500,
             fields=fields,
         )
 
-        proto = result.to_proto()
+        try:
+            proto = result.to_proto()
+        except Exception as e:
+            logger.warning(f"Failed to parse live feed response: {e}")
+            return []
         flights = []
         for f in proto.flights_list:
             route = f.extra_info.route
