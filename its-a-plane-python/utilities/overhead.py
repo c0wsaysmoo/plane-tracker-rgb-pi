@@ -359,15 +359,24 @@ class Overhead:
                         time_real_dep = self.safe_get(t, "real", "departure")
                         time_est_arr = self.safe_get(t, "estimated", "arrival")
 
-                        # Airport coordinates: NOT available from gRPC FlightDetails
-                        # (the official API only provides airport IDs/ICAO codes)
+                        # Airport coordinates: NOT available from gRPC FlightDetails.
+                        # Use flight_progress distances instead (server-calculated, in km).
+                        fp = self.safe_get(d, "flight_progress") or {}
+                        traversed_km = fp.get("traversed_distance", 0) or 0
+                        remaining_km = fp.get("remaining_distance", 0) or 0
+
+                        # Convert km to display units (miles or km)
+                        if DISTANCE_UNITS == "metric":
+                            dist_o = traversed_km
+                            dist_d = remaining_km
+                        else:
+                            dist_o = traversed_km * 0.621371
+                            dist_d = remaining_km * 0.621371
+
                         origin_lat = None
                         origin_lon = None
                         dest_lat = None
                         dest_lon = None
-
-                        dist_o = 0
-                        dist_d = 0
 
                         # Extract airborne trail points only (alt > 0)
                         raw_trail = self.safe_get(d, "trail", default=[]) or []
