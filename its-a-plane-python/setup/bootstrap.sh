@@ -123,11 +123,12 @@ echo ""
 
 # --- Step 6: Install/update systemd service ---
 echo "→ Installing systemd service..."
-cp "$REPO_DIR/its-a-plane-python/setup/plane-tracker.service" "$SERVICE_DEST"
+# Replace __REPO_DIR__ placeholder with actual repo path
+sed "s|__REPO_DIR__|$REPO_DIR|g" "$REPO_DIR/its-a-plane-python/setup/plane-tracker.service" > "$SERVICE_DEST"
 chmod 0644 "$SERVICE_DEST"
 systemctl daemon-reload
 systemctl enable "$NEW_SERVICE"
-echo "   ✓ Service installed and enabled"
+echo "   ✓ Service installed (repo: $REPO_DIR)"
 echo ""
 
 # --- Step 7: Start the service ---
