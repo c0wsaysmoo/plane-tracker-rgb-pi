@@ -3,6 +3,9 @@
 .env.local
 .env.production
 
+# VS
+*.code-workspace/
+
 # Python
 __pycache__/
 *.py[cod]
