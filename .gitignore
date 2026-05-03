@@ -31,10 +31,6 @@ env/
 .DS_Store
 Thumbs.db
 
-# Project-specific logs
-its-a-plane-python/close.txt
-its-a-plane-python/farthest.txt
-
 # FR24 cache
 .fr24/
 
