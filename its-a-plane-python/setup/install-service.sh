@@ -52,9 +52,9 @@ fi
 
 echo ""
 
-# --- Install systemd service ---
+# --- Install systemd service (replace __REPO_DIR__ with actual path) ---
 echo "==> Installing systemd service to $SERVICE_DEST"
-cp "$SERVICE_SRC" "$SERVICE_DEST"
+sed "s|__REPO_DIR__|$PROJECT_ROOT|g" "$SERVICE_SRC" > "$SERVICE_DEST"
 chmod 0644 "$SERVICE_DEST"
 
 echo "==> Reloading systemd daemon"
