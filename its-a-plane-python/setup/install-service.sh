@@ -1,17 +1,22 @@
 #!/bin/bash
-# install-service.sh — Install the plane-tracker systemd service and secrets
+# install-service.sh — Install the plane-tracker systemd service and config
 #
 # Usage:  sudo bash install-service.sh
 #
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_SRC="$SCRIPT_DIR/plane-tracker.env"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVICE_SRC="$SCRIPT_DIR/plane-tracker.service"
 
 ENV_DEST="/etc/plane-tracker.env"
 SERVICE_DEST="/etc/systemd/system/plane-tracker.service"
 OLD_SERVICE="flighttracker.service"
+
+echo "============================================"
+echo "  Plane Tracker — Service Installer"
+echo "============================================"
+echo ""
 
 # --- Remove old service if it exists ---
 if systemctl list-unit-files "$OLD_SERVICE" &>/dev/null && systemctl cat "$OLD_SERVICE" &>/dev/null; then
@@ -24,29 +29,30 @@ if systemctl list-unit-files "$OLD_SERVICE" &>/dev/null && systemctl cat "$OLD_S
     echo ""
 fi
 
-# --- Install environment file with secrets ---
+# --- Install environment file ---
 if [ ! -f "$ENV_DEST" ]; then
-    if [ -f "$ENV_SRC" ]; then
-        echo "==> Copying environment file to $ENV_DEST"
-        cp "$ENV_SRC" "$ENV_DEST"
+    # Check for .env in project root first (user may have pre-filled it)
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        echo "==> Found .env in project root — installing to $ENV_DEST"
+        cp "$PROJECT_ROOT/.env" "$ENV_DEST"
     else
-        echo "==> Creating $ENV_DEST (enter your API keys)"
+        echo "==> No .env found — installing .env.example as starting point"
+        cp "$PROJECT_ROOT/.env.example" "$ENV_DEST"
         echo ""
-        read -p "  FR24 API Key (subscription_key|token): " FR24_KEY
-        read -p "  Tomorrow.io API Key: " TOMORROW_KEY
-        cat > "$ENV_DEST" <<EOF
-FR24_API_KEY=${FR24_KEY}
-TOMORROW_API_KEY=${TOMORROW_KEY}
-EOF
+        echo "  !! You MUST edit $ENV_DEST to add your API keys !!"
+        echo "     sudo nano $ENV_DEST"
+        echo ""
     fi
     chown root:root "$ENV_DEST"
     chmod 0600 "$ENV_DEST"
-    echo "  → Saved to $ENV_DEST (mode 0600, root-only)"
+    echo "  → Installed to $ENV_DEST (mode 0600, root-only)"
 else
-    echo "==> $ENV_DEST already exists — keeping existing keys"
+    echo "==> $ENV_DEST already exists — keeping existing configuration"
 fi
 
 echo ""
+
+# --- Install systemd service ---
 echo "==> Installing systemd service to $SERVICE_DEST"
 cp "$SERVICE_SRC" "$SERVICE_DEST"
 chmod 0644 "$SERVICE_DEST"
@@ -66,6 +72,6 @@ echo "  Start:     sudo systemctl start plane-tracker"
 echo "  Status:    sudo systemctl status plane-tracker"
 echo "  Logs:      sudo journalctl -u plane-tracker -f"
 echo ""
-echo "  Edit keys: sudo nano /etc/plane-tracker.env"
-echo "  Then:      sudo systemctl restart plane-tracker"
+echo "  Edit config: sudo nano /etc/plane-tracker.env"
+echo "  Then:        sudo systemctl restart plane-tracker"
 echo ""

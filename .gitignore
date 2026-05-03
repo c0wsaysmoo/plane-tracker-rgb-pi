@@ -2,7 +2,6 @@
 .env
 .env.local
 .env.production
-its-a-plane-python/setup/plane-tracker.env
 
 # Python
 __pycache__/
