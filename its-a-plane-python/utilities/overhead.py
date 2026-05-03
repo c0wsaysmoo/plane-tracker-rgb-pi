@@ -18,13 +18,24 @@ from web import map_generator, upload_helper
 # Optional config values
 try:
     from config import MIN_ALTITUDE
+except (ImportError, ModuleNotFoundError, NameError):
+    MIN_ALTITUDE = 0
+
 try:
     from config import ZONE_HOME, LOCATION_HOME
     ZONE_DEFAULT = ZONE_HOME
     LOCATION_DEFAULT = LOCATION_HOME
+except (ImportError, ModuleNotFoundError, NameError):
+    ZONE_DEFAULT = {"tl_y": 41.904318, "tl_x": -87.647367,
+                    "br_y": 41.851654, "br_x": -87.573027}
+    LOCATION_DEFAULT = [41.882724, -87.623350]
+
 # Optional: explicit search radius in nautical miles (overrides zone-based calculation)
 try:
     from config import SEARCH_RADIUS_NM
+except (ImportError, ModuleNotFoundError, NameError):
+    SEARCH_RADIUS_NM = None
+
 # Constants
 RETRIES = 3
 RATE_LIMIT_DELAY = 0.5
@@ -39,12 +50,29 @@ AIRLABS_BASE = "https://airlabs.co/api/v9"
 
 # ICAO prefixes for airlines that reuse callsigns so heavily that adsbdb
 # route data is unreliable — skip straight to AirLabs/FlightAware fallback
+try:
+    from config import SKIP_ADSBDB_PREFIXES
+except (ImportError, ModuleNotFoundError, NameError):
+    SKIP_ADSBDB_PREFIXES = set()
+
+# Optional AirLabs API key for route fallback when adsbdb returns stale data
+try:
+    from config import AIRLABS_API_KEY
+except (ImportError, ModuleNotFoundError, NameError):
+    AIRLABS_API_KEY = None
+
 # Optional FlightAware AeroAPI key for route fallback (GA, charter, non-standard callsigns)
 try:
     from config import FLIGHTAWARE_API_KEY
+except (ImportError, ModuleNotFoundError, NameError):
+    FLIGHTAWARE_API_KEY = None
+
 # Monthly spending limit for FlightAware (dollars). Default $4 to stay under $5 free credit.
 try:
     from config import FLIGHTAWARE_MONTHLY_LIMIT
+except (ImportError, ModuleNotFoundError, NameError):
+    FLIGHTAWARE_MONTHLY_LIMIT = 4.00
+
 FLIGHTAWARE_BASE = "https://aeroapi.flightaware.com/aeroapi"
 FLIGHTAWARE_COST_PER_CALL = 0.01  # dollars per result set (verified from billing API)
 
@@ -267,6 +295,12 @@ def _route_makes_sense(plane_lat, plane_lon, origin_lat, origin_lon, dest_lat, d
     if not all((plane_lat, plane_lon, origin_lat, origin_lon, dest_lat, dest_lon)):
         return True  # Can't check, assume OK
 
+    # Reject Pacific/Australasian endpoints (lon > 100E or lon < 130W).
+    # India/Middle East (lon < 100E) can fly eastbound over the East Coast.
+    for lat, lon in [(origin_lat, origin_lon), (dest_lat, dest_lon)]:
+        if (100 < lon <= 180 or -180 <= lon < -130) and lat < 50:
+            return False
+
     route_dist = haversine(origin_lat, origin_lon, dest_lat, dest_lon)
     if route_dist < 50:
         return True  # Short route, hard to validate
@@ -274,11 +308,20 @@ def _route_makes_sense(plane_lat, plane_lon, origin_lat, origin_lon, dest_lat, d
     dist_to_origin = haversine(plane_lat, plane_lon, origin_lat, origin_lon)
     dist_to_dest = haversine(plane_lat, plane_lon, dest_lat, dest_lon)
 
+    # Wrong-side check: if the origin is nearby but the plane is farther from
+    # the destination than the origin is, the plane is past the origin in the
+    # wrong direction (e.g. stale LGA->CLT showing east of origin)
+    if dist_to_dest > route_dist and dist_to_origin < 150 and route_dist > 100:
+        return False
+
     # The sum of distances from plane to origin + plane to dest should be
     # roughly equal to the route distance (with some tolerance for curved paths).
-    # If it's way more than the route distance, the plane isn't on this route.
     detour_ratio = (dist_to_origin + dist_to_dest) / route_dist
     return detour_ratio < 1.8
+
+
+_airlabs_cache = {}  # {callsign: {"data": dict, "ts": float}}
+AIRLABS_CACHE_TTL = 3600  # 1 hour
 
 
 def _airlabs_route(callsign):
@@ -287,18 +330,26 @@ def _airlabs_route(callsign):
     if not AIRLABS_API_KEY:
         return {}
 
+    # Check cache
+    now = time()
+    cached = _airlabs_cache.get(callsign)
+    if cached and (now - cached["ts"]) < AIRLABS_CACHE_TTL:
+        return cached["data"]
+
     # Convert ICAO callsign to flight_icao parameter (e.g. SWA1444)
     url = f"{AIRLABS_BASE}/flight"
     params = {"flight_icao": callsign, "api_key": AIRLABS_API_KEY}
     try:
         r = requests.get(url, params=params, timeout=10)
         if r.status_code != 200:
+            _airlabs_cache[callsign] = {"data": {}, "ts": now}
             return {}
         data = r.json().get("response") or {}
         if not data:
+            _airlabs_cache[callsign] = {"data": {}, "ts": now}
             return {}
 
-        return {
+        result = {
             "airline_name": data.get("airline_name", ""),
             "airline_icao": data.get("airline_icao", ""),
             "airline_iata": data.get("airline_iata", ""),
@@ -309,8 +360,11 @@ def _airlabs_route(callsign):
             "dest_lat": data.get("arr_lat"),
             "dest_lon": data.get("arr_lng"),
         }
+        _airlabs_cache[callsign] = {"data": result, "ts": now}
+        return result
     except Exception as e:
         print(f"AirLabs route error for {callsign}: {e}")
+        _airlabs_cache[callsign] = {"data": {}, "ts": now - AIRLABS_CACHE_TTL + 300}
         return {}
 
 
@@ -387,6 +441,7 @@ def _flightaware_route(callsign):
             timeout=10,
         )
         if r.status_code != 200:
+            _fa_cache[callsign] = {"data": {}, "ts": now}
             return {}
 
         flights = r.json().get("flights", [])
@@ -432,7 +487,7 @@ def _flightaware_route(callsign):
             dest_lon = coords.get("lon")
 
         result = {
-            "airline_name": f.get("operator", ""),
+            "airline_name": f.get("operator", "") if len(f.get("operator", "")) > 4 else "",
             "airline_icao": f.get("operator_icao", ""),
             "airline_iata": f.get("operator_iata", ""),
             "origin_iata": origin.get("code_iata", ""),
@@ -448,6 +503,8 @@ def _flightaware_route(callsign):
 
     except Exception as e:
         print(f"FlightAware error for {callsign}: {e}")
+        # Cache errors briefly (5 min) to avoid hammering FA on transient failures
+        _fa_cache[callsign] = {"data": {}, "ts": now - FA_CACHE_TTL + 300}
         return {}
 
 
@@ -621,7 +678,10 @@ class Overhead:
                     registration = ac.get("r", "")
 
                     # Step 1: Try adsbdb for route (free, unlimited)
-                    route = _adsbdb_route(callsign)
+                    # Skip adsbdb for airlines that heavily reuse callsigns
+                    skip_adsbdb = callsign[:3] in SKIP_ADSBDB_PREFIXES
+                    adsbdb_data = _adsbdb_route(callsign)  # always fetch for airline name
+                    route = {} if skip_adsbdb else adsbdb_data
 
                     origin_lat = route.get("origin_lat")
                     origin_lon = route.get("origin_lon")
@@ -642,10 +702,8 @@ class Overhead:
                     # Step 2: Fallback chain — AirLabs (free) then FlightAware (paid)
                     if need_fallback:
                         fallback = _airlabs_route(callsign)
-                        if fallback:
-                        else:
+                        if not fallback:
                             fallback = _flightaware_route(callsign)
-                            if fallback:
                         if fallback:
                             route = fallback
                             origin_lat = route.get("origin_lat")
@@ -657,6 +715,9 @@ class Overhead:
                             origin_lat = origin_lon = dest_lat = dest_lon = None
 
                     airline = route.get("airline_name", "")
+                    # If airline is just an ICAO code, use adsbdb's airline name instead
+                    if (not airline or (len(airline) <= 4 and airline == airline.upper())) and adsbdb_data.get("airline_name"):
+                        airline = adsbdb_data["airline_name"]
                     origin = route.get("origin_iata", "")
                     destination = route.get("dest_iata", "")
 
@@ -675,6 +736,10 @@ class Overhead:
                         ac_info = _adsbdb_aircraft(registration)
                         if ac_info.get("owner"):
                             airline = ac_info["owner"]
+
+                    # Normalize to title case (FAA registration data is often ALL CAPS)
+                    if airline and airline == airline.upper():
+                        airline = airline.title()
 
                     # Audit log
 
