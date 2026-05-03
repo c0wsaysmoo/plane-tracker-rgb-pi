@@ -1,0 +1,19 @@
+[Unit]
+Description=Plane Tracker RGB LED Matrix Display
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Secrets loaded from a root-only environment file
+EnvironmentFile=/etc/plane-tracker.env
+WorkingDirectory=/home/robk/plane-tracker-rgb-pi/its-a-plane-python
+ExecStart=/usr/bin/python3 /home/robk/plane-tracker-rgb-pi/its-a-plane-python/its-a-plane.py
+Restart=on-failure
+RestartSec=10
+# Run as root for GPIO / LED matrix access
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
