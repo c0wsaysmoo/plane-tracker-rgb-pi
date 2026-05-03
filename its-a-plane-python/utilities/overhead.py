@@ -1,12 +1,9 @@
 import os
 import json
 import math
+import requests
 from time import sleep, time
 from threading import Thread, Lock
-
-from FlightRadar24.api import FlightRadar24API
-from requests.exceptions import ConnectionError
-from urllib3.exceptions import NewConnectionError, MaxRetryError
 
 from config import (
     DISTANCE_UNITS,
@@ -21,30 +18,58 @@ from web import map_generator, upload_helper
 # Optional config values
 try:
     from config import MIN_ALTITUDE
-except (ImportError, ModuleNotFoundError, NameError):
-    MIN_ALTITUDE = 0
-
 try:
     from config import ZONE_HOME, LOCATION_HOME
     ZONE_DEFAULT = ZONE_HOME
     LOCATION_DEFAULT = LOCATION_HOME
-except (ImportError, ModuleNotFoundError, NameError):
-    ZONE_DEFAULT = {"tl_y": 41.904318, "tl_x": -87.647367,
-                    "br_y": 41.851654, "br_x": -87.573027}
-    LOCATION_DEFAULT = [41.882724, -87.623350]
-
+# Optional: explicit search radius in nautical miles (overrides zone-based calculation)
+try:
+    from config import SEARCH_RADIUS_NM
 # Constants
 RETRIES = 3
-RATE_LIMIT_DELAY = 1
+RATE_LIMIT_DELAY = 0.5
 MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000
 EARTH_RADIUS_M = 3958.8
 BLANK_FIELDS = ["", "N/A", "NONE"]
 
+ADSB_LOL_BASE = "https://api.adsb.lol"
+ADSBDB_BASE = "https://api.adsbdb.com"
+AIRLABS_BASE = "https://airlabs.co/api/v9"
+
+# ICAO prefixes for airlines that reuse callsigns so heavily that adsbdb
+# route data is unreliable — skip straight to AirLabs/FlightAware fallback
+# Optional FlightAware AeroAPI key for route fallback (GA, charter, non-standard callsigns)
+try:
+    from config import FLIGHTAWARE_API_KEY
+# Monthly spending limit for FlightAware (dollars). Default $4 to stay under $5 free credit.
+try:
+    from config import FLIGHTAWARE_MONTHLY_LIMIT
+FLIGHTAWARE_BASE = "https://aeroapi.flightaware.com/aeroapi"
+FLIGHTAWARE_COST_PER_CALL = 0.01  # dollars per result set (verified from billing API)
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "close.txt")
 LOG_FILE_FARTHEST = os.path.join(BASE_DIR, "farthest.txt")
 TRACKED_FILE = os.path.join(BASE_DIR, "tracked_flight.json")
+FA_USAGE_FILE = os.path.join(BASE_DIR, "flightaware_usage.json")
+
+
+
+def _compute_search_radius():
+    """Compute search radius in NM from ZONE_HOME bounding box, or use explicit config."""
+    if SEARCH_RADIUS_NM is not None:
+        return SEARCH_RADIUS_NM
+    # Approximate radius from bounding box diagonal / 2
+    lat1, lon1 = ZONE_DEFAULT["tl_y"], ZONE_DEFAULT["tl_x"]
+    lat2, lon2 = ZONE_DEFAULT["br_y"], ZONE_DEFAULT["br_x"]
+    diag_miles = haversine(lat1, lon1, lat2, lon2)
+    # Convert to nautical miles
+    if DISTANCE_UNITS == "metric":
+        diag_nm = diag_miles * 0.539957  # km to nm
+    else:
+        diag_nm = diag_miles * 0.868976  # miles to nm
+    return max(10, diag_nm / 2)
 
 
 # Utility Functions
@@ -94,10 +119,8 @@ def estimate_stale_data(last_data):
     elapsed_hrs  = (time() - last_ts) / 3600
     elapsed_mins = elapsed_hrs * 60
 
-    # --- Time remaining: subtract elapsed time from last known ---
     last_time_str = data.get("time_remaining", "")
     if last_time_str:
-        # Parse "H:MM" or "Mm" format
         try:
             if ":" in last_time_str:
                 parts = last_time_str.split(":")
@@ -111,22 +134,14 @@ def estimate_stale_data(last_data):
         except (ValueError, IndexError):
             pass
 
-    # --- Distance remaining: subtract distance covered ---
     last_dist = data.get("dist_remaining")
     if last_dist is not None and speed_kts > 0:
-        # Convert knots to display units per hour
         if DISTANCE_UNITS == "metric":
-            speed_display = speed_kts * 1.852      # knots -> kph
+            speed_display = speed_kts * 1.852
         else:
-            speed_display = speed_kts * 1.15078    # knots -> mph
+            speed_display = speed_kts * 1.15078
         dist_covered = speed_display * elapsed_hrs
         data["dist_remaining"] = max(0, last_dist - dist_covered)
-
-    # --- Update progress bar position using estimated dist_remaining ---
-    total = data.get("total_distance")
-    if total and total > 0 and data.get("dist_remaining") is not None:
-        # total_distance is in display units, dist_remaining now estimated
-        pass  # progress bar uses dist_remaining/total_distance automatically
 
     return data
 
@@ -137,27 +152,15 @@ def degrees_to_cardinal(deg):
     return dirs[idx % 8]
 
 
-def plane_bearing(flight, home=LOCATION_DEFAULT):
+def bearing_from_home(lat, lon, home=LOCATION_DEFAULT):
     lat1, lon1 = map(math.radians, home)
-    lat2, lon2 = map(math.radians, (flight.latitude, flight.longitude))
+    lat2, lon2 = map(math.radians, (lat, lon))
     b = math.atan2(
         math.sin(lon2 - lon1) * math.cos(lat2),
         math.cos(lat1) * math.sin(lat2)
         - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
     )
     return (math.degrees(b) + 360) % 360
-
-
-def distance_from_flight_to_home(flight):
-    return haversine(
-        flight.latitude, flight.longitude,
-        LOCATION_DEFAULT[0], LOCATION_DEFAULT[1],
-    )
-
-
-def distance_to_point(flight, lat, lon):
-    return haversine(flight.latitude, flight.longitude, lat, lon)
-
 
 
 def load_tracked_callsign():
@@ -168,6 +171,284 @@ def load_tracked_callsign():
             return data.get("callsign", "").strip().upper()
     except (FileNotFoundError, json.JSONDecodeError):
         return ""
+
+
+# --- API helpers ---
+
+def _adsb_lol_nearby(lat, lon, radius_nm):
+    """Fetch aircraft near a point from adsb.lol. Returns list of dicts."""
+    url = f"{ADSB_LOL_BASE}/v2/lat/{lat}/lon/{lon}/dist/{int(radius_nm)}"
+    try:
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        return r.json().get("ac", [])
+    except Exception as e:
+        print(f"adsb.lol nearby error: {e}")
+        return []
+
+
+def _adsb_lol_callsign(callsign):
+    """Fetch aircraft by callsign from adsb.lol. Returns list of dicts."""
+    url = f"{ADSB_LOL_BASE}/v2/callsign/{callsign}"
+    try:
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        return r.json().get("ac", [])
+    except Exception as e:
+        print(f"adsb.lol callsign error: {e}")
+        return []
+
+
+def _adsbdb_route(callsign):
+    """Fetch route info (airline, origin, destination) from adsbdb.com.
+    Returns dict with keys: airline_name, airline_icao, airline_iata,
+    origin_iata, origin_lat, origin_lon, dest_iata, dest_lat, dest_lon.
+    Returns empty dict if not found.
+    """
+    url = f"{ADSBDB_BASE}/v0/callsign/{callsign}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 404:
+            return {}
+        r.raise_for_status()
+        data = r.json()
+        fr = data.get("response", {}).get("flightroute")
+        if not fr:
+            return {}
+
+        airline = fr.get("airline") or {}
+        origin = fr.get("origin") or {}
+        dest = fr.get("destination") or {}
+
+        return {
+            "airline_name": airline.get("name", ""),
+            "airline_icao": airline.get("icao", ""),
+            "airline_iata": airline.get("iata", ""),
+            "origin_iata": origin.get("iata_code", ""),
+            "origin_lat": origin.get("latitude"),
+            "origin_lon": origin.get("longitude"),
+            "dest_iata": dest.get("iata_code", ""),
+            "dest_lat": dest.get("latitude"),
+            "dest_lon": dest.get("longitude"),
+        }
+    except Exception as e:
+        print(f"adsbdb route error for {callsign}: {e}")
+        return {}
+
+
+def _adsbdb_aircraft(registration):
+    """Fetch aircraft info by registration (N-number) from adsbdb.com.
+    Returns dict with owner, type, manufacturer, or empty dict."""
+    url = f"{ADSBDB_BASE}/v0/aircraft/{registration}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 404:
+            return {}
+        r.raise_for_status()
+        ac = r.json().get("response", {}).get("aircraft")
+        if not ac:
+            return {}
+        return {
+            "owner": ac.get("registered_owner", ""),
+            "type": ac.get("icao_type", ""),
+            "manufacturer": ac.get("manufacturer", ""),
+            "registration": ac.get("registration", ""),
+        }
+    except Exception as e:
+        print(f"adsbdb aircraft error for {registration}: {e}")
+        return {}
+
+
+
+def _route_makes_sense(plane_lat, plane_lon, origin_lat, origin_lon, dest_lat, dest_lon):
+    """Check if a route is geographically plausible for the aircraft's position.
+    Returns True if the plane is reasonably close to the great circle path
+    between origin and destination. Returns True if we can't determine (missing coords)."""
+    if not all((plane_lat, plane_lon, origin_lat, origin_lon, dest_lat, dest_lon)):
+        return True  # Can't check, assume OK
+
+    route_dist = haversine(origin_lat, origin_lon, dest_lat, dest_lon)
+    if route_dist < 50:
+        return True  # Short route, hard to validate
+
+    dist_to_origin = haversine(plane_lat, plane_lon, origin_lat, origin_lon)
+    dist_to_dest = haversine(plane_lat, plane_lon, dest_lat, dest_lon)
+
+    # The sum of distances from plane to origin + plane to dest should be
+    # roughly equal to the route distance (with some tolerance for curved paths).
+    # If it's way more than the route distance, the plane isn't on this route.
+    detour_ratio = (dist_to_origin + dist_to_dest) / route_dist
+    return detour_ratio < 1.8
+
+
+def _airlabs_route(callsign):
+    """Fetch route info from AirLabs as fallback. Requires AIRLABS_API_KEY.
+    Returns dict in same format as _adsbdb_route, or empty dict."""
+    if not AIRLABS_API_KEY:
+        return {}
+
+    # Convert ICAO callsign to flight_icao parameter (e.g. SWA1444)
+    url = f"{AIRLABS_BASE}/flight"
+    params = {"flight_icao": callsign, "api_key": AIRLABS_API_KEY}
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code != 200:
+            return {}
+        data = r.json().get("response") or {}
+        if not data:
+            return {}
+
+        return {
+            "airline_name": data.get("airline_name", ""),
+            "airline_icao": data.get("airline_icao", ""),
+            "airline_iata": data.get("airline_iata", ""),
+            "origin_iata": data.get("dep_iata", ""),
+            "origin_lat": data.get("dep_lat"),
+            "origin_lon": data.get("dep_lng"),
+            "dest_iata": data.get("arr_iata", ""),
+            "dest_lat": data.get("arr_lat"),
+            "dest_lon": data.get("arr_lng"),
+        }
+    except Exception as e:
+        print(f"AirLabs route error for {callsign}: {e}")
+        return {}
+
+
+def _airport_coords(code):
+    """Look up airport coordinates from adsb.lol by ICAO code.
+    Accepts ICAO (KJFK, EGLL) or IATA (JFK, LHR) — tries ICAO first,
+    then prepends 'K' for US 3-letter codes. Returns {lat, lon} or empty dict."""
+    candidates = [code]
+    if len(code) == 3:
+        candidates.insert(0, "K" + code)  # Try US ICAO first (KJFK)
+    for c in candidates:
+        try:
+            r = requests.get(f"{ADSB_LOL_BASE}/api/0/airport/{c}", timeout=5)
+            if r.status_code == 200:
+                d = r.json()
+                if isinstance(d, dict) and d.get("lat") and d.get("lon"):
+                    return {"lat": d["lat"], "lon": d["lon"]}
+        except Exception:
+            pass
+    return {}
+
+
+# --- FlightAware AeroAPI route fallback ---
+
+_fa_cache = {}  # {callsign: {"data": dict, "ts": float}}
+FA_CACHE_TTL = 3600  # 1 hour
+
+
+def _fa_load_usage():
+    """Load FlightAware usage tracking. Resets monthly."""
+    from datetime import datetime
+    try:
+        with open(FA_USAGE_FILE, "r", encoding="utf-8") as f:
+            usage = json.load(f)
+        # Reset if month changed
+        if usage.get("month") != datetime.now().strftime("%Y-%m"):
+            return {"month": datetime.now().strftime("%Y-%m"), "calls": 0, "cost": 0.0}
+        return usage
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"month": datetime.now().strftime("%Y-%m"), "calls": 0, "cost": 0.0}
+
+
+def _fa_save_usage(usage):
+    try:
+        safe_write_json(FA_USAGE_FILE, usage)
+    except Exception as e:
+        print(f"Failed to save FA usage: {e}")
+
+
+def _flightaware_route(callsign):
+    """Fetch route from FlightAware AeroAPI (last resort fallback).
+    Works for GA, charter, ferry flights, and non-standard callsigns.
+    Returns dict in same format as _adsbdb_route, or empty dict.
+    Respects monthly budget limit and 1-hour cache."""
+    if not FLIGHTAWARE_API_KEY:
+        return {}
+
+    # Check cache (1 hour TTL)
+    now = time()
+    cached = _fa_cache.get(callsign)
+    if cached and (now - cached["ts"]) < FA_CACHE_TTL:
+        return cached["data"]
+
+    # Check budget
+    usage = _fa_load_usage()
+    if usage["cost"] >= FLIGHTAWARE_MONTHLY_LIMIT:
+        return {}
+
+    try:
+        r = requests.get(
+            f"{FLIGHTAWARE_BASE}/flights/{callsign}",
+            headers={"x-apikey": FLIGHTAWARE_API_KEY},
+            params={"max_pages": 1},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return {}
+
+        flights = r.json().get("flights", [])
+
+        # Track the API call cost
+        usage["calls"] += 1
+        usage["cost"] += FLIGHTAWARE_COST_PER_CALL
+        _fa_save_usage(usage)
+
+        if not flights:
+            _fa_cache[callsign] = {"data": {}, "ts": now}
+            return {}
+
+        # Prefer an en route flight with both origin and destination
+        f = next(
+            (fl for fl in flights
+             if fl.get("status") == "En Route"
+             and fl.get("origin") and fl.get("destination")),
+            # Fall back to any flight with both endpoints
+            next(
+                (fl for fl in flights
+                 if fl.get("origin") and fl.get("destination")),
+                flights[0]
+            )
+        )
+        origin = f.get("origin") or {}
+        dest = f.get("destination") or {}
+
+        origin_lat = origin.get("latitude")
+        origin_lon = origin.get("longitude")
+        dest_lat = dest.get("latitude")
+        dest_lon = dest.get("longitude")
+
+        # FA sometimes returns airport codes without coordinates —
+        # look them up from adsb.lol if missing
+        if origin.get("code_icao") and not origin_lat:
+            coords = _airport_coords(origin["code_icao"])
+            origin_lat = coords.get("lat")
+            origin_lon = coords.get("lon")
+        if dest.get("code_icao") and not dest_lat:
+            coords = _airport_coords(dest["code_icao"])
+            dest_lat = coords.get("lat")
+            dest_lon = coords.get("lon")
+
+        result = {
+            "airline_name": f.get("operator", ""),
+            "airline_icao": f.get("operator_icao", ""),
+            "airline_iata": f.get("operator_iata", ""),
+            "origin_iata": origin.get("code_iata", ""),
+            "origin_lat": origin_lat,
+            "origin_lon": origin_lon,
+            "dest_iata": dest.get("code_iata", ""),
+            "dest_lat": dest_lat,
+            "dest_lon": dest_lon,
+        }
+
+        _fa_cache[callsign] = {"data": result, "ts": now}
+        return result
+
+    except Exception as e:
+        print(f"FlightAware error for {callsign}: {e}")
+        return {}
 
 
 # Logging Closest Flights
@@ -281,28 +562,21 @@ def log_farthest_flight(entry: dict):
 
 class Overhead:
     def __init__(self):
-        self._api = FlightRadar24API()
         self._lock = Lock()
         self._data = []           # overhead flights
         self._tracked_data = None # tracked flight or None
         self._new_data = False
         self._processing = False
-        self._tracked_was_live = False       # was the flight live last poll?
-        self._tracked_miss_count = 0         # consecutive polls with no result
-        self._TRACKED_MISS_THRESHOLD = 3     # fallback miss threshold (no ETA)
-        self._tracked_last_callsign = ""     # last callsign we polled for
-        self._tracked_last_eta = None        # last known estimated arrival (unix ts)
-        self._tracked_last_data = None       # last known good tracked data
+        self._tracked_was_live = False
+        self._tracked_miss_count = 0
+        self._TRACKED_MISS_THRESHOLD = 3
+        self._tracked_last_callsign = ""
+        self._tracked_last_eta = None
+        self._tracked_last_data = None
+        self._search_radius = _compute_search_radius()
 
     def grab_data(self):
         Thread(target=self._grab, daemon=True).start()
-
-    def safe_get(self, d, *keys, default=None):
-        for key in keys:
-            if not d or not isinstance(d, dict):
-                return default
-            d = d.get(key)
-        return d if d is not None else default
 
     def _grab(self):
         with self._lock:
@@ -313,92 +587,150 @@ class Overhead:
         tracked_data = None
 
         try:
-            # --- STEP 1: Check zone for overhead flights ---
-            bounds = self._api.get_bounds(ZONE_DEFAULT)
-            flights = self._api.get_flights(bounds=bounds)
-            flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
-            flights.sort(key=lambda f: distance_from_flight_to_home(f))
-            flights = flights[:MAX_FLIGHT_LOOKUP]
+            # --- STEP 1: Check zone for overhead flights via adsb.lol ---
+            home_lat, home_lon = LOCATION_DEFAULT
+            aircraft = _adsb_lol_nearby(home_lat, home_lon, self._search_radius)
 
-            for f in flights:
-                retries = RETRIES
-                while retries:
-                    sleep(RATE_LIMIT_DELAY)
-                    try:
-                        d = self._api.get_flight_details(f)
+            # Filter by altitude (adsb.lol returns alt_baro in feet)
+            aircraft = [
+                ac for ac in aircraft
+                if isinstance(ac.get("alt_baro"), (int, float))
+                and MIN_ALTITUDE < ac["alt_baro"] < MAX_ALTITUDE
+            ]
 
-                        plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.airline_icao or ""
-                        airline = self.safe_get(d, "airline", "name", default="")
+            # Sort by distance from home and take closest N
+            for ac in aircraft:
+                ac["_dist"] = haversine(
+                    ac.get("lat", 0), ac.get("lon", 0),
+                    home_lat, home_lon,
+                )
+            aircraft.sort(key=lambda ac: ac["_dist"])
+            aircraft = aircraft[:MAX_FLIGHT_LOOKUP]
 
-                        origin = f.origin_airport_iata or ""
-                        destination = f.destination_airport_iata or ""
-                        callsign = f.callsign or ""
+            # Enrich each with route data from adsbdb
+            for ac in aircraft:
+                callsign = (ac.get("flight") or "").strip()
+                if not callsign:
+                    continue
 
-                        t = self.safe_get(d, "time", default={})
-                        time_sched_dep = self.safe_get(t, "scheduled", "departure")
-                        time_sched_arr = self.safe_get(t, "scheduled", "arrival")
-                        time_real_dep = self.safe_get(t, "real", "departure")
-                        time_est_arr = self.safe_get(t, "estimated", "arrival")
+                sleep(RATE_LIMIT_DELAY)
 
-                        o = self.safe_get(d, "airport", "origin")
-                        origin_lat = self.safe_get(o, "position", "latitude")
-                        origin_lon = self.safe_get(o, "position", "longitude")
+                try:
+                    plane_lat = ac.get("lat", 0)
+                    plane_lon = ac.get("lon", 0)
+                    registration = ac.get("r", "")
 
-                        dest = self.safe_get(d, "airport", "destination")
-                        dest_lat = self.safe_get(dest, "position", "latitude")
-                        dest_lon = self.safe_get(dest, "position", "longitude")
+                    # Step 1: Try adsbdb for route (free, unlimited)
+                    route = _adsbdb_route(callsign)
 
-                        dist_o = distance_to_point(f, origin_lat, origin_lon) if origin_lat else 0
-                        dist_d = distance_to_point(f, dest_lat, dest_lon) if dest_lat else 0
+                    origin_lat = route.get("origin_lat")
+                    origin_lon = route.get("origin_lon")
+                    dest_lat = route.get("dest_lat")
+                    dest_lon = route.get("dest_lon")
 
-                        # Extract airborne trail points only (alt > 0)
-                        raw_trail = self.safe_get(d, "trail", default=[]) or []
-                        trail = [
-                            [pt["lat"], pt["lng"]]
-                            for pt in raw_trail
-                            if isinstance(pt, dict) and pt.get("alt", 0) > 0
-                        ]
+                    need_fallback = False
+                    if not route:
+                        need_fallback = True
+                    elif not _route_makes_sense(
+                        plane_lat, plane_lon,
+                        origin_lat, origin_lon, dest_lat, dest_lon
+                    ):
+                        print(f"  Route {route.get('origin_iata','?')}->{route.get('dest_iata','?')} "
+                              f"implausible for {callsign}")
+                        need_fallback = True
 
-                        entry = {
-                            "airline": airline,
-                            "plane": plane,
-                            "origin": origin,
-                            "origin_latitude": origin_lat,
-                            "origin_longitude": origin_lon,
-                            "destination": destination,
-                            "destination_latitude": dest_lat,
-                            "destination_longitude": dest_lon,
-                            "plane_latitude": f.latitude,
-                            "plane_longitude": f.longitude,
-                            "owner_iata": f.airline_iata or "N/A",
-                            "owner_icao": self.safe_get(d, "owner", "code", "icao", default="") or f.airline_icao or "",
-                            "time_scheduled_departure": time_sched_dep,
-                            "time_scheduled_arrival": time_sched_arr,
-                            "time_real_departure": time_real_dep,
-                            "time_estimated_arrival": time_est_arr,
-                            "vertical_speed": f.vertical_speed,
-                            "callsign": callsign,
-                            "distance_origin": dist_o,
-                            "distance_destination": dist_d,
-                            "distance": distance_from_flight_to_home(f),
-                            "direction": degrees_to_cardinal(plane_bearing(f)),
-                            "trail": trail,
-                        }
+                    # Step 2: Fallback chain — AirLabs (free) then FlightAware (paid)
+                    if need_fallback:
+                        fallback = _airlabs_route(callsign)
+                        if fallback:
+                        else:
+                            fallback = _flightaware_route(callsign)
+                            if fallback:
+                        if fallback:
+                            route = fallback
+                            origin_lat = route.get("origin_lat")
+                            origin_lon = route.get("origin_lon")
+                            dest_lat = route.get("dest_lat")
+                            dest_lon = route.get("dest_lon")
+                        else:
+                            route = {}
+                            origin_lat = origin_lon = dest_lat = dest_lon = None
 
-                        overhead_data.append(entry)
-                        log_flight_data(entry)
-                        log_farthest_flight(entry)
-                        break
+                    airline = route.get("airline_name", "")
+                    origin = route.get("origin_iata", "")
+                    destination = route.get("dest_iata", "")
 
-                    except Exception as e:
-                        retries -= 1
+                    # Step 3: If we have airport codes but missing coordinates, look them up
+                    if origin and not (origin_lat and origin_lon):
+                        coords = _airport_coords(origin)
+                        origin_lat = coords.get("lat")
+                        origin_lon = coords.get("lon")
+                    if destination and not (dest_lat and dest_lon):
+                        coords = _airport_coords(destination)
+                        dest_lat = coords.get("lat")
+                        dest_lon = coords.get("lon")
+
+                    # Step 4: If no airline name, look up aircraft owner by registration
+                    if not airline and registration:
+                        ac_info = _adsbdb_aircraft(registration)
+                        if ac_info.get("owner"):
+                            airline = ac_info["owner"]
+
+                    # Audit log
+
+                    dist_o = haversine(plane_lat, plane_lon, origin_lat, origin_lon) if (origin_lat and origin_lon) else 0
+                    dist_d = haversine(plane_lat, plane_lon, dest_lat, dest_lon) if (dest_lat and dest_lon) else 0
+
+                    # Aircraft type from adsb.lol 't' field
+                    plane_type = ac.get("t", "")
+
+                    # ICAO airline code: from adsbdb or derive from callsign prefix
+                    owner_icao = route.get("airline_icao", "")
+                    if not owner_icao and len(callsign) >= 3 and callsign[:3].isalpha():
+                        owner_icao = callsign[:3]
+
+                    owner_iata = route.get("airline_iata", "") or "N/A"
+
+                    entry = {
+                        "airline": airline,
+                        "plane": plane_type,
+                        "origin": origin,
+                        "origin_latitude": origin_lat,
+                        "origin_longitude": origin_lon,
+                        "destination": destination,
+                        "destination_latitude": dest_lat,
+                        "destination_longitude": dest_lon,
+                        "plane_latitude": plane_lat,
+                        "plane_longitude": plane_lon,
+                        "owner_iata": owner_iata,
+                        "owner_icao": owner_icao,
+                        "time_scheduled_departure": None,
+                        "time_scheduled_arrival": None,
+                        "time_real_departure": None,
+                        "time_estimated_arrival": None,
+                        "vertical_speed": ac.get("baro_rate", 0) or 0,
+                        "callsign": callsign,
+                        "distance_origin": dist_o,
+                        "distance_destination": dist_d,
+                        "distance": ac["_dist"],
+                        "direction": degrees_to_cardinal(
+                            bearing_from_home(plane_lat, plane_lon)
+                        ),
+                        "trail": [],
+                    }
+
+                    overhead_data.append(entry)
+                    log_flight_data(entry)
+                    log_farthest_flight(entry)
+
+                except Exception as e:
+                    print(f"Error enriching flight {callsign}: {e}")
 
             # --- STEP 2: Only look for tracked flight if sky is clear ---
             if not overhead_data:
                 tracked_callsign = load_tracked_callsign()
                 if tracked_callsign:
 
-                    # If callsign changed, reset all state — new flight being tracked
                     if tracked_callsign != self._tracked_last_callsign:
                         self._tracked_last_callsign = tracked_callsign
                         self._tracked_was_live = False
@@ -409,40 +741,33 @@ class Overhead:
                     tracked_data = self._grab_tracked(tracked_callsign)
 
                     if tracked_data:
-                        # Flight found — reset miss counter, store latest ETA and data
                         self._tracked_was_live = True
                         self._tracked_miss_count = 0
                         self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
                         self._tracked_last_data = tracked_data
                     else:
                         if self._tracked_was_live:
-                            # Was live before, now missing
                             now_ts = time()
                             eta    = self._tracked_last_eta
 
                             if eta is not None:
                                 mins_since_eta = (now_ts - eta) / 60
                                 if mins_since_eta > 0:
-                                    # ETA has passed — use miss counter to confirm
-                                    # before wiping (avoids false wipe on brief API hiccup)
                                     self._tracked_miss_count += 1
                                     if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
                                         self._do_auto_wipe()
                                     elif self._tracked_last_data:
                                         tracked_data = estimate_stale_data(self._tracked_last_data)
                                 else:
-                                    # ETA still in future — oceanic gap, serve estimated data
                                     self._tracked_miss_count = 0
                                     if self._tracked_last_data:
                                         tracked_data = estimate_stale_data(self._tracked_last_data)
                             else:
-                                # No ETA data — fall back to miss counter
                                 self._tracked_miss_count += 1
                                 if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
                                     self._do_auto_wipe()
                                 elif self._tracked_last_data:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
-                        # If never live, don't increment — pre-flight waiting
 
             with self._lock:
                 self._data = overhead_data
@@ -450,7 +775,8 @@ class Overhead:
                 self._new_data = True
                 self._processing = False
 
-        except (ConnectionError, NewConnectionError, MaxRetryError):
+        except Exception as e:
+            print(f"Error in _grab: {e}")
             with self._lock:
                 self._new_data = False
                 self._processing = False
@@ -459,8 +785,7 @@ class Overhead:
         """Wipe tracked_flight.json and reset all tracking state."""
         try:
             with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-                import json as _json
-                _json.dump({"callsign": ""}, f)
+                json.dump({"callsign": ""}, f)
             print("Tracked flight ended — auto-cleared.")
         except Exception as e:
             print(f"Failed to auto-clear tracked flight: {e}")
@@ -471,115 +796,93 @@ class Overhead:
         self._tracked_last_callsign = ""
 
     def _grab_tracked(self, flight_input):
+        """Look up a specific tracked flight by callsign using adsb.lol + adsbdb."""
         flight_input = flight_input.strip().upper()
-        airline_icao = flight_input[:3] if len(flight_input) >= 3 and flight_input[:3].isalpha() else None
-        match = None
 
         try:
-            # Strategy 1: airline-filtered search by callsign (fast, works for mainline)
-            if airline_icao:
-                flights = self._api.get_flights(airline=airline_icao)
-                match = next(
-                    (f for f in flights if (f.callsign or "").upper() == flight_input),
-                    None,
-                )
+            # Search adsb.lol by callsign
+            results = _adsb_lol_callsign(flight_input)
 
-            # Strategy 2: high-limit global search matching on flight NUMBER
-            # This catches regionals where callsign differs from flight number
-            # e.g. user enters AA5056, actual callsign is JIA5056
-            # but f.number == "AA5056" on both
-            if not match:
-                config = self._api.get_flight_tracker_config()
-                config.limit = 10000
-                self._api.set_flight_tracker_config(config)
-                flights = self._api.get_flights()
-                # Reset limit back to default
-                config.limit = 1500
-                self._api.set_flight_tracker_config(config)
-                match = next(
-                    (f for f in flights if
-                     (f.number or "").upper() == flight_input or
-                     (f.callsign or "").upper() == flight_input),
-                    None,
-                )
-
-            if not match:
+            # If not found by exact callsign, the flight may not be airborne yet
+            if not results:
                 return None
 
+            ac = results[0]
+            plane_lat = ac.get("lat")
+            plane_lon = ac.get("lon")
+
+            # Fall back to lastPosition if current position unavailable
+            # (common over oceans or when ADS-B signal is intermittent)
+            if plane_lat is None or plane_lon is None:
+                last_pos = ac.get("lastPosition") or {}
+                plane_lat = last_pos.get("lat")
+                plane_lon = last_pos.get("lon")
+
+            has_position = plane_lat is not None and plane_lon is not None
+
+            # Get route info from adsbdb
             sleep(RATE_LIMIT_DELAY)
-            flight_details = self._api.get_flight_details(match)
-            match.set_flight_details(flight_details)
+            route = _adsbdb_route(flight_input)
 
-            origin_lat = match.origin_airport_latitude
-            origin_lon = match.origin_airport_longitude
-            dest_lat = match.destination_airport_latitude
-            dest_lon = match.destination_airport_longitude
+            origin = route.get("origin_iata", "")
+            destination = route.get("dest_iata", "")
+            dest_lat = route.get("dest_lat")
+            dest_lon = route.get("dest_lon")
+            origin_lat = route.get("origin_lat")
+            origin_lon = route.get("origin_lon")
 
-            # dist_remaining in display units (miles or km) for the stats line
-            dist_remaining = (
-                haversine(match.latitude, match.longitude, dest_lat, dest_lon)
-                if dest_lat else None
-            )
+            # Distance remaining to destination
+            dist_remaining = None
+            if has_position and dest_lat and dest_lon:
+                dist_remaining = haversine(plane_lat, plane_lon, dest_lat, dest_lon)
 
-            # Calculate time remaining from estimated arrival (most accurate when live)
+            # Time remaining estimate from distance and ground speed
             time_remaining = None
-            est_arr = self.safe_get(flight_details, "time", "estimated", "arrival")
-            if est_arr:
-                mins_left = int((est_arr - time()) / 60)
-                if mins_left > 0:
-                    h = mins_left // 60
-                    m = mins_left % 60
-                    time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
-            # Fallback: calculate from distance/speed if no ETA available
-            if not time_remaining and dist_remaining and match.ground_speed:
+            ground_speed_kts = ac.get("gs", 0) or 0
+            if dist_remaining and ground_speed_kts > 0:
                 if DISTANCE_UNITS == "metric":
                     dist_nm = dist_remaining * 0.539957
                 else:
                     dist_nm = dist_remaining * 0.868976
-                hrs_left = dist_nm / match.ground_speed
+                hrs_left = dist_nm / ground_speed_kts
                 mins_left = int(hrs_left * 60)
                 if mins_left > 0:
                     h = mins_left // 60
                     m = mins_left % 60
                     time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
 
-            # Total route distance in same display units for progress bar
+            # Total route distance for progress bar
             total_distance = (
                 haversine(origin_lat, origin_lon, dest_lat, dest_lon)
-                if origin_lat and dest_lat else None
+                if (origin_lat and origin_lon and dest_lat and dest_lon) else None
             )
 
-            # Time fields for delay colour coding (same as JourneyScene)
-            time_details = self.safe_get(flight_details, "time") or {}
-            time_sched_dep = self.safe_get(time_details, "scheduled", "departure")
-            time_sched_arr = self.safe_get(time_details, "scheduled", "arrival")
-            time_real_dep  = self.safe_get(time_details, "real", "departure")
-            time_est_arr   = self.safe_get(time_details, "estimated", "arrival")
+            airline_name = route.get("airline_name", "")
 
             return {
                 "callsign": flight_input,
-                "number": match.number or flight_input,
-                "airline_name": match.airline_name or "",
-                "is_live": True,
-                "origin": match.origin_airport_iata or "",
-                "destination": match.destination_airport_iata or "",
+                "number": flight_input,
+                "airline_name": airline_name,
+                "is_live": has_position,
+                "origin": origin,
+                "destination": destination,
                 "dest_lat": dest_lat,
                 "dest_lon": dest_lon,
-                "aircraft_type": match.aircraft_code or "",
-                "altitude": match.altitude,
-                "ground_speed": match.ground_speed or 0,
-                "heading": match.heading or 0,
+                "aircraft_type": ac.get("t", ""),
+                "altitude": ac.get("alt_baro", 0) or 0,
+                "ground_speed": ground_speed_kts,
+                "heading": ac.get("track", 0) or 0,
                 "dist_remaining": dist_remaining,
                 "total_distance": total_distance,
                 "time_remaining": time_remaining,
-                "latitude": match.latitude,
-                "longitude": match.longitude,
+                "latitude": plane_lat,
+                "longitude": plane_lon,
                 "last_seen_ts": time(),
-                "vertical_speed": match.vertical_speed or 0,
-                "time_scheduled_departure": time_sched_dep,
-                "time_scheduled_arrival": time_sched_arr,
-                "time_real_departure": time_real_dep,
-                "time_estimated_arrival": time_est_arr,
+                "vertical_speed": ac.get("baro_rate", 0) or 0,
+                "time_scheduled_departure": None,
+                "time_scheduled_arrival": None,
+                "time_real_departure": None,
+                "time_estimated_arrival": None,
             }
 
         except Exception as e:
@@ -611,7 +914,8 @@ class Overhead:
 
     @property
     def data_is_empty(self):
-        return len(self._data) == 0
+        with self._lock:
+            return len(self._data) == 0
 
 
 if __name__ == "__main__":
