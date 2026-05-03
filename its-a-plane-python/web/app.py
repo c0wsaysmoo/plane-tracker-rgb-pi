@@ -20,10 +20,12 @@ app = Flask(
     static_folder=os.path.join(WEB_DIR, "static")
 )
 
-# JSON flight logs (stored outside /web)
-CLOSEST_FILE  = os.path.join(BASE_DIR, "close.txt")
-FARTHEST_FILE = os.path.join(BASE_DIR, "farthest.txt")
-TRACKED_FILE  = os.path.join(BASE_DIR, "tracked_flight.json")
+# Writable data directory (same as overhead.py uses)
+DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", "/var/lib/plane-tracker")
+CLOSEST_FILE  = os.path.join(DATA_DIR, "close.txt")
+FARTHEST_FILE = os.path.join(DATA_DIR, "farthest.txt")
+TRACKED_FILE  = os.path.join(DATA_DIR, "tracked_flight.json")
+MAPS_DIR      = os.path.join(DATA_DIR, "maps")
 
 
 def load_json(path, default):
@@ -148,11 +150,10 @@ def tracked_set():
         return jsonify({"message": f"Error saving: {e}"}), 500
 
 
-# Serve PNG map snapshots from /web/static/maps/
+# Serve map files from the data directory
 @app.get("/maps/<path:filename>")
 def maps(filename):
-    maps_dir = os.path.join(WEB_DIR, "static/maps")
-    return send_from_directory(maps_dir, filename)
+    return send_from_directory(MAPS_DIR, filename)
 
 
 if __name__ == "__main__":

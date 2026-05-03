@@ -4,8 +4,9 @@ import math
 from config import LOCATION_HOME, DISTANCE_UNITS
 
 
-WEB_DIR = os.path.dirname(__file__)
-MAPS_DIR = os.path.join(WEB_DIR, "static", "maps")
+# Writable data directory (outside home dir for systemd compatibility)
+DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", "/var/lib/plane-tracker")
+MAPS_DIR = os.path.join(DATA_DIR, "maps")
 os.makedirs(MAPS_DIR, exist_ok=True)
 
 def get_unit_label():
