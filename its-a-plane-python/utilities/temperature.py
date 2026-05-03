@@ -33,19 +33,22 @@ from config import TEMPERATURE_LOCATION
 logger = logging.getLogger(__name__)
 
 # ─── Rate Limiter ────────────────────────────────────────────────────────────
-# Tomorrow.io free tier: 25 requests/hour = 1 every 144s
-# We use 180s (3 min) minimum between any API call for safety margin.
-_MIN_INTERVAL_S = 180  # seconds between API calls
+# Normal mode: no more than 1 API call per hour (3600s).
+# Backoff mode (after 429): 1 call every 10 minutes until success.
+_NORMAL_INTERVAL_S = 3600   # 1 hour between calls
+_BACKOFF_INTERVAL_S = 600   # 10 minutes when rate-limited
 _last_call_ts = 0.0
+_in_backoff = False
 _rate_lock = threading.Lock()
 
 
 def _rate_limited() -> bool:
     """Return True if we should skip this API call due to rate limiting."""
-    global _last_call_ts
+    global _last_call_ts, _in_backoff
     with _rate_lock:
         elapsed = time.time() - _last_call_ts
-        if elapsed < _MIN_INTERVAL_S:
+        interval = _BACKOFF_INTERVAL_S if _in_backoff else _NORMAL_INTERVAL_S
+        if elapsed < interval:
             return True
         return False
 
@@ -55,6 +58,23 @@ def _record_call():
     global _last_call_ts
     with _rate_lock:
         _last_call_ts = time.time()
+
+
+def _enter_backoff():
+    """Enter backoff mode after receiving 429."""
+    global _in_backoff
+    with _rate_lock:
+        _in_backoff = True
+    logger.warning("Tomorrow.io: entering backoff mode (retry every 10 min)")
+
+
+def _exit_backoff():
+    """Exit backoff mode after a successful response."""
+    global _in_backoff
+    with _rate_lock:
+        if _in_backoff:
+            _in_backoff = False
+            logger.info("Tomorrow.io: backoff cleared, resuming 1hr interval")
 
 
 # ─── DNS helper ──────────────────────────────────────────────────────────────
@@ -107,7 +127,7 @@ TOMORROW_API_URL = "https://api.tomorrow.io/v4"
 # ─── Temperature & Humidity ──────────────────────────────────────────────────
 _cached_temp = None
 _cached_temp_ts = 0.0
-_TEMP_CACHE_TTL = 300  # 5 minutes
+_TEMP_CACHE_TTL = 3600  # 1 hour
 
 
 def grab_temperature_and_humidity():
@@ -144,10 +164,11 @@ def grab_temperature_and_humidity():
         )
 
         if request.status_code == 429:
-            logger.warning("Tomorrow.io rate limit hit (429) — will retry later")
+            _enter_backoff()
             return _cached_temp if _cached_temp else (None, None)
 
         request.raise_for_status()
+        _exit_backoff()
 
         data = request.json().get("data", {}).get("values", {})
         temperature = data.get("temperature")
@@ -235,10 +256,11 @@ def grab_forecast(tag="unknown"):
         )
 
         if resp.status_code == 429:
-            logger.warning(f"[Forecast:{tag}] Tomorrow.io rate limit hit (429) — will retry later")
+            _enter_backoff()
             return _cached_forecast if _cached_forecast else []
 
         resp.raise_for_status()
+        _exit_backoff()
 
         data = resp.json().get("data", {})
         timelines = data.get("timelines", [])
