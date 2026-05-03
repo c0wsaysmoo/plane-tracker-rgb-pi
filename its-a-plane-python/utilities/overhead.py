@@ -56,13 +56,33 @@ def safe_load_json(path: str):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError) as e:
+        if isinstance(e, (PermissionError, OSError)):
+            logger.warning(f"Permission denied reading {path} — attempting to fix")
+            try:
+                os.chmod(path, 0o666)
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data if isinstance(data, list) else []
+            except Exception:
+                pass
         return []
 
 
 def safe_write_json(path: str, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        # Ensure the file is readable/writable by all users
+        os.chmod(path, 0o666)
+    except PermissionError:
+        logger.warning(f"Permission denied writing {path} — attempting to fix")
+        try:
+            os.chmod(path, 0o666)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e2:
+            logger.error(f"Cannot write {path}: {e2}")
 
 
 def ordinal(n: int):
