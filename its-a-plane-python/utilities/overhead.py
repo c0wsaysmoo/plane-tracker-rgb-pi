@@ -371,10 +371,13 @@ class Overhead:
                         # Aircraft type from details, fallback to live feed
                         plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.aircraft_code or ""
 
-                        # Airline name: not available from gRPC API,
-                        # use flight number prefix as display name
+                        # Airline name from registered_owners (aircraft_info)
                         flight_number = self.safe_get(d, "schedule_info", "flight_number", default="")
-                        airline = flight_number or f.callsign or ""
+                        airline_name = self.safe_get(d, "aircraft_info", "registered_owners", default="")
+                        # Livery note: when painted_as_id differs from operated_by_id
+                        painted_as_id = self.safe_get(d, "schedule_info", "painted_as_id", default=0) or 0
+                        operated_by_id = self.safe_get(d, "schedule_info", "operated_by_id", default=0) or 0
+                        has_special_livery = (painted_as_id != 0 and operated_by_id != 0 and painted_as_id != operated_by_id)
 
                         origin = f.origin_airport_iata or ""
                         destination = f.destination_airport_iata or ""
@@ -413,8 +416,14 @@ class Overhead:
                             if isinstance(pt, dict) and pt.get("alt", 0) > 0
                         ]
 
+                        # Determine livery note text (only if special and short)
+                        livery_note = ""
+                        if has_special_livery and airline_name:
+                            # If owner differs from the ICAO-implied airline, it's a livery note
+                            livery_note = "special livery"
+
                         entry = {
-                            "airline": airline,
+                            "airline": airline_name,
                             "plane": plane,
                             "flight_number": flight_number,
                             "origin": origin,
@@ -438,6 +447,7 @@ class Overhead:
                             "distance": distance_from_flight_to_home(f),
                             "direction": degrees_to_cardinal(plane_bearing(f)),
                             "trail": trail,
+                            "livery_note": livery_note,
                         }
 
                         overhead_data.append(entry)

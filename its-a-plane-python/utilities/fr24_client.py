@@ -109,9 +109,9 @@ class LiveFlight:
         flight_info = details.get("flight_info", {})
 
         self.number = schedule.get("flight_number", "") or self.callsign
-        # Airline name is not available from the gRPC FlightDetails endpoint
-        # We leave it as derived from callsign prefix or empty
-        self.airline_name = ""
+        # Airline name from aircraft_info.registered_owners
+        aircraft = details.get("aircraft_info", {})
+        self.airline_name = aircraft.get("registered_owners", "") or ""
 
         # Update position from flight_info if available (more current)
         if flight_info:
@@ -272,10 +272,12 @@ class FR24Client:
         flight_plan = proto.flight_plan
         flight_info = proto.flight_info
 
-        # Derive airline name from flight number (e.g. "BA123" → "British Airways")
-        # The gRPC API doesn't return airline name, only numeric IDs
+        # Extract airline name from aircraft_info.registered_owners
         flight_number = schedule_info.flight_number or ""
-        airline_name = ""  # Not available from gRPC FlightDetails
+        airline_name = aircraft_info.registered_owners or ""
+        # painted_as_id indicates livery (e.g. special livery when != operated_by_id)
+        painted_as_id = schedule_info.painted_as_id or 0
+        operated_by_id = schedule_info.operated_by_id or 0
 
         # flight_plan.departure/destination are ICAO strings (e.g. "EGLL"), not objects
         fp_departure = flight_plan.departure or ""  # ICAO origin
@@ -325,7 +327,8 @@ class FR24Client:
             # New fields for _grab_tracked compatibility
             "schedule_info": {
                 "flight_number": flight_number,
-                "operated_by_id": schedule_info.operated_by_id or 0,
+                "operated_by_id": operated_by_id,
+                "painted_as_id": painted_as_id,
                 "origin_id": schedule_info.origin_id or 0,
                 "destination_id": schedule_info.destination_id or 0,
                 "scheduled_departure": schedule_info.scheduled_departure or None,
@@ -337,6 +340,7 @@ class FR24Client:
                 "icao_address": aircraft_info.icao_address or "",
                 "reg": aircraft_info.reg or "",
                 "typecode": aircraft_info.type or "",
+                "registered_owners": airline_name,
             },
             "flight_progress": {
                 "traversed_distance": flight_progress.traversed_distance or 0,
