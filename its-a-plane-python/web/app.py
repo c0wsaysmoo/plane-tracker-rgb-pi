@@ -2,8 +2,10 @@
 from flask import Flask, render_template, jsonify, send_from_directory, request
 import json
 import os
+import requests as http_requests
 
-from FlightRadar24.api import FlightRadar24API
+ADSB_LOL_BASE = "https://api.adsb.lol"
+ADSBDB_BASE = "https://api.adsbdb.com"
 
 # /web is the folder that this file lives in
 WEB_DIR = os.path.dirname(__file__)
@@ -32,57 +34,46 @@ def load_json(path, default):
 
 def lookup_flight(callsign):
     """
-    Try to find a live flight by callsign or flight number.
+    Try to find a live flight by callsign using adsb.lol + adsbdb.
     Returns a dict with found=True/False and flight info if found.
     """
     callsign = callsign.strip().upper()
-    airline_icao = callsign[:3] if len(callsign) >= 3 and callsign[:3].isalpha() else None
 
     try:
-        api = FlightRadar24API()
-        match = None
+        # Check if flight is currently airborne via adsb.lol
+        r = http_requests.get(
+            f"{ADSB_LOL_BASE}/v2/callsign/{callsign}", timeout=10
+        )
+        r.raise_for_status()
+        ac_list = r.json().get("ac", [])
+        is_airborne = len(ac_list) > 0
 
-        # Strategy 1: airline filter (fast, works for mainline)
-        if airline_icao:
-            try:
-                flights = api.get_flights(airline=airline_icao)
-                match = next(
-                    (f for f in flights if (f.callsign or "").upper() == callsign),
-                    None,
-                )
-            except Exception:
-                pass
+        # Get route info from adsbdb (works even if not airborne)
+        r2 = http_requests.get(
+            f"{ADSBDB_BASE}/v0/callsign/{callsign}", timeout=10
+        )
+        route = {}
+        if r2.status_code == 200:
+            fr = r2.json().get("response", {}).get("flightroute")
+            if fr:
+                route = fr
 
-        # Strategy 2: global search matching on number or callsign
-        if not match:
-            flights = api.get_flights()
-            match = next(
-                (f for f in flights if
-                 (f.number or "").upper() == callsign or
-                 (f.callsign or "").upper() == callsign),
-                None,
-            )
+        airline = route.get("airline", {}).get("name", "")
+        origin = route.get("origin", {}).get("iata_code", "???")
+        destination = route.get("destination", {}).get("iata_code", "???")
 
-        if not match:
+        if not is_airborne and not route:
             return {"found": False}
-
-        # Get full details for airline name and route
-        details = api.get_flight_details(match)
-        match.set_flight_details(details)
-
-        airline = match.airline_name or ""
-        origin = match.origin_airport_iata or "???"
-        destination = match.destination_airport_iata or "???"
-        number = match.number or callsign
 
         return {
             "found": True,
-            "callsign": match.callsign,
-            "number": number,
+            "callsign": callsign,
+            "number": callsign,
             "airline": airline,
             "origin": origin,
             "destination": destination,
-            "summary": f"{airline} {number} {origin}→{destination}",
+            "airborne": is_airborne,
+            "summary": f"{airline} {callsign} {origin}\u2192{destination}",
         }
 
     except Exception as e:
@@ -122,7 +113,7 @@ def tracked_json():
 
 @app.post("/tracked/lookup")
 def tracked_lookup():
-    """Live lookup — check if a flight is currently findable before saving."""
+    """Live lookup - check if a flight is currently findable before saving."""
     data = request.get_json(force=True)
     callsign = data.get("callsign", "").strip().upper()
     if not callsign:

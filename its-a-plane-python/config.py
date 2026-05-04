@@ -28,3 +28,7 @@ FORECAST_DAYS = 3 #today plus the next two days
 EMAIL = "" #insert your email address between the " ie "example@example.com" to recieve emails when there is a new top 3 flight. Leave "" to recieve no emails. It will log/local webpage regardless
 MAX_FARTHEST = 3 #the amount of furthest flights you want in your log
 MAX_CLOSEST = 3 #the amount of closest flights to your house you want in your log
+SEARCH_RADIUS_NM = 10 #nautical miles from LOCATION_HOME to search for aircraft. If not set, computed from ZONE_HOME bounding box (minimum 10nm)
+#AIRLABS_API_KEY = "" #optional: free API key from https://airlabs.co/ for route fallback when adsbdb returns stale data (1000 calls/month)
+#FLIGHTAWARE_API_KEY = "" #optional: API key from https://www.flightaware.com/aeroapi/portal/ for route fallback - GA, charter, non-standard callsigns ($5/month free credit)
+#FLIGHTAWARE_MONTHLY_LIMIT = 4.50 #optional: stop calling FlightAware after this many dollars spent
