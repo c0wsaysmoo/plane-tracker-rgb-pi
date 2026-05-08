@@ -167,9 +167,14 @@ class FR24Client:
 
     async def _ensure_client(self) -> FR24:
         if self._fr24 is None:
+            logger.info("FR24: Initializing client and logging in...")
             self._fr24 = FR24()
             await self._fr24.__aenter__()
-            await self._fr24.login("from_env")
+            try:
+                await self._fr24.login("from_env")
+                logger.info("FR24: Login successful")
+            except Exception as e:
+                logger.warning(f"FR24: Login failed ({type(e).__name__}: {e}) — continuing with anonymous access")
         return self._fr24
 
     @property
@@ -198,16 +203,17 @@ class FR24Client:
         # Check cache first
         cached = self._cache.get_cached_flights(cache_key)
         if cached is not None:
-            logger.debug(f"FR24 feed cache hit for key: {cache_key}")
+            logger.info(f"FR24: Cache hit ({len(cached)} flights) for key: {cache_key}")
             return cached
 
         # Check rate limiter (90s polling interval)
         if not self._cache.should_poll_feed():
-            logger.debug("FR24 feed rate limited — returning empty or last cached")
+            logger.info("FR24: Rate limited (90s) — returning cached or empty")
             # Try to return any cached result for this key (even if slightly different params)
             return cached if cached is not None else []
 
         # Make the actual API call
+        logger.info(f"FR24: Making live API call (key: {cache_key})")
         result = self._run(self._get_flights_async(bounds, airline))
 
         # Cache the result and record the poll
@@ -238,6 +244,7 @@ class FR24Client:
         # Max 4 fields for unauthenticated users; vspeed requires auth
         fields = {"flight", "reg", "route", "type"}
 
+        logger.info(f"FR24: Fetching live feed (bbox: S={bbox.south}, N={bbox.north}, W={bbox.west}, E={bbox.east})")
         result = await fr24.live_feed.fetch(
             bounding_box=bbox,
             limit=1500,
@@ -247,8 +254,11 @@ class FR24Client:
         try:
             proto = result.to_proto()
         except Exception as e:
-            logger.warning(f"Failed to parse live feed response: {e}")
+            logger.warning(f"FR24: Failed to parse live feed response: {e}")
             return []
+
+        flight_count = len(proto.flights_list)
+        logger.info(f"FR24: Live feed returned {flight_count} flights")
         flights = []
         for f in proto.flights_list:
             route = f.extra_info.route

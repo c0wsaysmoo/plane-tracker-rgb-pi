@@ -345,7 +345,9 @@ class Overhead:
         try:
             # --- STEP 1: Check zone for overhead flights ---
             flights = self._api.get_flights(bounds=ZONE_DEFAULT)
+            logger.info(f"Overhead: {len(flights)} flights in zone (before altitude filter)")
             flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
+            logger.info(f"Overhead: {len(flights)} flights after altitude filter ({MIN_ALTITUDE}-{MAX_ALTITUDE}ft)")
             flights.sort(key=lambda f: distance_from_flight_to_home(f))
             flights = flights[:MAX_FLIGHT_LOOKUP]
 
@@ -517,7 +519,13 @@ class Overhead:
                 self._new_data = True
                 self._processing = False
 
-        except (ConnectionError, ConnectError, TimeoutException, OSError):
+        except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
+            logger.warning(f"Overhead: Network error during _grab: {type(e).__name__}: {e}")
+            with self._lock:
+                self._new_data = False
+                self._processing = False
+        except Exception as e:
+            logger.error(f"Overhead: Unexpected error in _grab: {type(e).__name__}: {e}", exc_info=True)
             with self._lock:
                 self._new_data = False
                 self._processing = False
