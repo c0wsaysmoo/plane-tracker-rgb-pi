@@ -64,6 +64,15 @@ _ensure_env_credentials()
 
 from fr24 import FR24, BoundingBox  # noqa: E402
 
+# Force-import h2 early (before rgbmatrix drops privileges).
+# httpx lazy-imports h2 only when AsyncClient(http2=True) is constructed;
+# by that time drop_privileges may have removed read access to venv files.
+import h2  # noqa: E402, F401
+import h2.connection  # noqa: E402, F401
+import h2.config  # noqa: E402, F401
+import h2.events  # noqa: E402, F401
+import hpack  # noqa: E402, F401
+
 
 @dataclass
 class LiveFlight:
