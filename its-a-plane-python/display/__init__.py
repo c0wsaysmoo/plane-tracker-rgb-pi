@@ -100,6 +100,8 @@ class Display(
         options.show_refresh_rate = 0
         options.gpio_slowdown = GPIO_SLOWDOWN
         options.disable_hardware_pulsing = True
+        # Keep running as root — the fr24 thread needs file/network access
+        # after matrix init. On a dedicated Pi this is fine.
         options.drop_privileges = False
         options.limit_refresh_rate_hz = 120
         self.matrix = RGBMatrix(options=options)
