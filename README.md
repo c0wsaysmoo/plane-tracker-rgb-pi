@@ -1,4 +1,7 @@
-## Looks like fr24 ended their free api that the clock relies on. I think my long term solution is going to be a mixture of using opensky to find the flights overhead and then use a paid fr24 subscription (9$) a month to look up the callsign information. In the meantime I am working on a way to still use fr24 for free, but I want to wait a few days to see how things play out. I have yet to find an accurate legit free way to find airline route information nevermind the schedule. 
+## This fork works with a PAID FR24 subscription API key
+## Note this also is setup for a Adafruit TRIPLE RGB Matrix Bonnet. If using the older single model and having problems, update the display/__init__.py and change the "regular" back to the commented version
+
+# For faster setup see the script in its-a-plane-python/setup/update-rpi.sh
 
 ## Real-Time Flight Tracking Added
 
