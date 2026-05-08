@@ -68,8 +68,8 @@ if __name__ == "__main__":
     # Build path to web/app.py
     app_path = os.path.join(base_dir, "web", "app.py")
 
-    # Start Flask server in background
-    subprocess.Popen(["python3", app_path])
+    # Start Flask server in background (use same interpreter as this process)
+    subprocess.Popen([sys.executable, app_path])
 
     # Start display loop
     from display import Display
