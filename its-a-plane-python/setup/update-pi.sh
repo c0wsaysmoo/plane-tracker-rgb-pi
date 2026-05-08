@@ -44,12 +44,22 @@ fi
 
 echo ""
 
-# --- Step 2: Install Python dependencies ---
-echo "==> Installing Python dependencies..."
-pip install --break-system-packages -r requirements.txt 2>/dev/null \
-    || pip install -r requirements.txt 2>/dev/null \
-    || pip3 install --break-system-packages -r requirements.txt 2>/dev/null \
-    || pip3 install -r requirements.txt
+# --- Step 2: Install Python dependencies (using a virtual environment) ---
+echo "==> Ensuring python3-venv is available..."
+apt-get update -qq && apt-get install -y -qq python3-venv python3-dev 2>/dev/null || true
+
+VENV_DIR="$REPO_DIR/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "==> Creating virtual environment at $VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+else
+    echo "==> Virtual environment already exists at $VENV_DIR"
+fi
+
+echo "==> Installing Python dependencies into venv..."
+"$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel 2>&1 | tail -3
+"$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" 2>&1 | tail -5
+echo "   ✓ Dependencies installed"
 
 echo ""
 
@@ -76,7 +86,7 @@ echo ""
 
 # --- Step 4: Install and enable systemd service ---
 echo "==> Installing systemd service..."
-cp "$REPO_DIR/its-a-plane-python/setup/plane-tracker.service" /etc/systemd/system/
+sed "s|__REPO_DIR__|$REPO_DIR|g" "$REPO_DIR/its-a-plane-python/setup/plane-tracker.service" > /etc/systemd/system/plane-tracker.service
 chmod 0644 /etc/systemd/system/plane-tracker.service
 systemctl daemon-reload
 systemctl enable plane-tracker.service

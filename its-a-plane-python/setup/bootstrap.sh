@@ -80,10 +80,21 @@ else
 fi
 echo ""
 
-# --- Step 4: Install/upgrade Python dependencies ---
-echo "→ Installing Python dependencies..."
-pip install --break-system-packages --ignore-installed typing-extensions \
-    -r "$REPO_DIR/requirements.txt" 2>&1 | tail -5
+# --- Step 4: Install/upgrade Python dependencies (using a virtual environment) ---
+echo "→ Ensuring python3-venv is available..."
+apt-get update -qq && apt-get install -y -qq python3-venv python3-dev 2>/dev/null || true
+
+VENV_DIR="$REPO_DIR/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "   Creating virtual environment at $VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+else
+    echo "   Virtual environment already exists at $VENV_DIR"
+fi
+
+echo "→ Installing Python dependencies into venv..."
+"$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel 2>&1 | tail -3
+"$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" 2>&1 | tail -5
 echo "   ✓ Dependencies installed"
 echo ""
 

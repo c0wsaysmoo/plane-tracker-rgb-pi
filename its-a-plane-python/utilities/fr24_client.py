@@ -18,7 +18,9 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+from utilities.cache import FR24Cache
 
 logger = logging.getLogger(__name__)
 
@@ -133,11 +135,16 @@ class FR24Client:
     """
     Synchronous client wrapping the async `fr24` SDK.
     Thread-safe: each call runs its own event loop iteration.
+
+    Includes built-in caching:
+      - Live feed (get_flights): polled at most every 90 seconds.
+      - Flight details (get_flight_details): cached per flight_id for 30 minutes.
     """
 
     def __init__(self):
         self._fr24: FR24 | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._cache = FR24Cache()
 
     def _get_loop(self) -> asyncio.AbstractEventLoop:
         if self._loop is None or self._loop.is_closed():
@@ -156,6 +163,11 @@ class FR24Client:
             await self._fr24.login("from_env")
         return self._fr24
 
+    @property
+    def cache(self) -> FR24Cache:
+        """Expose the cache for external inspection/testing."""
+        return self._cache
+
     def get_flights(
         self,
         bounds: dict | None = None,
@@ -164,12 +176,36 @@ class FR24Client:
         """
         Get live flights, optionally filtered by bounding box or airline.
 
+        Results are cached for 90 seconds. If called again within the polling
+        interval, the cached result is returned without making an API call.
+
         :param bounds: Dict with keys tl_y, tl_x, br_y, br_x (old format)
                        or use default world bounds
         :param airline: ICAO airline code to filter by (post-filter)
         :returns: List of LiveFlight objects
         """
-        return self._run(self._get_flights_async(bounds, airline))
+        cache_key = self._cache.make_feed_cache_key(bounds, airline)
+
+        # Check cache first
+        cached = self._cache.get_cached_flights(cache_key)
+        if cached is not None:
+            logger.debug(f"FR24 feed cache hit for key: {cache_key}")
+            return cached
+
+        # Check rate limiter (90s polling interval)
+        if not self._cache.should_poll_feed():
+            logger.debug("FR24 feed rate limited — returning empty or last cached")
+            # Try to return any cached result for this key (even if slightly different params)
+            return cached if cached is not None else []
+
+        # Make the actual API call
+        result = self._run(self._get_flights_async(bounds, airline))
+
+        # Cache the result and record the poll
+        self._cache.set_cached_flights(cache_key, result)
+        self._cache.record_feed_poll()
+
+        return result
 
     async def _get_flights_async(
         self,
@@ -244,10 +280,29 @@ class FR24Client:
         """
         Get detailed information about a live flight.
 
+        Results are cached per flight_id for 30 minutes. If the flight details
+        are already in cache, the cached version is returned without an API call.
+
         :param flight: A LiveFlight object (must have flight_id set)
         :returns: Nested dict with flight details
         """
-        return self._run(self._get_flight_details_async(flight))
+        if not flight.flight_id:
+            return {}
+
+        # Check 30-minute cache first
+        cached = self._cache.get_cached_flight_details(flight.flight_id)
+        if cached is not None:
+            logger.debug(f"FR24 flight detail cache hit for: {flight.flight_id}")
+            return cached
+
+        # Cache miss — fetch from API
+        result = self._run(self._get_flight_details_async(flight))
+
+        # Cache the result (even empty dicts, to avoid repeated failed lookups)
+        if result:
+            self._cache.set_cached_flight_details(flight.flight_id, result)
+
+        return result
 
     async def _get_flight_details_async(self, flight: LiveFlight) -> dict:
         fr24 = await self._ensure_client()
