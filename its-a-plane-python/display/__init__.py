@@ -100,7 +100,7 @@ class Display(
         options.show_refresh_rate = 0
         options.gpio_slowdown = GPIO_SLOWDOWN
         options.disable_hardware_pulsing = True
-        options.drop_privileges = True
+        options.drop_privileges = False
         options.limit_refresh_rate_hz = 120
         self.matrix = RGBMatrix(options=options)
 
