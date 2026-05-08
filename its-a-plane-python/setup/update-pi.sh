@@ -59,6 +59,19 @@ fi
 echo "==> Installing Python dependencies into venv..."
 "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel 2>&1 | tail -3
 "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" 2>&1 | tail -5
+
+# Install rgbmatrix from source if the rpi-rgb-led-matrix repo exists
+RGB_MATRIX_DIR="$HOME/rpi-rgb-led-matrix"
+if [ -d "$RGB_MATRIX_DIR/bindings/python" ]; then
+    echo "==> Installing rgbmatrix Python bindings into venv..."
+    cd "$RGB_MATRIX_DIR/bindings/python"
+    "$VENV_DIR/bin/pip" install -e . 2>&1 | tail -3
+    cd "$REPO_DIR"
+else
+    echo "   ⚠ rgbmatrix source not found at $RGB_MATRIX_DIR"
+    echo "     Run the Adafruit RGB Matrix installer first, or:"
+    echo "     cd ~/rpi-rgb-led-matrix/bindings/python && make && $VENV_DIR/bin/pip install ."
+fi
 echo "   ✓ Dependencies installed"
 
 echo ""
