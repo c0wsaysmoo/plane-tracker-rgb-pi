@@ -84,7 +84,8 @@ class Display(
 ):
     def __init__(self):
         options = RGBMatrixOptions()
-        options.hardware_mapping = "adafruit-hat-pwm" if HAT_PWM_ENABLED else "adafruit-hat"
+        options.hardware_mapping = "regular" 
+        # CHANGE TO THIS FOR OLDER VERSION "adafruit-hat-pwm" if HAT_PWM_ENABLED else "adafruit-hat"
         options.rows = 32
         options.cols = 64
         options.chain_length = 1
@@ -98,7 +99,8 @@ class Display(
         options.pixel_mapper_config = ""
         options.show_refresh_rate = 0
         options.gpio_slowdown = GPIO_SLOWDOWN
-        options.disable_hardware_pulsing = True
+        options.disable_hardware_pulsing = False
+        # was True
         options.drop_privileges = True
         options.limit_refresh_rate_hz = 120
         self.matrix = RGBMatrix(options=options)
