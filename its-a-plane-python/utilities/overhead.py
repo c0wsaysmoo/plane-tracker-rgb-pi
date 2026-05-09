@@ -339,7 +339,11 @@ _AIRCRAFT_CACHE_TTL = 3600  # 1 hour
 def _adsbdb_aircraft(registration):
     """Fetch aircraft info by registration (N-number) from adsbdb.com (cached 1hr).
     Returns dict with owner, type, manufacturer, or empty dict."""
+    global _aircraft_cache
     now = time()
+    if len(_aircraft_cache) > 5000:
+        cutoff = now - _AIRCRAFT_CACHE_TTL * 2
+        _aircraft_cache = {k: v for k, v in _aircraft_cache.items() if v["ts"] > cutoff}
     cached = _aircraft_cache.get(registration)
     if cached and (now - cached["ts"]) < _AIRCRAFT_CACHE_TTL:
         return cached["data"]
