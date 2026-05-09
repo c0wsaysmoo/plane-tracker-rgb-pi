@@ -29,6 +29,21 @@ EMAIL = "" #insert your email address between the " ie "example@example.com" to 
 MAX_FARTHEST = 3 #the amount of furthest flights you want in your log
 MAX_CLOSEST = 3 #the amount of closest flights to your house you want in your log
 SEARCH_RADIUS_NM = 10 #nautical miles from LOCATION_HOME to search for aircraft. If not set, computed from ZONE_HOME bounding box (minimum 10nm)
-#AIRLABS_API_KEY = "" #optional: free API key from https://airlabs.co/ for route fallback when adsbdb returns stale data (1000 calls/month)
-#FLIGHTAWARE_API_KEY = "" #optional: API key from https://www.flightaware.com/aeroapi/portal/ for route fallback - GA, charter, non-standard callsigns ($5/month free credit)
+
+# --- Route Fallback Chain ---
+# Sources tried in order when adsbdb fails or returns stale data.
+# Available sources and their tradeoffs:
+#   "fr24"         — FR24 official REST API (flight-summary/light). $9/month Explorer plan (30K credits).
+#                    Best coverage. Has schedule times (delay colors). 1 credit/live flight.
+#   "airlabs"      — AirLabs /flight endpoint. Free, 1000 calls/month per key.
+#                    Good commercial coverage. No schedule times. No GA/private.
+#   "flightaware"  — FlightAware AeroAPI. $5/month free credit (~830 calls at $0.006/call).
+#                    Best GA/private coverage. Has schedule times.
+# Without any keys configured, the system works on adsb.lol + adsbdb alone (~70% route coverage).
+#ROUTE_FALLBACK_CHAIN = ["airlabs", "flightaware"]  # free tiers only (default if keys set)
+#ROUTE_FALLBACK_CHAIN = ["fr24"]  # FR24 official REST API ($9/month)
+#ROUTE_FALLBACK_CHAIN = ["fr24", "airlabs", "flightaware"]  # try everything
+#FLIGHTRADAR24_KEY = "" #optional: Bearer token from https://fr24api.flightradar24.com/ ($9/month Explorer)
+#AIRLABS_API_KEY = "" #optional: free API key from https://airlabs.co/ (1000 calls/month)
+#FLIGHTAWARE_API_KEY = "" #optional: API key from https://www.flightaware.com/aeroapi/portal/ ($5/month free credit)
 #FLIGHTAWARE_MONTHLY_LIMIT = 4.50 #optional: stop calling FlightAware after this many dollars spent

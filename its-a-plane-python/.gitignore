@@ -1,0 +1,10 @@
+airports.json
+airlines.json
+route_audit.log
+close.txt
+farthest.txt
+tracked_flight.json
+flightaware_usage.json
+flight_counter.json
+__pycache__/
+*.pyc

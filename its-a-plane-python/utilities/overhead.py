@@ -1,8 +1,10 @@
 import os
 import json
 import math
+import socket
 import requests
 from time import sleep, time
+from datetime import datetime, timezone, timedelta
 from threading import Thread, Lock
 
 from config import (
@@ -35,6 +37,12 @@ try:
     from config import SEARCH_RADIUS_NM
 except (ImportError, ModuleNotFoundError, NameError):
     SEARCH_RADIUS_NM = None
+
+# Config-driven fallback chain for route lookups
+try:
+    from config import ROUTE_FALLBACK_CHAIN
+except ImportError:
+    ROUTE_FALLBACK_CHAIN = []
 
 # Constants
 RETRIES = 3
@@ -73,6 +81,12 @@ try:
 except (ImportError, ModuleNotFoundError, NameError):
     FLIGHTAWARE_MONTHLY_LIMIT = 4.00
 
+# Optional FR24 REST API key for route fallback
+try:
+    from config import FLIGHTRADAR24_KEY
+except (ImportError, ModuleNotFoundError, NameError):
+    FLIGHTRADAR24_KEY = None
+
 FLIGHTAWARE_BASE = "https://aeroapi.flightaware.com/aeroapi"
 FLIGHTAWARE_COST_PER_CALL = 0.01  # dollars per result set (verified from billing API)
 
@@ -81,7 +95,45 @@ LOG_FILE = os.path.join(BASE_DIR, "close.txt")
 LOG_FILE_FARTHEST = os.path.join(BASE_DIR, "farthest.txt")
 TRACKED_FILE = os.path.join(BASE_DIR, "tracked_flight.json")
 FA_USAGE_FILE = os.path.join(BASE_DIR, "flightaware_usage.json")
+ROUTE_AUDIT_LOG = os.path.join(BASE_DIR, "route_audit.log")
 
+HOSTNAME = socket.gethostname()
+
+# Helicopter types — set owner_icao to "HELI" for logo display
+HELICOPTER_TYPES = {
+    "S76", "EC35", "EC55", "EC30", "A109", "A139", "A169",
+    "B06", "B407", "B429", "R44", "R66", "R22",
+    "AS50", "AS55", "AS65", "H60", "BK17", "MD52", "MD50",
+    "S92", "AW13", "AW16", "AW10", "B212", "B412",
+    "EC45", "EC75", "S61", "S70", "H500", "BALL",
+}
+
+# Common airline ICAO prefixes -> display names
+# (covers ~90% of traffic; GA/unknowns fall through to adsbdb owner lookup)
+AIRLINE_NAMES = {
+    "AAL": "American Airlines", "DAL": "Delta Air Lines", "UAL": "United Airlines",
+    "SWA": "Southwest Airlines", "JBU": "JetBlue Airways", "NKS": "Spirit Airlines",
+    "FFT": "Frontier Airlines", "ASA": "Alaska Airlines", "HAL": "Hawaiian Airlines",
+    "RPA": "United Express", "ENY": "American Eagle", "JIA": "American Eagle",
+    "SKW": "SkyWest Airlines", "EDV": "Delta Connection", "GJS": "United Express",
+    "CPZ": "United Express", "ASQ": "Delta Connection", "MXY": "Breeze Airways",
+    "BAW": "British Airways", "DLH": "Lufthansa", "AFR": "Air France",
+    "KLM": "KLM", "SWR": "Swiss", "AUA": "Austrian", "SAS": "SAS",
+    "IBE": "Iberia", "TAP": "TAP Portugal", "AZA": "ITA Airways",
+    "EIN": "Aer Lingus", "FIN": "Finnair", "LOT": "LOT Polish",
+    "UAE": "Emirates", "QTR": "Qatar Airways", "ETD": "Etihad Airways",
+    "THY": "Turkish Airlines", "ELY": "El Al", "SVA": "Saudia",
+    "ANA": "All Nippon Airways", "JAL": "Japan Airlines", "KAL": "Korean Air",
+    "CPA": "Cathay Pacific", "SIA": "Singapore Airlines", "QFA": "Qantas",
+    "AIR": "Air India", "CCA": "Air China", "CES": "China Eastern",
+    "CSN": "China Southern", "EVA": "EVA Air",
+    "ACA": "Air Canada", "WJA": "WestJet",
+    "AVA": "Avianca", "LAN": "LATAM", "CMP": "Copa Airlines",
+    "VIR": "Virgin Atlantic", "EJA": "NetJets", "LXJ": "Flexjet",
+    "XOJ": "XOJET", "VJT": "VistaJet", "TVF": "Transavia",
+    "KAP": "Cape Air", "CFG": "Condor", "EWG": "Eurowings",
+    "WUP": "Wheels Up", "FXC": "Flightcraft",
+}
 
 
 def _compute_search_radius():
@@ -199,6 +251,22 @@ def load_tracked_callsign():
             return data.get("callsign", "").strip().upper()
     except (FileNotFoundError, json.JSONDecodeError):
         return ""
+
+
+# =============================================================================
+# Audit Logging
+# =============================================================================
+
+def _log_route_audit(callsign, aircraft_type, distance, source, origin, destination):
+    """Append to route_audit.log with hostname prefix."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    route_str = f"{origin or '?'}->{destination or '?'}"
+    line = f"{ts} [{HOSTNAME}] {callsign} {aircraft_type} {distance:.1f} {source} {route_str}\n"
+    try:
+        with open(ROUTE_AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
 
 
 # --- API helpers ---
@@ -327,11 +395,18 @@ AIRLABS_CACHE_TTL = 3600  # 1 hour
 def _airlabs_route(callsign):
     """Fetch route info from AirLabs as fallback. Requires AIRLABS_API_KEY.
     Returns dict in same format as _adsbdb_route, or empty dict."""
+    global _airlabs_cache
+
     if not AIRLABS_API_KEY:
         return {}
 
-    # Check cache
+    # Cache eviction guard — prevent unbounded growth
     now = time()
+    if len(_airlabs_cache) > 5000:
+        cutoff = now - AIRLABS_CACHE_TTL * 2
+        _airlabs_cache = {k: v for k, v in _airlabs_cache.items() if v["ts"] > cutoff}
+
+    # Check cache
     cached = _airlabs_cache.get(callsign)
     if cached and (now - cached["ts"]) < AIRLABS_CACHE_TTL:
         return cached["data"]
@@ -369,12 +444,19 @@ def _airlabs_route(callsign):
 
 
 def _airport_coords(code):
-    """Look up airport coordinates from adsb.lol by ICAO code.
-    Accepts ICAO (KJFK, EGLL) or IATA (JFK, LHR) — tries ICAO first,
-    then prepends 'K' for US 3-letter codes. Returns {lat, lon} or empty dict."""
+    """Look up airport coordinates from local database (no API calls).
+    Accepts IATA (JFK, LHR) or ICAO (KJFK, EGLL). Returns {lat, lon} or empty dict."""
+    if not code:
+        return {}
+    try:
+        from utilities.airports import get_airport_coords
+        return get_airport_coords(code)
+    except ImportError:
+        pass
+    # Fallback to adsb.lol if local database not available
     candidates = [code]
     if len(code) == 3:
-        candidates.insert(0, "K" + code)  # Try US ICAO first (KJFK)
+        candidates.insert(0, "K" + code)
     for c in candidates:
         try:
             r = requests.get(f"{ADSB_LOL_BASE}/api/0/airport/{c}", timeout=5)
@@ -395,7 +477,6 @@ FA_CACHE_TTL = 3600  # 1 hour
 
 def _fa_load_usage():
     """Load FlightAware usage tracking. Resets monthly."""
-    from datetime import datetime
     try:
         with open(FA_USAGE_FILE, "r", encoding="utf-8") as f:
             usage = json.load(f)
@@ -419,11 +500,18 @@ def _flightaware_route(callsign):
     Works for GA, charter, ferry flights, and non-standard callsigns.
     Returns dict in same format as _adsbdb_route, or empty dict.
     Respects monthly budget limit and 1-hour cache."""
+    global _fa_cache
+
     if not FLIGHTAWARE_API_KEY:
         return {}
 
-    # Check cache (1 hour TTL)
+    # Cache eviction guard — prevent unbounded growth
     now = time()
+    if len(_fa_cache) > 5000:
+        cutoff = now - FA_CACHE_TTL * 2
+        _fa_cache = {k: v for k, v in _fa_cache.items() if v["ts"] > cutoff}
+
+    # Check cache (1 hour TTL)
     cached = _fa_cache.get(callsign)
     if cached and (now - cached["ts"]) < FA_CACHE_TTL:
         return cached["data"]
@@ -487,7 +575,7 @@ def _flightaware_route(callsign):
             dest_lon = coords.get("lon")
 
         result = {
-            "airline_name": f.get("operator", "") if len(f.get("operator", "")) > 4 else "",
+            "airline_name": (f.get("operator") or "") if len(f.get("operator") or "") > 4 else "",
             "airline_icao": f.get("operator_icao", ""),
             "airline_iata": f.get("operator_iata", ""),
             "origin_iata": origin.get("code_iata", ""),
@@ -506,6 +594,139 @@ def _flightaware_route(callsign):
         # Cache errors briefly (5 min) to avoid hammering FA on transient failures
         _fa_cache[callsign] = {"data": {}, "ts": now - FA_CACHE_TTL + 300}
         return {}
+
+
+# --- FR24 REST API route fallback ---
+
+_fr24_cache = {}  # {callsign: {"data": dict, "ts": float}}
+FR24_CACHE_TTL = 3600  # 1 hour
+
+
+def _fr24_route(callsign):
+    """Fetch route from FR24 official REST API (flight-summary/light endpoint).
+    Requires FLIGHTRADAR24_KEY. Returns dict in same format as _adsbdb_route,
+    or empty dict. 1-hour cache, 5-min error cache."""
+    global _fr24_cache
+
+    if not FLIGHTRADAR24_KEY:
+        return {}
+
+    # Cache eviction guard — prevent unbounded growth
+    now = time()
+    if len(_fr24_cache) > 5000:
+        cutoff = now - FR24_CACHE_TTL * 2
+        _fr24_cache = {k: v for k, v in _fr24_cache.items() if v["ts"] > cutoff}
+
+    # Check cache
+    cached = _fr24_cache.get(callsign)
+    if cached and (now - cached["ts"]) < FR24_CACHE_TTL:
+        return cached["data"]
+
+    try:
+        now_utc = datetime.now(timezone.utc)
+        from_utc = (now_utc - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
+        to_utc = (now_utc + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+
+        r = requests.get(
+            "https://fr24api.flightradar24.com/api/flight-summary/light",
+            headers={
+                "Accept": "application/json",
+                "Accept-Version": "v1",
+                "Authorization": f"Bearer {FLIGHTRADAR24_KEY}",
+            },
+            params={
+                "callsigns": callsign,
+                "flight_datetime_from": from_utc,
+                "flight_datetime_to": to_utc,
+                "limit": 5,
+                "sort": "desc",
+            },
+            timeout=10,
+        )
+
+        if r.status_code != 200:
+            _fr24_cache[callsign] = {"data": {}, "ts": now - FR24_CACHE_TTL + 300}
+            return {}
+
+        flights = r.json().get("data", [])
+        if not flights:
+            _fr24_cache[callsign] = {"data": {}, "ts": now}
+            return {}
+
+        # Prefer live flight (flight_ended=false), then most recent
+        f = (
+            next((fl for fl in flights if not fl.get("flight_ended", True)), None)
+            or flights[0]
+        )
+
+        # FR24 light endpoint returns ICAO airport codes
+        origin_icao = f.get("orig_icao", "")
+        dest_icao = f.get("dest_icao_actual", "") or f.get("dest_icao", "")
+
+        # Convert ICAO to IATA (strip leading K for US airports)
+        origin_iata = origin_icao
+        if origin_icao and len(origin_icao) == 4 and origin_icao.startswith("K"):
+            origin_iata = origin_icao[1:]
+        dest_iata = dest_icao
+        if dest_icao and len(dest_icao) == 4 and dest_icao.startswith("K"):
+            dest_iata = dest_icao[1:]
+
+        # Look up coordinates via adsb.lol
+        origin_lat = origin_lon = None
+        dest_lat = dest_lon = None
+        if origin_icao:
+            coords = _airport_coords(origin_icao)
+            origin_lat = coords.get("lat")
+            origin_lon = coords.get("lon")
+        if dest_icao:
+            coords = _airport_coords(dest_icao)
+            dest_lat = coords.get("lat")
+            dest_lon = coords.get("lon")
+
+        # Airline name from painted_as or operating_as
+        painted_as = f.get("painted_as", "")
+        airline_name = AIRLINE_NAMES.get(painted_as, "") if painted_as else ""
+
+        result = {
+            "airline_name": airline_name,
+            "airline_icao": f.get("operating_as", "") or painted_as,
+            "airline_iata": "",
+            "origin_iata": origin_iata,
+            "origin_lat": origin_lat,
+            "origin_lon": origin_lon,
+            "dest_iata": dest_iata,
+            "dest_lat": dest_lat,
+            "dest_lon": dest_lon,
+        }
+
+        _fr24_cache[callsign] = {"data": result, "ts": now}
+        return result
+
+    except Exception as e:
+        print(f"FR24 REST route error for {callsign}: {e}")
+        # Cache errors briefly (5 min)
+        _fr24_cache[callsign] = {"data": {}, "ts": now - FR24_CACHE_TTL + 300}
+        return {}
+
+
+# --- Fallback dispatcher ---
+
+def _fallback_route(callsign):
+    """Try each source in ROUTE_FALLBACK_CHAIN order. Returns (result_dict, source_name)
+    or ({}, None) if all fail. Falls back to hardcoded airlabs->flightaware if chain is empty."""
+    sources = ROUTE_FALLBACK_CHAIN if ROUTE_FALLBACK_CHAIN else ["airlabs", "flightaware"]
+    dispatch = {
+        "fr24": _fr24_route,
+        "airlabs": _airlabs_route,
+        "flightaware": _flightaware_route,
+    }
+    for source in sources:
+        fn = dispatch.get(source)
+        if fn:
+            result = fn(callsign)
+            if result:
+                return result, source
+    return {}, None
 
 
 # Logging Closest Flights
@@ -689,8 +910,12 @@ class Overhead:
                     dest_lon = route.get("dest_lon")
 
                     need_fallback = False
+                    sanity_ok = True
+                    fallback_source = None
+
                     if not route:
                         need_fallback = True
+                        sanity_ok = False
                     elif not _route_makes_sense(
                         plane_lat, plane_lon,
                         origin_lat, origin_lon, dest_lat, dest_lon
@@ -698,12 +923,11 @@ class Overhead:
                         print(f"  Route {route.get('origin_iata','?')}->{route.get('dest_iata','?')} "
                               f"implausible for {callsign}")
                         need_fallback = True
+                        sanity_ok = False
 
-                    # Step 2: Fallback chain — AirLabs (free) then FlightAware (paid)
+                    # Step 2: Fallback chain — config-driven dispatcher
                     if need_fallback:
-                        fallback = _airlabs_route(callsign)
-                        if not fallback:
-                            fallback = _flightaware_route(callsign)
+                        fallback, fallback_source = _fallback_route(callsign)
                         if fallback:
                             route = fallback
                             origin_lat = route.get("origin_lat")
@@ -741,11 +965,6 @@ class Overhead:
                     if airline and airline == airline.upper():
                         airline = airline.title()
 
-                    # Audit log
-
-                    dist_o = haversine(plane_lat, plane_lon, origin_lat, origin_lon) if (origin_lat and origin_lon) else 0
-                    dist_d = haversine(plane_lat, plane_lon, dest_lat, dest_lon) if (dest_lat and dest_lon) else 0
-
                     # Aircraft type from adsb.lol 't' field
                     plane_type = ac.get("t", "")
 
@@ -754,7 +973,22 @@ class Overhead:
                     if not owner_icao and len(callsign) >= 3 and callsign[:3].isalpha():
                         owner_icao = callsign[:3]
 
+                    # Helicopter detection — override owner_icao for logo display
+                    if plane_type in HELICOPTER_TYPES:
+                        owner_icao = "HELI"
+
+                    # Use AIRLINE_NAMES as fallback when adsbdb doesn't return airline name
+                    if not airline and owner_icao and owner_icao in AIRLINE_NAMES:
+                        airline = AIRLINE_NAMES[owner_icao]
+
                     owner_iata = route.get("airline_iata", "") or "N/A"
+
+                    dist_o = haversine(plane_lat, plane_lon, origin_lat, origin_lon) if (origin_lat and origin_lon) else 0
+                    dist_d = haversine(plane_lat, plane_lon, dest_lat, dest_lon) if (dest_lat and dest_lon) else 0
+
+                    # Audit log
+                    audit_source = fallback_source or ("adsbdb" if sanity_ok else "none")
+                    _log_route_audit(callsign, plane_type, ac["_dist"], audit_source, origin, destination)
 
                     entry = {
                         "airline": airline,
@@ -785,8 +1019,8 @@ class Overhead:
                     }
 
                     overhead_data.append(entry)
-                    log_flight_data(entry)
-                    log_farthest_flight(entry)
+                    log_flight_data(dict(entry))
+                    log_farthest_flight(dict(entry))
 
                 except Exception as e:
                     print(f"Error enriching flight {callsign}: {e}")
@@ -843,7 +1077,9 @@ class Overhead:
         except Exception as e:
             print(f"Error in _grab: {e}")
             with self._lock:
-                self._new_data = False
+                self._data = []
+                self._tracked_data = None
+                self._new_data = True  # signal completion even on failure
                 self._processing = False
 
     def _do_auto_wipe(self):
