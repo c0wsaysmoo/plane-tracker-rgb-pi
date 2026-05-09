@@ -30,7 +30,7 @@ from config import TEMPERATURE_LOCATION
 # ===== CACHE SETTINGS =====
 # Cache durations match the original scene refresh intervals
 # This prevents redundant API calls on reboot while maintaining normal refresh rates
-CACHE_DIR = "/tmp/flight-tracker-cache"
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
 TEMPERATURE_CACHE_DURATION = 600   # 10 minutes (matches TEMPERATURE_REFRESH_SECONDS in scenes/temperature.py)
 FORECAST_CACHE_DURATION = 3600     # 1 hour (matches hourly refresh in scenes/daysforecast.py)
 os.makedirs(CACHE_DIR, exist_ok=True)
