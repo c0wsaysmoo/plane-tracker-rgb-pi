@@ -332,26 +332,40 @@ def _adsbdb_route(callsign):
         return {}
 
 
+_aircraft_cache = {}  # {registration: {"data": dict, "ts": float}}
+_AIRCRAFT_CACHE_TTL = 3600  # 1 hour
+
+
 def _adsbdb_aircraft(registration):
-    """Fetch aircraft info by registration (N-number) from adsbdb.com.
+    """Fetch aircraft info by registration (N-number) from adsbdb.com (cached 1hr).
     Returns dict with owner, type, manufacturer, or empty dict."""
+    now = time()
+    cached = _aircraft_cache.get(registration)
+    if cached and (now - cached["ts"]) < _AIRCRAFT_CACHE_TTL:
+        return cached["data"]
+
     url = f"{ADSBDB_BASE}/v0/aircraft/{registration}"
     try:
         r = requests.get(url, timeout=10)
         if r.status_code == 404:
+            _aircraft_cache[registration] = {"data": {}, "ts": now}
             return {}
         r.raise_for_status()
         ac = r.json().get("response", {}).get("aircraft")
         if not ac:
+            _aircraft_cache[registration] = {"data": {}, "ts": now}
             return {}
-        return {
+        result = {
             "owner": ac.get("registered_owner", ""),
             "type": ac.get("icao_type", ""),
             "manufacturer": ac.get("manufacturer", ""),
             "registration": ac.get("registration", ""),
         }
+        _aircraft_cache[registration] = {"data": result, "ts": now}
+        return result
     except Exception as e:
         print(f"adsbdb aircraft error for {registration}: {e}")
+        _aircraft_cache[registration] = {"data": {}, "ts": now - _AIRCRAFT_CACHE_TTL + 300}
         return {}
 
 
