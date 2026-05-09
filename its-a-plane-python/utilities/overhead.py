@@ -9,7 +9,6 @@ from threading import Thread, Lock
 
 from config import (
     DISTANCE_UNITS,
-    CLOCK_FORMAT,
     MAX_FARTHEST,
     MAX_CLOSEST,
 )
@@ -45,12 +44,10 @@ except ImportError:
     ROUTE_FALLBACK_CHAIN = []
 
 # Constants
-RETRIES = 3
 RATE_LIMIT_DELAY = 0.5
 MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000
 EARTH_RADIUS_M = 3958.8
-BLANK_FIELDS = ["", "N/A", "NONE"]
 
 ADSB_LOL_BASE = "https://api.adsb.lol"
 ADSBDB_BASE = "https://api.adsbdb.com"
