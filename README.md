@@ -1,4 +1,38 @@
-## after spending all weekend on a flight radar workaround only for today to have it not work, decided on a more permanent approach. using a free API from Open skies, 1000 free credits from flightaware aero, and 1000 free credits from airlabs, plus a fr24 subscription if you want. with this new setup you can just rely on the free credit until they run out. you can use the free credits and then fr24 after they run if you want or share your fr24 with multiple people (not that i would recommend that of course) or if you don't want to bother you can just use fr24. in all cases you will need an Open sky API. everything will work as is except with the fr24 credits. there is no estimated arrival time because that information cost eight times the amount. I'm still doing troubleshooting and debugging and I'm busy the next few days. that is my larest update. there does seem to be another work around, but i havent tested it but youre free to try if you search for "unoffical flight radar api jean" the. look at the issues. maybe someone with more time can try it, but im burnt out. ill upload what i have once i know it works.
+## Flight Tracker v2.0: Update
+
+I have essentially rewritten the flight logic from the ground up to address the shifting landscape of flight data APIs. The goal was to move away from "temporary workarounds" and build a permanent solution that is both robust and cost-effective.
+
+### 1. The "Waterfall" API Stack
+To keep the tracker free for as many users as possible, the system now uses a prioritized "waterfall" logic. It exhausts free credits across multiple providers before tapping into paid tiers.
+
+*   **OpenSky-Network (Required):** Acts as the primary "scout." It pings your bounding box every 30 seconds to detect aircraft, altitude, airspeed, and flight paths.
+*   **AirLabs (1,000 Free Credits/Mo):** The first stop for route and status data (on-time/delayed).
+*   **FlightAware ($5 Free Credit/Mo):** The secondary failover for route lookups.
+*   **FlightRadar24 ($9 for 30,000 Lookups/Mo):** The final tier for high-volume users.
+*   **Smart Rotation:** You can stack multiple API keys; the system will automatically rotate to the next provider once one is exhausted. You can use any combination of Airlabs/FLightAware/FlightRadar24 that you want.
+
+### 2. Multi-Device "Master/Slave" Architecture
+For power users with multiple clocks in a single household, you can now designate one unit as the **Master**. 
+*   The **Master** unit performs the API lookups and processing.
+*   The **Slave** units sync data locally from the Master.
+This ensures you aren't burning multiple credits for the same aircraft flying over your house.
+
+### 3. Local Intelligence & Credit Efficiency
+I have shifted the heavy lifting from the API servers to your local hardware to drastically reduce data consumption.
+*   **ADSB Trigger:** You can pre-save a flight number, but the system will not burn an API credit for a lookup until the ADSB signal confirms the plane has actually taken off.
+*   **Local ETA Calculation:** Instead of constantly polling APIs for "time remaining," the tracker now calculates distance and ETA locally. It factors in current airspeed, location, and descent patterns to give a ballpark arrival time.
+*   **The Result:** Most flights now only require **one single credit** for the entire tracking duration.
+
+### 4. New Statistics Dashboard
+The update includes a redesigned web interface that provides real-time analytics for your tracker. It calculates your **Average Daily Flights**, allowing you to project your monthly usage and choose the API combination that fits your specific "sky traffic."
+
+### Why this approach?
+Flight Radar 24 is becoming increasingly restricted. I researched community databases and "free" workarounds, but found them either too inaccurate or too easy for providers to shut down. 
+
+By building a system that stacks APIs, triggers only on live ADSB data, and calculates ETAs locally, I've created a version of the clock that is sustainable for the long haul.
+
+---
+**Note:** *I am a solo developer working on this in my free time. I’ve stress-tested the code as much as possible, but please keep in mind that the current build is still fluid. Keep an eye on the repo for further updates!*
 
 ## Real-Time Flight Tracking Added
 
