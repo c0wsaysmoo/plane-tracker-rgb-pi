@@ -42,7 +42,7 @@ It’s been interesting seeing how everyone is pivoting after the FR24 setback. 
 [ajplotkin](https://github.com/ajplotkin/plane-tracker-rgb-pi-f24only)
 
 ---
-**Note:** *I am a solo developer working on this in my free time. I’ve stress-tested the code as much as possible, but please keep in mind that the current build is still fluid. Keep an eye on the repo for further updates!*
+**Note:** *I am working by msyelf in my free time. I’ve stress-tested the code as much as possible, but please keep in mind that the current build is still fluid. I am doing my best so be kind. It's still a very fluid project so keep checking.*
 
 ## Real-Time Flight Tracking Added
 
