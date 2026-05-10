@@ -27,14 +27,8 @@ from utilities.airports import get_airport_coords as _airport_coords
 from utilities.airports import icao_to_iata as _icao_to_iata
 from utilities.airlines import get_airline_name as _lookup_airline
 
-_cache     = {}
-CACHE_TTL  = 3600  # 1 hour
-
-
-def _get_airline_name(icao, iata="", operator=""):
-    if operator and len(operator) > 4 and not operator.isupper():
-        return operator
-    return _lookup_airline(icao) or _lookup_airline(iata) or icao or ""
+_cache    = {}
+CACHE_TTL = 3600  # 1 hour
 
 
 def _to_unix(dt_str):
@@ -113,9 +107,12 @@ class FR24Client:
             origin      = _icao_to_iata(origin_icao) if origin_icao else "?"
             destination = _icao_to_iata(dest_icao)   if dest_icao   else "?"
 
-            painted_as   = f.get("painted_as", "")
-            operating_as = f.get("operating_as", "") or f.get("operated_as", "")
-            airline_name = _get_airline_name(painted_as, "", painted_as)
+            painted_as   = f.get("painted_as", "")   # marketing brand e.g. "AAL"
+            operating_as = f.get("operating_as", "") or f.get("operated_as", "")  # operator e.g. "ENY"
+
+            # Display name from painted_as, logo from operating_as
+            airline_name = _lookup_airline(painted_as) or painted_as
+            logo_icao    = operating_as or painted_as
 
             origin_coords = _airport_coords(origin) or _airport_coords(origin_icao)
             dest_coords   = _airport_coords(destination) or _airport_coords(dest_icao)
@@ -126,7 +123,7 @@ class FR24Client:
 
             result = {
                 "airline_name": airline_name,
-                "airline_icao": operating_as,
+                "airline_icao": logo_icao,
                 "airline_iata": "",
                 "origin_iata":  origin,
                 "origin_lat":   origin_coords.get("lat"),
