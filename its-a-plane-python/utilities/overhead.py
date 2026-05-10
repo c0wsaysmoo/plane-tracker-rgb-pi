@@ -1,8 +1,11 @@
 import os
 import json
 import math
+import socket
 import logging
+import requests
 from time import sleep, time
+from datetime import datetime
 from threading import Thread, Lock
 
 from utilities.fr24_client import FR24Client, LiveFlight
@@ -35,6 +38,24 @@ except (ImportError, ModuleNotFoundError, NameError):
                     "br_y": 41.851654, "br_x": -87.573027}
     LOCATION_DEFAULT = [41.882724, -87.623350]
 
+try:
+    from config import SEARCH_RADIUS_NM
+except (ImportError, ModuleNotFoundError, NameError):
+    SEARCH_RADIUS_NM = None
+
+# Local databases for offline lookups (no API calls needed)
+try:
+    from utilities.airports import get_airport_coords as _local_airport_coords
+    _HAS_LOCAL_AIRPORTS = True
+except ImportError:
+    _HAS_LOCAL_AIRPORTS = False
+
+try:
+    from utilities.airlines import get_airline_name as _local_airline_name
+    _HAS_LOCAL_AIRLINES = True
+except ImportError:
+    _HAS_LOCAL_AIRLINES = False
+
 # Constants
 RETRIES = 3
 RATE_LIMIT_DELAY = 1
@@ -42,6 +63,16 @@ MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000
 EARTH_RADIUS_M = 3958.8
 BLANK_FIELDS = ["", "N/A", "NONE"]
+ADSBDB_BASE = "https://api.adsbdb.com"
+
+# Helicopter types — set owner_icao to "HELI" for helicopter logo display
+HELICOPTER_TYPES = {
+    "S76", "EC35", "EC55", "EC30", "A109", "A139", "A169",
+    "B06", "B407", "B429", "R44", "R66", "R22",
+    "AS50", "AS55", "AS65", "H60", "BK17", "MD52", "MD50",
+    "S92", "AW13", "AW16", "AW10", "B212", "B412",
+    "EC45", "EC75", "S61", "S70", "H500", "BALL",
+}
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -54,6 +85,13 @@ LOG_FILE_FARTHEST = os.path.join(DATA_DIR, "farthest.txt")
 TRACKED_FILE = os.path.join(DATA_DIR, "tracked_flight.json")
 MAPS_DIR = os.path.join(DATA_DIR, "maps")
 os.makedirs(MAPS_DIR, exist_ok=True)
+ROUTE_AUDIT_LOG = os.path.join(DATA_DIR, "route_audit.log")
+
+HOSTNAME = socket.gethostname()
+
+# In-memory caches for adsbdb lookups (GA aircraft owner info)
+_aircraft_cache = {}  # registration -> {data, ts}
+_CACHE_TTL = 3600     # 1 hour
 
 
 # Utility Functions
@@ -97,6 +135,12 @@ def ordinal(n: int):
 
 
 def haversine(lat1, lon1, lat2, lon2):
+    """Distance between two points. Returns miles or km based on DISTANCE_UNITS.
+    Returns 0 if any coordinate is None (fixes: haversine guard for None values)."""
+    # Guard against None values — use `any(v is None ...)` instead of `not all(...)`
+    # because `not all(...)` fails for airports at 0.0 latitude/longitude
+    if any(v is None for v in (lat1, lon1, lat2, lon2)):
+        return 0
     lat1, lon1 = map(math.radians, (lat1, lon1))
     lat2, lon2 = map(math.radians, (lat2, lon2))
     dlat = lat2 - lat1
@@ -151,12 +195,6 @@ def estimate_stale_data(last_data):
         dist_covered = speed_display * elapsed_hrs
         data["dist_remaining"] = max(0, last_dist - dist_covered)
 
-    # --- Update progress bar position using estimated dist_remaining ---
-    total = data.get("total_distance")
-    if total and total > 0 and data.get("dist_remaining") is not None:
-        # total_distance is in display units, dist_remaining now estimated
-        pass  # progress bar uses dist_remaining/total_distance automatically
-
     return data
 
 
@@ -187,6 +225,73 @@ def distance_from_flight_to_home(flight):
 def distance_to_point(flight, lat, lon):
     return haversine(flight.latitude, flight.longitude, lat, lon)
 
+
+# --- Local database lookups (no API calls needed) ---
+
+def _airport_coords(code):
+    """Look up airport coordinates from local database (no API calls).
+    Accepts IATA (JFK, LHR) or ICAO (KJFK, EGLL). Returns {lat, lon} or empty dict."""
+    if not code:
+        return {}
+    if _HAS_LOCAL_AIRPORTS:
+        return _local_airport_coords(code)
+    return {}
+
+
+def _airline_name_lookup(icao_code):
+    """Look up airline name from local database. Returns empty string if not found."""
+    if not icao_code:
+        return ""
+    if _HAS_LOCAL_AIRLINES:
+        return _local_airline_name(icao_code)
+    return ""
+
+
+def _adsbdb_aircraft(registration):
+    """Fetch aircraft owner info by registration from adsbdb (free, cached 1hr).
+    Used for GA flights (N-numbers) where FR24 has no airline name."""
+    cached = _aircraft_cache.get(registration)
+    if cached and (time() - cached["ts"]) < _CACHE_TTL:
+        return cached["data"]
+
+    url = f"{ADSBDB_BASE}/v0/aircraft/{registration}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 404:
+            _aircraft_cache[registration] = {"data": {}, "ts": time()}
+            return {}
+        r.raise_for_status()
+        ac = r.json().get("response", {}).get("aircraft")
+        if not ac:
+            _aircraft_cache[registration] = {"data": {}, "ts": time()}
+            return {}
+        result = {
+            "owner": ac.get("registered_owner", ""),
+            "type": ac.get("icao_type", ""),
+            "manufacturer": ac.get("manufacturer", ""),
+            "registration": ac.get("registration", ""),
+        }
+        _aircraft_cache[registration] = {"data": result, "ts": time()}
+        return result
+    except Exception as e:
+        logger.debug(f"adsbdb aircraft error for {registration}: {e}")
+        # Cache error for 5 minutes to avoid hammering
+        _aircraft_cache[registration] = {"data": {}, "ts": time() - _CACHE_TTL + 300}
+        return {}
+
+
+# --- Audit Logging ---
+
+def _log_route_audit(callsign, aircraft_type, distance, source, origin, destination):
+    """Append to route_audit.log with hostname prefix for multi-device monitoring."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    route_str = f"{origin or '?'}->{destination or '?'}"
+    line = f"{ts} [{HOSTNAME}] {callsign} {aircraft_type} {distance:.1f} {source} {route_str}\n"
+    try:
+        with open(ROUTE_AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
 
 
 def load_tracked_callsign():
@@ -323,6 +428,72 @@ class Overhead:
         self._tracked_last_eta = None        # last known estimated arrival (unix ts)
         self._tracked_last_data = None       # last known good tracked data
         self._first_flight_logged = False    # log first flight details as JSON
+        self._cycle_count = 0               # total grab_data cycles
+        self._total_flights_seen = 0        # lifetime flight count
+
+    def _log_pipeline_summary(self, stats: dict):
+        """
+        Log a pretty summary of the data pipeline cycle.
+
+        Displays: API calls made, data sources used, flights processed,
+        helicopters detected, and data enrichment statistics.
+        """
+        elapsed = stats.get("elapsed_ms", 0)
+        self._cycle_count += 1
+        self._total_flights_seen += stats.get("flights_processed", 0)
+
+        lines = [
+            "",
+            "┌─────────────────────────────────────────────────────────",
+            f"│ 🛩️  Pipeline Cycle #{self._cycle_count}  ({elapsed:.0f}ms)",
+            "├─────────────────────────────────────────────────────────",
+            f"│ FR24 API Status:       {'✓ OK' if self._api.fr24_ok else '✗ UNREACHABLE'}",
+            f"│ Zone flights (raw):    {stats.get('zone_raw', 0)}",
+            f"│ After altitude filter: {stats.get('zone_filtered', 0)} "
+            f"(min={MIN_ALTITUDE}ft, max={MAX_ALTITUDE}ft)",
+            f"│ Flights processed:     {stats.get('flights_processed', 0)}",
+            f"│ Details fetched (API): {stats.get('details_fetched', 0)}",
+            f"│ Details from cache:    {stats.get('details_cached', 0)}",
+            "├─── Data Sources ───────────────────────────────────────",
+            f"│ Local airports used:   {stats.get('airport_lookups', 0)} "
+            f"({'✓ loaded' if _HAS_LOCAL_AIRPORTS else '✗ not available'})",
+            f"│ Local airlines used:   {stats.get('airline_lookups', 0)} "
+            f"({'✓ loaded' if _HAS_LOCAL_AIRLINES else '✗ not available'})",
+            f"│ adsbdb GA lookups:     {stats.get('adsbdb_lookups', 0)}",
+            f"│ Helicopter detected:   {stats.get('helicopters', 0)}",
+        ]
+
+        # Tracked flight info
+        tracked = stats.get("tracked_status", "")
+        if tracked:
+            lines.append("├─── Tracked Flight ─────────────────────────────────────")
+            lines.append(f"│ Status: {tracked}")
+            if stats.get("tracked_callsign"):
+                lines.append(f"│ Callsign: {stats['tracked_callsign']}")
+
+        # Flight details table
+        flights = stats.get("flight_details", [])
+        if flights:
+            lines.append("├─── Overhead Flights ───────────────────────────────────")
+            lines.append("│  #  Callsign   Type  Route         Dist   Source")
+            lines.append("│ ─── ────────── ───── ───────────── ────── ──────────")
+            for i, fd in enumerate(flights, 1):
+                cs = fd.get("callsign", "?")[:9].ljust(9)
+                ac = fd.get("plane", "?")[:5].ljust(5)
+                orig = fd.get("origin", "?")[:3]
+                dest = fd.get("destination", "?")[:3]
+                route = f"{orig}→{dest}".ljust(13)
+                dist = f"{fd.get('distance', 0):.1f}".rjust(5)
+                src = fd.get("data_source", "fr24")[:10]
+                lines.append(f"│ {i:>2}  {cs} {ac} {route} {dist}  {src}")
+
+        lines.append("├─── Lifetime Stats ─────────────────────────────────────")
+        lines.append(f"│ Total cycles:         {self._cycle_count}")
+        lines.append(f"│ Total flights seen:   {self._total_flights_seen}")
+        lines.append(f"│ Aircraft cache size:  {len(_aircraft_cache)}")
+        lines.append("└─────────────────────────────────────────────────────────")
+
+        logger.info("\n".join(lines))
 
     def grab_data(self):
         Thread(target=self._grab, daemon=True).start()
@@ -341,13 +512,30 @@ class Overhead:
 
         overhead_data = []
         tracked_data = None
+        _grab_start = time()
+
+        # Pipeline stats for diagnostic logging
+        stats = {
+            "zone_raw": 0,
+            "zone_filtered": 0,
+            "flights_processed": 0,
+            "details_fetched": 0,
+            "details_cached": 0,
+            "airport_lookups": 0,
+            "airline_lookups": 0,
+            "adsbdb_lookups": 0,
+            "helicopters": 0,
+            "tracked_status": "",
+            "tracked_callsign": "",
+            "flight_details": [],
+        }
 
         try:
             # --- STEP 1: Check zone for overhead flights ---
             flights = self._api.get_flights(bounds=ZONE_DEFAULT)
-            logger.info(f"Overhead: {len(flights)} flights in zone (before altitude filter)")
+            stats["zone_raw"] = len(flights)
             flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
-            logger.info(f"Overhead: {len(flights)} flights after altitude filter ({MIN_ALTITUDE}-{MAX_ALTITUDE}ft)")
+            stats["zone_filtered"] = len(flights)
             flights.sort(key=lambda f: distance_from_flight_to_home(f))
             flights = flights[:MAX_FLIGHT_LOOKUP]
 
@@ -357,6 +545,7 @@ class Overhead:
                     sleep(RATE_LIMIT_DELAY)
                     try:
                         d = self._api.get_flight_details(f)
+                        stats["details_fetched"] += 1
 
                         if not d:
                             retries -= 1
@@ -373,9 +562,33 @@ class Overhead:
                         # Aircraft type from details, fallback to live feed
                         plane = self.safe_get(d, "aircraft", "model", "code", default="") or f.aircraft_code or ""
 
-                        # Airline name from registered_owners (aircraft_info)
+                        # Airline name: try local database first, then FR24's registered_owners
                         flight_number = self.safe_get(d, "schedule_info", "flight_number", default="")
                         airline_name = self.safe_get(d, "aircraft_info", "registered_owners", default="")
+
+                        # Enrich with local airline database (better display names for regionals)
+                        owner_icao = f.airline_icao or ""
+                        local_airline = _airline_name_lookup(owner_icao)
+                        if local_airline:
+                            airline_name = local_airline
+                            stats["airline_lookups"] += 1
+
+                        # Helicopter detection — override owner_icao for logo display
+                        if plane in HELICOPTER_TYPES:
+                            owner_icao = "HELI"
+                            stats["helicopters"] += 1
+
+                        # GA owner lookup for N-number aircraft with no airline
+                        if (not airline_name and f.registration
+                                and f.registration.startswith("N")
+                                and f.registration[1:2].isdigit()):
+                            stats["adsbdb_lookups"] += 1
+                            ac_info = _adsbdb_aircraft(f.registration)
+                            if ac_info.get("owner"):
+                                airline_name = ac_info["owner"]
+                                if airline_name == airline_name.upper():
+                                    airline_name = airline_name.title()
+
                         # Livery note: when painted_as_id differs from operated_by_id
                         painted_as_id = self.safe_get(d, "schedule_info", "painted_as_id", default=0) or 0
                         operated_by_id = self.safe_get(d, "schedule_info", "operated_by_id", default=0) or 0
@@ -391,24 +604,51 @@ class Overhead:
                         time_real_dep = self.safe_get(t, "real", "departure")
                         time_est_arr = self.safe_get(t, "estimated", "arrival")
 
-                        # Airport coordinates: NOT available from gRPC FlightDetails.
-                        # Use flight_progress distances instead (server-calculated, in METERS).
-                        fp = self.safe_get(d, "flight_progress") or {}
-                        traversed_m = fp.get("traversed_distance", 0) or 0
-                        remaining_m = fp.get("remaining_distance", 0) or 0
-
-                        # Convert meters to display units (miles or km)
-                        if DISTANCE_UNITS == "metric":
-                            dist_o = traversed_m / 1000.0   # meters → km
-                            dist_d = remaining_m / 1000.0
-                        else:
-                            dist_o = traversed_m / 1609.344  # meters → miles
-                            dist_d = remaining_m / 1609.344
-
+                        # Airport coordinates from local database (no API calls)
                         origin_lat = None
                         origin_lon = None
                         dest_lat = None
                         dest_lon = None
+
+                        if origin:
+                            coords = _airport_coords(origin)
+                            origin_lat = coords.get("lat")
+                            origin_lon = coords.get("lon")
+                            if origin_lat is not None:
+                                stats["airport_lookups"] += 1
+                        if destination:
+                            coords = _airport_coords(destination)
+                            dest_lat = coords.get("lat")
+                            dest_lon = coords.get("lon")
+                            if dest_lat is not None:
+                                stats["airport_lookups"] += 1
+
+                        # Calculate distances: prefer local airport coords, fallback to flight_progress
+                        fp = self.safe_get(d, "flight_progress") or {}
+                        traversed_m = fp.get("traversed_distance", 0) or 0
+                        remaining_m = fp.get("remaining_distance", 0) or 0
+
+                        # Use local airport coords for distance if available
+                        if origin_lat is not None and origin_lon is not None:
+                            dist_o = haversine(f.latitude, f.longitude, origin_lat, origin_lon)
+                        elif traversed_m:
+                            # Fallback to flight_progress (meters → display units)
+                            if DISTANCE_UNITS == "metric":
+                                dist_o = traversed_m / 1000.0
+                            else:
+                                dist_o = traversed_m / 1609.344
+                        else:
+                            dist_o = 0
+
+                        if dest_lat is not None and dest_lon is not None:
+                            dist_d = haversine(f.latitude, f.longitude, dest_lat, dest_lon)
+                        elif remaining_m:
+                            if DISTANCE_UNITS == "metric":
+                                dist_d = remaining_m / 1000.0
+                            else:
+                                dist_d = remaining_m / 1609.344
+                        else:
+                            dist_d = 0
 
                         # Extract airborne trail points only (alt > 0)
                         raw_trail = self.safe_get(d, "trail", default=[]) or []
@@ -421,7 +661,6 @@ class Overhead:
                         # Determine livery note text (only if special and short)
                         livery_note = ""
                         if has_special_livery and airline_name:
-                            # If owner differs from the ICAO-implied airline, it's a livery note
                             livery_note = "special livery"
 
                         entry = {
@@ -437,7 +676,7 @@ class Overhead:
                             "plane_latitude": f.latitude,
                             "plane_longitude": f.longitude,
                             "owner_iata": f.airline_iata or "N/A",
-                            "owner_icao": f.airline_icao or "",
+                            "owner_icao": owner_icao,
                             "time_scheduled_departure": time_sched_dep,
                             "time_scheduled_arrival": time_sched_arr,
                             "time_real_departure": time_real_dep,
@@ -453,6 +692,21 @@ class Overhead:
                         }
 
                         overhead_data.append(entry)
+                        stats["flights_processed"] += 1
+
+                        # Track flight details for pipeline summary
+                        stats["flight_details"].append({
+                            "callsign": callsign,
+                            "plane": plane,
+                            "origin": origin,
+                            "destination": destination,
+                            "distance": entry["distance"],
+                            "data_source": "fr24_grpc",
+                        })
+
+                        # Audit log
+                        _log_route_audit(callsign, plane, entry["distance"], "fr24_grpc", origin, destination)
+
                         log_flight_data(entry)
                         log_farthest_flight(entry)
                         break
@@ -466,6 +720,7 @@ class Overhead:
             if not overhead_data:
                 tracked_callsign = load_tracked_callsign()
                 if tracked_callsign:
+                    stats["tracked_callsign"] = tracked_callsign
 
                     # If callsign changed, reset all state — new flight being tracked
                     if tracked_callsign != self._tracked_last_callsign:
@@ -513,6 +768,21 @@ class Overhead:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
                         # If never live, don't increment — pre-flight waiting
 
+            # Update tracked status for pipeline summary
+            if tracked_data:
+                if tracked_data.get("is_live"):
+                    stats["tracked_status"] = "LIVE"
+                else:
+                    stats["tracked_status"] = "ESTIMATED (stale)"
+            elif stats.get("tracked_callsign"):
+                stats["tracked_status"] = "NOT FOUND"
+            else:
+                stats["tracked_status"] = ""
+
+            # --- Pipeline Summary ---
+            stats["elapsed_ms"] = (time() - _grab_start) * 1000
+            self._log_pipeline_summary(stats)
+
             with self._lock:
                 self._data = overhead_data
                 self._tracked_data = tracked_data
@@ -521,13 +791,20 @@ class Overhead:
 
         except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
             logger.warning(f"Overhead: Network error during _grab: {type(e).__name__}: {e}")
+            # FIX: Set _new_data = True with empty data so the main loop doesn't
+            # spin forever in `while not o.new_data` (error handler freeze bug)
             with self._lock:
-                self._new_data = False
+                self._data = []
+                self._tracked_data = None
+                self._new_data = True
                 self._processing = False
         except Exception as e:
             logger.error(f"Overhead: Unexpected error in _grab: {type(e).__name__}: {e}", exc_info=True)
+            # FIX: Same — signal completion even on failure so display can proceed
             with self._lock:
-                self._new_data = False
+                self._data = []
+                self._tracked_data = None
+                self._new_data = True
                 self._processing = False
 
     def _do_auto_wipe(self):
@@ -559,11 +836,17 @@ class Overhead:
                     None,
                 )
 
-            # Strategy 2: global live feed search matching on callsign
-            # The official API doesn't support airline filtering server-side,
-            # so we fetch the full live feed (up to 2000) and filter locally.
+            # Strategy 2: bounded search around last known position or wide area
+            # (avoids pulling entire global feed — more efficient than full-globe search)
             if not match:
-                flights = self._api.get_flights()
+                # Use a wide bounding box covering common flight areas
+                wide_bounds = {
+                    "tl_y": 70.0,   # North
+                    "tl_x": -130.0, # West
+                    "br_y": 10.0,   # South
+                    "br_x": 40.0,   # East
+                }
+                flights = self._api.get_flights(bounds=wide_bounds)
                 match = next(
                     (f for f in flights
                      if (f.callsign or "").upper() == flight_input),
@@ -583,13 +866,39 @@ class Overhead:
             total_m = fp.get("great_circle_distance", 0) or 0
             eta = fp.get("eta", 0) or 0
 
-            # Convert meters to display units
-            if DISTANCE_UNITS == "metric":
-                dist_remaining = (remaining_m / 1000.0) if remaining_m else None  # → km
-                total_distance = (total_m / 1000.0) if total_m else None
+            # Look up airport coordinates from local database for distance calculations
+            origin_code = match.origin_airport_iata or ""
+            dest_code = match.destination_airport_iata or ""
+            dest_coords = _airport_coords(dest_code)
+            origin_coords = _airport_coords(origin_code)
+
+            dest_lat = dest_coords.get("lat")
+            dest_lon = dest_coords.get("lon")
+
+            # Calculate distance remaining: prefer local airport coords
+            if dest_lat is not None and dest_lon is not None:
+                dist_remaining = haversine(match.latitude, match.longitude, dest_lat, dest_lon)
+            elif remaining_m:
+                if DISTANCE_UNITS == "metric":
+                    dist_remaining = remaining_m / 1000.0
+                else:
+                    dist_remaining = remaining_m / 1609.344
             else:
-                dist_remaining = (remaining_m / 1609.344) if remaining_m else None  # → miles
-                total_distance = (total_m / 1609.344) if total_m else None
+                dist_remaining = None
+
+            # Total distance: prefer local airport coords
+            origin_lat = origin_coords.get("lat")
+            origin_lon = origin_coords.get("lon")
+            if (origin_lat is not None and origin_lon is not None
+                    and dest_lat is not None and dest_lon is not None):
+                total_distance = haversine(origin_lat, origin_lon, dest_lat, dest_lon)
+            elif total_m:
+                if DISTANCE_UNITS == "metric":
+                    total_distance = total_m / 1000.0
+                else:
+                    total_distance = total_m / 1609.344
+            else:
+                total_distance = None
 
             # Calculate time remaining from ETA
             time_remaining = None
@@ -627,15 +936,31 @@ class Overhead:
             time_real_dep  = self.safe_get(time_details, "real", "departure")
             time_est_arr   = self.safe_get(time_details, "estimated", "arrival") or eta or None
 
+            # Airline name: try local database, then FR24
+            airline_name = match.airline_name or ""
+            if not airline_name:
+                airline_icao_code = match.airline_icao or ""
+                airline_name = _airline_name_lookup(airline_icao_code)
+
+            # GA owner lookup for N-number aircraft
+            if (not airline_name and match.registration
+                    and match.registration.startswith("N")
+                    and match.registration[1:2].isdigit()):
+                ac_info = _adsbdb_aircraft(match.registration)
+                if ac_info.get("owner"):
+                    airline_name = ac_info["owner"]
+                    if airline_name == airline_name.upper():
+                        airline_name = airline_name.title()
+
             return {
                 "callsign": flight_input,
                 "number": match.number or flight_input,
-                "airline_name": match.airline_name or "",
+                "airline_name": airline_name,
                 "is_live": True,
                 "origin": match.origin_airport_iata or "",
                 "destination": match.destination_airport_iata or "",
-                "dest_lat": 0,
-                "dest_lon": 0,
+                "dest_lat": dest_lat or 0,
+                "dest_lon": dest_lon or 0,
                 "aircraft_type": match.aircraft_code or "",
                 "altitude": match.altitude,
                 "ground_speed": match.ground_speed or 0,
@@ -682,7 +1007,9 @@ class Overhead:
 
     @property
     def data_is_empty(self):
-        return len(self._data) == 0
+        # FIX: Acquire lock to be consistent with all other properties
+        with self._lock:
+            return len(self._data) == 0
 
 
 if __name__ == "__main__":

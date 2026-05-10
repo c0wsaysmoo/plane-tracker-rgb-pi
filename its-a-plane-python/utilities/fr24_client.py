@@ -1,8 +1,12 @@
 """
-Synchronous wrapper around the official `fr24` Python SDK (v0.3.0+).
+Synchronous wrapper around the `fr24` Python package (v0.3.0+).
 
 Provides a drop-in replacement for the old unofficial FlightRadar24API usage,
 bridging the async API into the synchronous threading model used by this project.
+
+NOTE: The `fr24` pip package (by cathaypacific8747) is an unofficial gRPC client
+that accesses FR24's internal feed endpoint (data-feed.flightradar24.com).
+The official FR24 SDK is `pip install fr24sdk` from Flightradar24's GitHub.
 
 Environment variables used by the fr24 package for authentication:
     fr24_subscription_key  – your subscription key
@@ -10,6 +14,11 @@ Environment variables used by the fr24 package for authentication:
 
 Alternatively, FR24_API_KEY in config.py (format: "subscription_key|token")
 is parsed and injected into the environment before the fr24 package reads them.
+
+Thread-safety: Each API call creates its own event loop and FR24 context manager,
+ensuring no shared mutable state across threads. The FR24 client is entered and
+exited per call cycle to prevent resource leaks (HTTP/gRPC connections, file
+descriptors) over long-running 24/7 operation.
 """
 
 from __future__ import annotations
@@ -67,11 +76,14 @@ from fr24 import FR24, BoundingBox  # noqa: E402
 # Force-import h2 early (before rgbmatrix drops privileges).
 # httpx lazy-imports h2 only when AsyncClient(http2=True) is constructed;
 # by that time drop_privileges may have removed read access to venv files.
-import h2  # noqa: E402, F401
-import h2.connection  # noqa: E402, F401
-import h2.config  # noqa: E402, F401
-import h2.events  # noqa: E402, F401
-import hpack  # noqa: E402, F401
+try:
+    import h2  # noqa: E402, F401
+    import h2.connection  # noqa: E402, F401
+    import h2.config  # noqa: E402, F401
+    import h2.events  # noqa: E402, F401
+    import hpack  # noqa: E402, F401
+except ImportError:
+    pass  # Non-fatal — only needed if using HTTP/2
 
 
 @dataclass
@@ -109,8 +121,9 @@ class LiveFlight:
     def set_flight_details(self, details: dict) -> None:
         """
         Populate additional fields from a flight_details dict response.
-        The official gRPC API does NOT provide airline name or airport coordinates.
-        It provides: flight_number, aircraft type, schedule times, flight progress.
+        The gRPC API does NOT provide airline name or airport coordinates
+        directly. It provides: flight_number, aircraft type, schedule times,
+        flight progress.
         """
         if not details:
             return
@@ -142,8 +155,12 @@ class LiveFlight:
 
 class FR24Client:
     """
-    Synchronous client wrapping the async `fr24` SDK.
-    Thread-safe: each call runs its own event loop iteration.
+    Synchronous client wrapping the async `fr24` package.
+
+    Thread-safe: each API call creates a fresh event loop and FR24 context
+    manager. The context manager is properly entered and exited per cycle,
+    preventing resource leaks (HTTP/gRPC connections, file descriptors) over
+    long-running 24/7 operation.
 
     Includes built-in caching:
       - Live feed (get_flights): polled at most every 90 seconds.
@@ -151,31 +168,35 @@ class FR24Client:
     """
 
     def __init__(self):
-        self._fr24: FR24 | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
         self._cache = FR24Cache()
+        self._fr24_ok = True  # Track whether FR24 is reachable
 
-    def _get_loop(self) -> asyncio.AbstractEventLoop:
-        if self._loop is None or self._loop.is_closed():
-            self._loop = asyncio.new_event_loop()
-        return self._loop
+    def _run_with_client(self, async_func):
+        """
+        Create a fresh event loop and FR24 context manager, run the async
+        function, then properly clean up. This ensures:
+        1. Thread-safety (no shared event loop across threads)
+        2. No resource leaks (__aexit__ always called)
+        3. Fresh connections each cycle (no stale HTTP/2 streams)
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            async def _wrapper():
+                fr24 = FR24()
+                async with fr24:
+                    try:
+                        await fr24.login("from_env")
+                    except Exception as e:
+                        logger.debug(f"FR24: Login failed ({type(e).__name__}: {e}) — using anonymous")
+                    return await async_func(fr24)
+            return loop.run_until_complete(_wrapper())
+        finally:
+            loop.close()
 
-    def _run(self, coro):
-        """Run an async coroutine synchronously."""
-        loop = self._get_loop()
-        return loop.run_until_complete(coro)
-
-    async def _ensure_client(self) -> FR24:
-        if self._fr24 is None:
-            logger.info("FR24: Initializing client and logging in...")
-            self._fr24 = FR24()
-            await self._fr24.__aenter__()
-            try:
-                await self._fr24.login("from_env")
-                logger.info("FR24: Login successful")
-            except Exception as e:
-                logger.warning(f"FR24: Login failed ({type(e).__name__}: {e}) — continuing with anonymous access")
-        return self._fr24
+    @property
+    def fr24_ok(self) -> bool:
+        """Whether FR24 is currently reachable."""
+        return self._fr24_ok
 
     @property
     def cache(self) -> FR24Cache:
@@ -209,12 +230,24 @@ class FR24Client:
         # Check rate limiter (90s polling interval)
         if not self._cache.should_poll_feed():
             logger.info("FR24: Rate limited (90s) — returning cached or empty")
-            # Try to return any cached result for this key (even if slightly different params)
             return cached if cached is not None else []
 
         # Make the actual API call
         logger.info(f"FR24: Making live API call (key: {cache_key})")
-        result = self._run(self._get_flights_async(bounds, airline))
+        try:
+            result = self._run_with_client(
+                lambda fr24: self._get_flights_async(fr24, bounds, airline)
+            )
+            # Reset fr24_ok on success (fixes: flag never reset to True)
+            self._fr24_ok = True
+        except (ConnectionError, OSError) as e:
+            logger.warning(f"FR24: Connection error: {e}")
+            self._fr24_ok = False
+            return []
+        except Exception as e:
+            logger.warning(f"FR24: Unexpected error fetching flights: {e}")
+            self._fr24_ok = False
+            return []
 
         # Cache the result and record the poll
         self._cache.set_cached_flights(cache_key, result)
@@ -224,11 +257,10 @@ class FR24Client:
 
     async def _get_flights_async(
         self,
+        fr24: FR24,
         bounds: dict | None,
         airline: str | None,
     ) -> list[LiveFlight]:
-        fr24 = await self._ensure_client()
-
         if bounds:
             # Old format: tl_y=north, tl_x=west, br_y=south, br_x=east
             bbox = BoundingBox(
@@ -261,9 +293,25 @@ class FR24Client:
         logger.info(f"FR24: Live feed returned {flight_count} flights")
         flights = []
         for f in proto.flights_list:
-            route = f.extra_info.route
-            origin_iata = getattr(route, "from", "") or ""
-            destination_iata = route.to or ""
+            # Defensive null handling for protobuf fields
+            # (protobuf fields can be absent/None; getattr chains prevent crashes)
+            extra = getattr(f, 'extra_info', None)
+            route = getattr(extra, 'route', None) if extra else None
+            origin_iata = (getattr(route, 'from', '') or '') if route else ''
+            destination_iata = (getattr(route, 'to', '') or '') if route else ''
+            callsign = getattr(f, 'callsign', '') or ''
+            registration = (getattr(extra, 'reg', '') or '') if extra else ''
+            aircraft_type = (getattr(extra, 'type', '') or '') if extra else ''
+            vspeed = (getattr(extra, 'vspeed', 0) or 0) if extra else 0
+
+            # ETA from schedule (defensive)
+            schedule = getattr(extra, 'schedule', None) if extra else None
+            eta = 0
+            if schedule is not None:
+                try:
+                    eta = getattr(schedule, 'eta', 0) or 0
+                except Exception:
+                    eta = 0
 
             lf = LiveFlight(
                 flight_id=f"{f.flightid:x}" if f.flightid else "",
@@ -272,16 +320,16 @@ class FR24Client:
                 altitude=f.alt,
                 ground_speed=f.speed,
                 heading=f.track,
-                vertical_speed=f.extra_info.vspeed,
-                callsign=f.callsign or "",
-                registration=f.extra_info.reg or "",
+                vertical_speed=vspeed,
+                callsign=callsign,
+                registration=registration,
                 origin_airport_iata=origin_iata,
                 destination_airport_iata=destination_iata,
-                airline_icao=f.callsign[:3] if f.callsign and len(f.callsign) >= 3 and f.callsign[:3].isalpha() else "",
+                airline_icao=callsign[:3] if callsign and len(callsign) >= 3 and callsign[:3].isalpha() else "",
                 airline_iata="",
-                aircraft_code=f.extra_info.type or "",
+                aircraft_code=aircraft_type,
                 on_ground=f.on_ground,
-                eta=f.extra_info.schedule.eta if f.extra_info.HasField("schedule") else 0,
+                eta=eta,
             )
             flights.append(lf)
 
@@ -315,7 +363,20 @@ class FR24Client:
             return cached
 
         # Cache miss — fetch from API
-        result = self._run(self._get_flight_details_async(flight))
+        try:
+            result = self._run_with_client(
+                lambda fr24: self._get_flight_details_async(fr24, flight)
+            )
+            # Reset fr24_ok on success
+            self._fr24_ok = True
+        except (ConnectionError, OSError) as e:
+            logger.warning(f"FR24: Connection error getting details: {e}")
+            self._fr24_ok = False
+            return {}
+        except Exception as e:
+            logger.warning(f"FR24: Error getting flight details: {e}")
+            self._fr24_ok = False
+            return {}
 
         # Cache the result (even empty dicts, to avoid repeated failed lookups)
         if result:
@@ -323,9 +384,7 @@ class FR24Client:
 
         return result
 
-    async def _get_flight_details_async(self, flight: LiveFlight) -> dict:
-        fr24 = await self._ensure_client()
-
+    async def _get_flight_details_async(self, fr24: FR24, flight: LiveFlight) -> dict:
         if not flight.flight_id:
             return {}
 
@@ -339,36 +398,52 @@ class FR24Client:
             logger.warning(f"Failed to fetch flight details for {flight.flight_id}: {e}")
             return {}
 
-        # Extract proto fields safely
-        schedule_info = proto.schedule_info
-        aircraft_info = proto.aircraft_info
-        flight_progress = proto.flight_progress
-        flight_plan = proto.flight_plan
-        flight_info = proto.flight_info
+        # Extract proto fields safely using defensive getattr
+        schedule_info = getattr(proto, 'schedule_info', None)
+        aircraft_info = getattr(proto, 'aircraft_info', None)
+        flight_progress = getattr(proto, 'flight_progress', None)
+        flight_plan = getattr(proto, 'flight_plan', None)
+        flight_info = getattr(proto, 'flight_info', None)
 
         # Extract airline name from aircraft_info.registered_owners
-        flight_number = schedule_info.flight_number or ""
-        airline_name = aircraft_info.registered_owners or ""
+        flight_number = (getattr(schedule_info, 'flight_number', '') or '') if schedule_info else ''
+        airline_name = (getattr(aircraft_info, 'registered_owners', '') or '') if aircraft_info else ''
         # painted_as_id indicates livery (e.g. special livery when != operated_by_id)
-        painted_as_id = schedule_info.painted_as_id or 0
-        operated_by_id = schedule_info.operated_by_id or 0
+        painted_as_id = (getattr(schedule_info, 'painted_as_id', 0) or 0) if schedule_info else 0
+        operated_by_id = (getattr(schedule_info, 'operated_by_id', 0) or 0) if schedule_info else 0
 
         # flight_plan.departure/destination are ICAO strings (e.g. "EGLL"), not objects
-        fp_departure = flight_plan.departure or ""  # ICAO origin
-        fp_destination = flight_plan.destination or ""  # ICAO destination
+        fp_departure = (getattr(flight_plan, 'departure', '') or '') if flight_plan else ''
+        fp_destination = (getattr(flight_plan, 'destination', '') or '') if flight_plan else ''
 
         # flight_progress distances are in km (unsigned int)
-        remaining_km = flight_progress.remaining_distance or 0
-        total_km = flight_progress.great_circle_distance or 0
-        eta = flight_progress.eta or 0
+        remaining_km = (getattr(flight_progress, 'remaining_distance', 0) or 0) if flight_progress else 0
+        total_km = (getattr(flight_progress, 'great_circle_distance', 0) or 0) if flight_progress else 0
+        eta = (getattr(flight_progress, 'eta', 0) or 0) if flight_progress else 0
+        traversed_distance = (getattr(flight_progress, 'traversed_distance', 0) or 0) if flight_progress else 0
+        elapsed_time = (getattr(flight_progress, 'elapsed_time', 0) or 0) if flight_progress else 0
+        remaining_time = (getattr(flight_progress, 'remaining_time', 0) or 0) if flight_progress else 0
+
+        # Schedule fields (defensive)
+        sched_departure = (getattr(schedule_info, 'scheduled_departure', None)) if schedule_info else None
+        sched_arrival = (getattr(schedule_info, 'scheduled_arrival', None)) if schedule_info else None
+        actual_departure = (getattr(schedule_info, 'actual_departure', None)) if schedule_info else None
+        actual_arrival = (getattr(schedule_info, 'actual_arrival', None)) if schedule_info else None
+        origin_id = (getattr(schedule_info, 'origin_id', 0) or 0) if schedule_info else 0
+        destination_id = (getattr(schedule_info, 'destination_id', 0) or 0) if schedule_info else 0
+
+        # Aircraft info (defensive)
+        ac_type = (getattr(aircraft_info, 'type', '') or '') if aircraft_info else ''
+        ac_reg = (getattr(aircraft_info, 'reg', '') or '') if aircraft_info else ''
+        ac_icao_address = (getattr(aircraft_info, 'icao_address', '') or '') if aircraft_info else ''
 
         # Build old-style nested dict for backward compat with overhead.py parsing
         compat = {
             "aircraft": {
                 "model": {
-                    "code": aircraft_info.type or "",
+                    "code": ac_type,
                 },
-                "registration": aircraft_info.reg or "",
+                "registration": ac_reg,
             },
             "airline": {
                 "name": airline_name,
@@ -382,11 +457,11 @@ class FR24Client:
             },
             "time": {
                 "scheduled": {
-                    "departure": schedule_info.scheduled_departure or None,
-                    "arrival": schedule_info.scheduled_arrival or None,
+                    "departure": sched_departure or None,
+                    "arrival": sched_arrival or None,
                 },
                 "real": {
-                    "departure": schedule_info.actual_departure or None,
+                    "departure": actual_departure or None,
                 },
                 "estimated": {
                     "arrival": eta or None,
@@ -403,24 +478,24 @@ class FR24Client:
                 "flight_number": flight_number,
                 "operated_by_id": operated_by_id,
                 "painted_as_id": painted_as_id,
-                "origin_id": schedule_info.origin_id or 0,
-                "destination_id": schedule_info.destination_id or 0,
-                "scheduled_departure": schedule_info.scheduled_departure or None,
-                "scheduled_arrival": schedule_info.scheduled_arrival or None,
-                "actual_departure": schedule_info.actual_departure or None,
-                "actual_arrival": schedule_info.actual_arrival or None,
+                "origin_id": origin_id,
+                "destination_id": destination_id,
+                "scheduled_departure": sched_departure or None,
+                "scheduled_arrival": sched_arrival or None,
+                "actual_departure": actual_departure or None,
+                "actual_arrival": actual_arrival or None,
             },
             "aircraft_info": {
-                "icao_address": aircraft_info.icao_address or "",
-                "reg": aircraft_info.reg or "",
-                "typecode": aircraft_info.type or "",
+                "icao_address": ac_icao_address,
+                "reg": ac_reg,
+                "typecode": ac_type,
                 "registered_owners": airline_name,
             },
             "flight_progress": {
-                "traversed_distance": flight_progress.traversed_distance or 0,
+                "traversed_distance": traversed_distance,
                 "remaining_distance": remaining_km,
-                "elapsed_time": flight_progress.elapsed_time or 0,
-                "remaining_time": flight_progress.remaining_time or 0,
+                "elapsed_time": elapsed_time,
+                "remaining_time": remaining_time,
                 "eta": eta,
                 "great_circle_distance": total_km,
             },
@@ -430,46 +505,37 @@ class FR24Client:
             },
         }
 
-        # Trail points
+        # Trail points (defensive)
         trail_points = []
-        for tp in proto.flight_trail_list:
-            if tp.altitude > 0:
+        flight_trail = getattr(proto, 'flight_trail_list', []) or []
+        for tp in flight_trail:
+            alt = getattr(tp, 'altitude', 0) or 0
+            if alt > 0:
                 trail_points.append({
-                    "lat": tp.lat,
-                    "lng": tp.lon,
-                    "alt": tp.altitude,
-                    "ts": tp.snapshot_id,
+                    "lat": getattr(tp, 'lat', 0),
+                    "lng": getattr(tp, 'lon', 0),
+                    "alt": alt,
+                    "ts": getattr(tp, 'snapshot_id', 0),
                 })
         compat["trail"] = trail_points
 
         # Also store the flight_info position data (useful for tracked)
         if flight_info:
             compat["flight_info"] = {
-                "latitude": flight_info.lat,
-                "longitude": flight_info.lon,
-                "altitude": flight_info.alt,
-                "ground_speed": flight_info.speed,
-                "heading": flight_info.track,
-                "vertical_speed": flight_info.vspeed,
-                "callsign": flight_info.callsign or "",
+                "latitude": getattr(flight_info, 'lat', 0),
+                "longitude": getattr(flight_info, 'lon', 0),
+                "altitude": getattr(flight_info, 'alt', 0),
+                "ground_speed": getattr(flight_info, 'speed', 0),
+                "heading": getattr(flight_info, 'track', 0),
+                "vertical_speed": getattr(flight_info, 'vspeed', 0),
+                "callsign": getattr(flight_info, 'callsign', '') or '',
             }
 
         return compat
 
     def close(self):
-        """Clean up the async client."""
-        if self._fr24:
-            try:
-                self._run(self._fr24.__aexit__(None, None, None))
-            except Exception:
-                pass
-            self._fr24 = None
-        if self._loop and not self._loop.is_closed():
-            self._loop.close()
-            self._loop = None
+        """Clean up — no-op since we create/destroy per call now."""
+        pass
 
     def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        pass

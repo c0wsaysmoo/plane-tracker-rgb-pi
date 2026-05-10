@@ -55,6 +55,13 @@ HAT_PWM_ENABLED = _bool(os.environ.get("HAT_PWM_ENABLED", "True"))
 MIN_ALTITUDE = int(os.environ.get("MIN_ALTITUDE", "1000"))
 JOURNEY_CODE_SELECTED = os.environ.get("JOURNEY_CODE_SELECTED", "LHR")
 JOURNEY_BLANK_FILLER = os.environ.get("JOURNEY_BLANK_FILLER", " ? ")
+SPEED_UNITS = os.environ.get("SPEED_UNITS", "imperial")  # imperial (mph), metric (km/h), or knots
+
+# --- Search radius ---
+# Nautical miles from LOCATION_HOME to search for aircraft.
+# If not set, computed from ZONE_HOME bounding box (minimum 10nm).
+_search_radius_raw = os.environ.get("SEARCH_RADIUS_NM", "")
+SEARCH_RADIUS_NM = int(_search_radius_raw) if _search_radius_raw else None
 
 # --- Logging & notifications ---
 EMAIL = os.environ.get("EMAIL", "")
@@ -63,3 +70,16 @@ MAX_CLOSEST = int(os.environ.get("MAX_CLOSEST", "3"))
 
 # --- FlightRadar24 API ---
 FR24_API_KEY = os.environ.get("FR24_API_KEY", "")
+
+# --- Route Fallback Chain ---
+# Sources tried in order when adsbdb fails or returns stale data.
+# Available: "fr24", "airlabs", "flightaware"
+# Comma-separated list, e.g. "airlabs,flightaware"
+_fallback_raw = os.environ.get("ROUTE_FALLBACK_CHAIN", "")
+ROUTE_FALLBACK_CHAIN = [s.strip() for s in _fallback_raw.split(",") if s.strip()] if _fallback_raw else []
+
+# Optional fallback API keys
+AIRLABS_API_KEY = os.environ.get("AIRLABS_API_KEY", "")
+FLIGHTAWARE_API_KEY = os.environ.get("FLIGHTAWARE_API_KEY", "")
+FLIGHTAWARE_MONTHLY_LIMIT = float(os.environ.get("FLIGHTAWARE_MONTHLY_LIMIT", "4.50"))
+FLIGHTRADAR24_KEY = os.environ.get("FLIGHTRADAR24_KEY", "")  # Bearer token for FR24 REST API
