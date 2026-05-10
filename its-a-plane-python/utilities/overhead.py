@@ -615,6 +615,7 @@ class Overhead:
                                 local_airline = _airline_name_lookup(owner_icao)
                                 if local_airline:
                                     airline_name = local_airline
+                                    stats["airline_lookups"] += 1
                         else:
                             # Non-regional: use local DB if available
                             local_airline = _airline_name_lookup(owner_icao)
@@ -863,8 +864,7 @@ class Overhead:
         """Wipe tracked_flight.json and reset all tracking state."""
         try:
             with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-                import json as _json
-                _json.dump({"callsign": ""}, f)
+                json.dump({"callsign": ""}, f)
             print("Tracked flight ended — auto-cleared.")
         except Exception as e:
             print(f"Failed to auto-clear tracked flight: {e}")
