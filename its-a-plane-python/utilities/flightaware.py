@@ -3,8 +3,8 @@ flightaware.py — Route lookup via FlightAware AeroAPI.
 Free tier: ~1,000 calls/month ($5 credit at $0.005/call) per key.
 Supports multiple API keys — rotates when one hits its budget cap.
 
-In config.py set either:
-    FLIGHTAWARE_API_KEY  = "single_key"
+In config.py set either a single key or a list:
+    FLIGHTAWARE_API_KEYS = "single_key"
     FLIGHTAWARE_API_KEYS = ["key1", "key2", ...]
     FLIGHTAWARE_MONTHLY_LIMIT = 4.00  # $ cap per key (default $4.00)
 """
@@ -61,19 +61,19 @@ def _get_airline_name(icao, iata, fa_operator):
 # ---------------------------------------------------------------------------
 
 def _load_keys():
+    """Load FlightAware API keys from config.
+    FLIGHTAWARE_API_KEYS can be a single string or a list of strings."""
     try:
-        from config import FLIGHTAWARE_API_KEYS
-        if isinstance(FLIGHTAWARE_API_KEYS, list) and FLIGHTAWARE_API_KEYS:
-            return [k for k in FLIGHTAWARE_API_KEYS if k]
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from config import FLIGHTAWARE_API_KEY
-        if FLIGHTAWARE_API_KEY:
-            return [FLIGHTAWARE_API_KEY]
-    except (ImportError, AttributeError):
-        pass
-    return []
+        import config as _config
+        val = getattr(_config, "FLIGHTAWARE_API_KEYS", None) \
+           or getattr(_config, "FLIGHTAWARE_API_KEY", None)
+        if not val:
+            return []
+        if isinstance(val, list):
+            return [k.strip() for k in val if k and k.strip()]
+        return [val.strip()]
+    except Exception:
+        return []
 
 def _load_limit():
     try:
@@ -121,12 +121,7 @@ def _get_active_key():
         kdata = usage["keys"].get(key, {"calls": 0, "cost": 0.0})
         cost  = kdata.get("cost", 0.0)
         if cost < _LIMIT:
-            if len(_KEYS) > 1:
-                print(f"[FlightAware] Using key {i+1}/{len(_KEYS)} (${cost:.3f}/${_LIMIT:.2f})")
             return key, usage
-        else:
-            print(f"[FlightAware] Key {i+1}/{len(_KEYS)} exhausted (${cost:.3f}) — trying next")
-    print(f"[FlightAware] All {len(_KEYS)} key(s) exhausted for this month")
     return None, None
 
 def _increment_usage(key, usage):

@@ -80,12 +80,7 @@ def _get_active_key():
     for i, key in enumerate(_KEYS):
         calls = usage["keys"].get(key, 0)
         if calls < MONTHLY_LIMIT:
-            if len(_KEYS) > 1:
-                print(f"[AirLabs] Using key {i+1}/{len(_KEYS)} ({calls}/{MONTHLY_LIMIT} calls)")
             return key
-        else:
-            print(f"[AirLabs] Key {i+1}/{len(_KEYS)} exhausted ({calls}/{MONTHLY_LIMIT}) — trying next")
-    print(f"[AirLabs] All {len(_KEYS)} key(s) exhausted for this month")
     return None
 
 
