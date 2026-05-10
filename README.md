@@ -19,6 +19,8 @@ This ensures you aren't burning multiple credits for the same aircraft flying ov
 
 ### 3. Local Intelligence & Credit Efficiency
 I have shifted the heavy lifting from the API servers to your local hardware to drastically reduce data consumption.
+*   **Auto-Updating Databases:** The tracker now maintains a local airport and airline database. If the system encounters a code it doesn't recognize, it will automatically trigger a download of an updated database to ensure your display stays current without manual intervention.
+*   **ADSB Trigger:** You can pre-save a flight number, but the system will not burn an API credit for a lookup until the ADSB signal confirms the plane has actually taken off.
 *   **ADSB Trigger:** You can pre-save a flight number, but the system will not burn an API credit for a lookup until the ADSB signal confirms the plane has actually taken off.
 *   **Local ETA Calculation:** Instead of constantly polling APIs for "time remaining," the tracker now calculates distance and ETA locally. It factors in current airspeed, location, and descent patterns to give a ballpark arrival time.
 *   **The Result:** Most flights now only require **one single credit** for the entire tracking duration.
