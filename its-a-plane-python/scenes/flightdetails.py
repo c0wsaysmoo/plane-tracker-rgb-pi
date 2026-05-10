@@ -22,6 +22,7 @@ class FlightDetailsScene(object):
     def __init__(self):
         super().__init__()
         self.flight_position = screen.WIDTH
+        self.flight_details_complete = False
         self._data_all_looped = False
 
     @Animator.KeyFrame.add(1)
@@ -29,6 +30,9 @@ class FlightDetailsScene(object):
 
         # Guard against no data
         if len(self._data) == 0:
+            return
+
+        if self.flight_details_complete:
             return
 
         # Clear the whole area
@@ -97,13 +101,13 @@ class FlightDetailsScene(object):
         # Handle scrolling
         self.flight_position -= 1
         if self.flight_position + flight_no_text_length < 0:
-            self.flight_position = screen.WIDTH
             if len(self._data) > 1:
-                self._data_index = (self._data_index + 1) % len(self._data)
-                self._data_all_looped = (not self._data_index) or self._data_all_looped
-                self.reset_scene()
+                self.flight_details_complete = True
+                self.mark_scroll_complete("flight_details")
+            else:
+                self.flight_position = screen.WIDTH
 
     @Animator.KeyFrame.add(0)
-    def reset_scrolling(self):
+    def reset_flight_details_scroll(self):
         self.flight_position = screen.WIDTH
-
+        self.flight_details_complete = False
