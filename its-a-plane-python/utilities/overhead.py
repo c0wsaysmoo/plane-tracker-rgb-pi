@@ -783,7 +783,7 @@ class Overhead:
                     self._tracked_last_eta = None
                     self._tracked_last_data = None
 
-                tracked_data = self._grab_tracked(tracked_callsign)
+                tracked_data = self._grab_tracked(tracked_callsign, zone_flights=flights)
 
                 if tracked_data:
                     # Flight found — reset miss counter, store latest ETA and data
@@ -874,30 +874,31 @@ class Overhead:
         self._tracked_last_data = None
         self._tracked_last_callsign = ""
 
-    def _grab_tracked(self, flight_input):
+    def _grab_tracked(self, flight_input, zone_flights=None):
         flight_input = flight_input.strip().upper()
         airline_icao = flight_input[:3] if len(flight_input) >= 3 and flight_input[:3].isalpha() else None
         match = None
 
         try:
-            # Strategy 1: airline-filtered search by callsign (fast, works for mainline)
-            if airline_icao:
-                flights = self._api.get_flights(airline=airline_icao)
+            # Strategy 0: check zone flights already fetched (no extra API call)
+            if zone_flights:
                 match = next(
-                    (f for f in flights if (f.callsign or "").upper() == flight_input),
+                    (f for f in zone_flights if (f.callsign or "").upper() == flight_input),
                     None,
                 )
 
-            # Strategy 2: bounded search around last known position or wide area
-            # (avoids pulling entire global feed — more efficient than full-globe search)
+            # Strategy 1: wide bounding box search (bypasses rate limiter)
             if not match:
-                # Use a wide bounding box covering common flight areas
                 wide_bounds = {
                     "tl_y": 70.0,   # North
                     "tl_x": -130.0, # West
                     "br_y": 10.0,   # South
                     "br_x": 40.0,   # East
                 }
+                # Reset rate limiter so tracked search isn't blocked by zone scan
+                self._api.cache.feed_rate_limiter.reset()
+                wide_key = self._api.cache.make_feed_cache_key(wide_bounds)
+                self._api.cache._feed_cache.invalidate(wide_key)
                 flights = self._api.get_flights(bounds=wide_bounds)
                 match = next(
                     (f for f in flights
