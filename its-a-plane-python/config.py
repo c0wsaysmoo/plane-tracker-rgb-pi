@@ -1,10 +1,12 @@
 """
-Configuration — all values sourced from environment variables.
+Configuration — all values sourced exclusively from environment variables.
 
-The environment is loaded from /etc/plane-tracker.env (systemd EnvironmentFile)
-or from the project-root .env file (via python-dotenv for local development).
+NO user-configurable defaults are stored in this file.
+All configuration must be provided via:
+  - /etc/plane-tracker.env (systemd EnvironmentFile for production)
+  - .env file in the project root (for local development via python-dotenv)
 
-See .env.example for documentation of all variables.
+See .env.example for documentation of all available variables and their defaults.
 """
 import os
 
@@ -20,42 +22,50 @@ def _bool(val: str) -> bool:
     return val.strip().lower() in ("true", "1", "yes", "on")
 
 
+def _require(name: str) -> str:
+    """Return env var value or empty string (caller decides how to handle missing)."""
+    return os.environ.get(name, "")
+
+
+# --- API Keys ---
+FR24_API_KEY = _require("FR24_API_KEY")
+TOMORROW_API_KEY = _require("TOMORROW_API_KEY")
+
 # --- Bounding box for overhead flight detection ---
 ZONE_HOME = {
-    "tl_y": float(os.environ.get("ZONE_TL_LAT", "51.595")),
-    "tl_x": float(os.environ.get("ZONE_TL_LON", "-0.314")),
-    "br_y": float(os.environ.get("ZONE_BR_LAT", "51.47")),
-    "br_x": float(os.environ.get("ZONE_BR_LON", "-0.111")),
+    "tl_y": float(os.environ["ZONE_TL_LAT"]) if "ZONE_TL_LAT" in os.environ else 0.0,
+    "tl_x": float(os.environ["ZONE_TL_LON"]) if "ZONE_TL_LON" in os.environ else 0.0,
+    "br_y": float(os.environ["ZONE_BR_LAT"]) if "ZONE_BR_LAT" in os.environ else 0.0,
+    "br_x": float(os.environ["ZONE_BR_LON"]) if "ZONE_BR_LON" in os.environ else 0.0,
 }
 
 # --- Home location (for distance calculations) ---
 LOCATION_HOME = [
-    float(os.environ.get("HOME_LAT", "51.55864")),
-    float(os.environ.get("HOME_LON", "-0.177332")),
+    float(os.environ["HOME_LAT"]) if "HOME_LAT" in os.environ else 0.0,
+    float(os.environ["HOME_LON"]) if "HOME_LON" in os.environ else 0.0,
 ]
 
 # --- Weather ---
-TEMPERATURE_LOCATION = os.environ.get("TEMPERATURE_LOCATION", "51.55864,-0.177332")
-TOMORROW_API_KEY = os.environ.get("TOMORROW_API_KEY", "")
+TEMPERATURE_LOCATION = _require("TEMPERATURE_LOCATION")
 TEMPERATURE_UNITS = os.environ.get("TEMPERATURE_UNITS", "metric")
 FORECAST_DAYS = int(os.environ.get("FORECAST_DAYS", "3"))
 
 # --- Display & units ---
-DISTANCE_UNITS = os.environ.get("DISTANCE_UNITS", "imperial")
-CLOCK_FORMAT = os.environ.get("CLOCK_FORMAT", "12hr")
+DISTANCE_UNITS = os.environ.get("DISTANCE_UNITS", "metric")
+CLOCK_FORMAT = os.environ.get("CLOCK_FORMAT", "24hr")
 BRIGHTNESS = int(os.environ.get("BRIGHTNESS", "100"))
 BRIGHTNESS_NIGHT = int(os.environ.get("BRIGHTNESS_NIGHT", "50"))
-NIGHT_BRIGHTNESS = _bool(os.environ.get("NIGHT_BRIGHTNESS", "True"))
-NIGHT_START = os.environ.get("NIGHT_START", "20:00")
+NIGHT_BRIGHTNESS = _bool(os.environ.get("NIGHT_BRIGHTNESS", "False"))
+NIGHT_START = os.environ.get("NIGHT_START", "22:00")
 NIGHT_END = os.environ.get("NIGHT_END", "06:00")
 GPIO_SLOWDOWN = int(os.environ.get("GPIO_SLOWDOWN", "2"))
 HAT_PWM_ENABLED = _bool(os.environ.get("HAT_PWM_ENABLED", "True"))
 
 # --- Flight filtering ---
-MIN_ALTITUDE = int(os.environ.get("MIN_ALTITUDE", "1000"))
-JOURNEY_CODE_SELECTED = os.environ.get("JOURNEY_CODE_SELECTED", "LHR")
+MIN_ALTITUDE = int(os.environ.get("MIN_ALTITUDE", "0"))
+JOURNEY_CODE_SELECTED = _require("JOURNEY_CODE_SELECTED")
 JOURNEY_BLANK_FILLER = os.environ.get("JOURNEY_BLANK_FILLER", " ? ")
-SPEED_UNITS = os.environ.get("SPEED_UNITS", "imperial")  # imperial (mph), metric (km/h), or knots
+SPEED_UNITS = os.environ.get("SPEED_UNITS", "metric")
 
 # --- Search radius ---
 # Nautical miles from LOCATION_HOME to search for aircraft.
@@ -68,13 +78,9 @@ EMAIL = os.environ.get("EMAIL", "")
 MAX_FARTHEST = int(os.environ.get("MAX_FARTHEST", "3"))
 MAX_CLOSEST = int(os.environ.get("MAX_CLOSEST", "3"))
 
-# --- FlightRadar24 API ---
-FR24_API_KEY = os.environ.get("FR24_API_KEY", "")
-
 # --- Route Fallback Chain ---
 # Sources tried in order when adsbdb fails or returns stale data.
 # Available: "fr24", "airlabs", "flightaware"
-# Comma-separated list, e.g. "airlabs,flightaware"
 _fallback_raw = os.environ.get("ROUTE_FALLBACK_CHAIN", "")
 ROUTE_FALLBACK_CHAIN = [s.strip() for s in _fallback_raw.split(",") if s.strip()] if _fallback_raw else []
 
@@ -82,4 +88,4 @@ ROUTE_FALLBACK_CHAIN = [s.strip() for s in _fallback_raw.split(",") if s.strip()
 AIRLABS_API_KEY = os.environ.get("AIRLABS_API_KEY", "")
 FLIGHTAWARE_API_KEY = os.environ.get("FLIGHTAWARE_API_KEY", "")
 FLIGHTAWARE_MONTHLY_LIMIT = float(os.environ.get("FLIGHTAWARE_MONTHLY_LIMIT", "4.50"))
-FLIGHTRADAR24_KEY = os.environ.get("FLIGHTRADAR24_KEY", "")  # Bearer token for FR24 REST API
+FLIGHTRADAR24_KEY = os.environ.get("FLIGHTRADAR24_KEY", "")

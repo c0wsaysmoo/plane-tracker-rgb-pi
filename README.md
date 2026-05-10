@@ -1,7 +1,96 @@
-## This fork works with a PAID FR24 subscription API key
-## Note this also is setup for a Adafruit TRIPLE RGB Matrix Bonnet. If using the older single model and having problems, update the display/__init__.py and change the "regular" back to the commented version
+# ✈️ plane-tracker-rgb-pi (a10kiloham fork)
 
-# For faster setup see the script in its-a-plane-python/setup/update-rpi.sh
+> **Fork of [c0wsaysmoo/plane-tracker-rgb-pi](https://github.com/c0wsaysmoo/plane-tracker-rgb-pi)** with major architectural changes, incorporating recommendations from [ajplotkin's fork](https://github.com/ajplotkin/plane-tracker-rgb-pi).
+
+This fork requires a **PAID FR24 subscription API key** and is configured for an **Adafruit TRIPLE RGB Matrix Bonnet** by default. If using the older single bonnet and having display issues, update `display/__init__.py` and change "regular" back to the commented version.
+
+**For faster setup see:** `its-a-plane-python/setup/update-pi.sh`
+
+---
+
+## Summary of Changes from Original (c0wsaysmoo)
+
+This fork is a significant mod of the flight tracking backend, configuration system, and deployment model. The display scenes and visual design remain largely unchanged — the changes are focused on reliability, API sustainability, and data enrichment.
+
+### Major Differences at a Glance
+
+| Feature | c0wsaysmoo (original) | This fork (a10kiloham) | Source |
+|---------|----------------------|----------------------|--------|
+| **FR24 API** | Unofficial `FlightRadarAPI` pip package (web scraping) | Official `fr24` gRPC SDK (v0.3.0+, paid subscription) | ✅ This fork |
+| **FR24 Feed Caching** | None — polls API every cycle | 90-second polling interval with TTL cache | ✅ This fork |
+| **FR24 Flight Detail Cache** | None — fetches details on every pass | 30-minute per-flight cache (checks cache first) | ✅ This fork |
+| **Weather API Rate Limiting** | None — can exhaust free tier quickly | 1 call/hour max, 1-hour backoff on HTTP 429 | ✅ This fork |
+| **Weather Cache** | None | 1-hour TTL for temperature & forecast data | ✅ This fork |
+| **Configuration** | Hardcoded values in `config.py` | Environment variables via `.env` file + systemd EnvironmentFile | ✅ This fork |
+| **Secrets Management** | API keys in source code | Secrets in `/etc/plane-tracker.env` (mode 0600, root-only) | ✅ This fork |
+| **Deployment** | `crontab @reboot` | systemd service with auto-restart, journald logging | ✅ This fork |
+| **Python Environment** | `pip install --break-system-packages` | Proper virtualenv (`.venv/`) with `requirements.txt` | ✅ This fork |
+| **Airport Coordinates** | Relied entirely on FR24 API (which doesn't provide them via gRPC) | Local offline database (`airports.json` from GitHub CSV) | 🔀 ajplotkin |
+| **Airline Names** | Only from FR24 `registered_owners` field | Local airline database with regional carrier overrides | 🔀 ajplotkin |
+| **Distance Calculations** | Only from `flight_progress` (meters from API) | Haversine from local airport coords, API fallback | 🔀 ajplotkin |
+| **Helicopter Detection** | None | Identifies helicopter types, shows HELI logo | 🔀 ajplotkin |
+| **GA Aircraft Lookup** | None | adsbdb.com lookup for N-number owner info | 🔀 ajplotkin |
+| **Search Radius** | Fixed bounding box only | Configurable `SEARCH_RADIUS_NM` | 🔀 ajplotkin |
+| **Unit Tests** | None | 67+ tests covering cache, utilities, databases | 🔀 ajplotkin + this fork |
+| **FR24 Client Architecture** | Persistent async context (can leak resources) | Per-call context manager (thread-safe, no leaks) | 🔀 ajplotkin |
+| **Data Directory** | Home folder (breaks with systemd ProtectHome) | `/var/lib/plane-tracker/` (writable, survives upgrades) | ✅ This fork |
+| **Pipeline Diagnostics** | None | Rich per-cycle summary logging (flights, sources, stats) | 🔀 ajplotkin |
+| **Startup Validation** | None | Checks API keys/config at boot, logs masked keys | ✅ This fork |
+| **Triple RGB Matrix** | Single bonnet only | Triple Matrix Bonnet support | ✅ This fork |
+| **Setup Script** | Manual multi-step process | One-command `update-pi.sh` (clone, venv, deps, service) | ✅ This fork |
+
+### Legend
+- ✅ **This fork** — Original work in this (a10kiloham) fork
+- 🔀 **ajplotkin** — Based on recommendations/code from ajplotkin's fork, integrated here
+
+---
+
+### Changes Integrated from ajplotkin's Fork
+
+The following features were adapted from [ajplotkin's fork](https://github.com/ajplotkin/plane-tracker-rgb-pi) and merged into this codebase (commit `1f0d54f`):
+
+1. **Local Airport Database** (`utilities/airports.py`) — Downloads airport-codes.csv from GitHub once, caches as JSON. Provides instant offline IATA/ICAO → lat/lon lookups. No API calls needed.
+
+2. **Local Airline Database** (`utilities/airlines.py`) — Offline airline ICAO → name lookup with manual overrides for regional carriers (e.g. Republic → "American Eagle", SkyWest → "Delta Connection").
+
+3. **Data Enrichment Pipeline** (`utilities/overhead.py`) — Rewired overhead flight processing to:
+   - Use local airport coords for haversine distance (instead of relying on FR24's `flight_progress` which reports meters from the flight plan, not actual position)
+   - Look up airline names from local DB before falling back to FR24's `registered_owners`
+   - Detect helicopters by aircraft type code and override logo to HELI
+   - Look up GA aircraft owners via adsbdb for unidentified N-number registrations
+   - Guard `haversine()` against `None` coordinates (prevents crashes for airports at 0°lat/lon)
+
+4. **FR24 Client Rewrite** (`utilities/fr24_client.py`) — Per-call async context pattern ensuring no leaked HTTP/gRPC connections during 24/7 operation. Thread-safe with no shared mutable state.
+
+5. **Extended Configuration** (`.env.example`) — Added `SEARCH_RADIUS_NM`, `SPEED_UNITS`, and route fallback chain options (AirLabs, FlightAware, FR24 REST as secondary sources).
+
+6. **Unit Test Suite** — `test_local_databases.py`, `test_overhead_utils.py`, `test_standalone.py` covering utility functions, local lookups, and integration scenarios.
+
+---
+
+### API Caching Architecture (New in This Fork)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  utilities/cache.py                       │
+├──────────────────┬──────────────────────────────────────┤
+│  WeatherCache    │  FR24Cache                            │
+│  ─────────────   │  ──────────                           │
+│  • 1hr TTL       │  • Feed: 90s TTL + rate limiter       │
+│  • 1hr rate cap  │  • Details: 30min per-flight cache    │
+│  • 429 backoff   │  • Cache-first lookup pattern         │
+│  • Shared limiter│  • Independent key/flight caching     │
+│  (temp+forecast) │                                       │
+└──────────────────┴──────────────────────────────────────┘
+```
+
+- **Weather (Tomorrow.io)**: After the first successful call, the API is polled at most once per hour. On HTTP 429, enters a 1-hour backoff before retrying. Cached data is served during both normal rate-limiting and backoff periods.
+
+- **FR24 Live Feed**: Polled at most every 90 seconds. Repeated calls within 90s return the cached flight list. Different bounding box / airline queries are cached independently.
+
+- **FR24 Flight Details**: Each flight's details are cached for 30 minutes by `flight_id`. The display checks cache before requesting any further flight data — if a hit exists, no API call is made.
+
+---
 
 ## Real-Time Flight Tracking Added
 
@@ -32,7 +121,7 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 - The current temperature color is based on the current humidity level on a gradient of white-blue.
 - Time changes color at sunrise and sunset.
 - The date shows moon phases with a purple-to-white gradient. It gradually becomes white on the right until the full moon, then fades white on the left as the moon wanes.
-- The display dims at predefined times, set in the config file.
+- The display dims at predefined times, set in the `.env` file (`NIGHT_START` / `NIGHT_END`).
 - You can switch between 12hr/24hr time and choose imperial or metric units.
 
 ## Flight Tracker Screen:
@@ -226,7 +315,7 @@ Clone the tracker:
 cd ~
 git clone https://github.com/c0wsaysmoo/plane-tracker-rgb-pi
 ```
-If the bridge on the bonnet is soldered, you'll need to set HAT_PWM_ENABLED=True in the config file. It's False by default
+If the bridge on the bonnet is soldered, you'll need to set `HAT_PWM_ENABLED=True` in your `.env` file. It's True by default
 
 After cloning the files, move everything to the main folder, as some files need to be in /home/path/ rather than /home/path/plane-tracker-rgb-pi/ You'll need to combine the two logos folders since Github only allows 1,000 files per folder so I had to split them.
 ```
@@ -259,11 +348,14 @@ sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-# 9. Edit the Config File
+# 9. Edit the Environment Config
 
 ```
-nano ~/its-a-plane-python/config.py
+cp ~/plane-tracker-rgb-pi/.env.example ~/plane-tracker-rgb-pi/.env
+nano ~/plane-tracker-rgb-pi/.env
 ```
+
+Fill in your API keys (`FR24_API_KEY`, `TOMORROW_API_KEY`), location coordinates (`HOME_LAT`, `HOME_LON`, `ZONE_*`), and any other preferences. See `.env.example` for full documentation of all variables.
 
 # 10. Run the Script
 

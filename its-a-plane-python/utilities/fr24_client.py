@@ -12,7 +12,7 @@ Environment variables used by the fr24 package for authentication:
     fr24_subscription_key  – your subscription key
     fr24_token             – your access token (JWT)
 
-Alternatively, FR24_API_KEY in config.py (format: "subscription_key|token")
+Alternatively, FR24_API_KEY in .env (format: "subscription_key|token")
 is parsed and injected into the environment before the fr24 package reads them.
 
 Thread-safety: Each API call creates its own event loop and FR24 context manager,
