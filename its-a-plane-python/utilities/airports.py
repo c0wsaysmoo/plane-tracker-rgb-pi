@@ -41,10 +41,10 @@ def _download_and_build():
             if not coords_str:
                 continue
             try:
-                # Dataset "coordinates" field is "longitude,latitude"
+                # Dataset "coordinates" field is "latitude,longitude"
                 parts = coords_str.split(",")
-                lon = float(parts[0].strip())
-                lat = float(parts[1].strip())
+                lat = float(parts[0].strip())
+                lon = float(parts[1].strip())
             except (ValueError, AttributeError, IndexError):
                 continue
 
