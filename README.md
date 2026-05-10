@@ -157,9 +157,12 @@ Map will show the top 3 (by default) farthest flights, and the top 3 closest pin
 
 The email
 
-![web](https://github.com/user-attachments/assets/a61177a2-b2ee-4720-bc50-3ba89a95bc61)
+<img width="2557" height="1129" alt="4" src="https://github.com/user-attachments/assets/d344c640-4bd4-4ad7-8ba4-dab8aa5d33af" />
+<img width="2555" height="1273" alt="3" src="https://github.com/user-attachments/assets/3dbc2803-2c2c-41dc-9f60-a629ab3ed0e7" />
+<img width="2554" height="626" alt="1" src="https://github.com/user-attachments/assets/607370bf-a855-486c-9339-ba1eb53a18ce" />
 
-The local webpage to track flights or to look at your maps/logs
+
+The local webpage to track flights or to look at your maps/logs/stats. You can look at the overall stats or click on the dates at the bottom to look at stats for individual days
 
 https://github.com/user-attachments/assets/0b4b1fd7-0fd1-4d9d-8753-bb8d455cce10
 
