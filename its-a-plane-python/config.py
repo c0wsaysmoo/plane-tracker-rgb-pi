@@ -50,7 +50,7 @@ OPENSKY_CLIENT_SECRET = "xxxx"
 # FlightAware AeroAPI � route fallback (get key at flightaware.com/aeroapi)
 FLIGHTAWARE_API_KEYS      = "xxx", "xxx" # if more than one key format like ["key1", "key2"] https://www.flightaware.com/aeroapi/signup/personalflight radar 24 api signup
 
-FLIGHTAWARE_MONTHLY_LIMIT = 4.99   # Stop calling FA when this $ limit is reached
+FLIGHTAWARE_MONTHLY_LIMIT = 5.00   # Stop calling FA when this $ limit is reached
 
 # AirLabs � route fallback (get key at airlabs.co)
 AIRLABS_API_KEYS = "xxx" #if you have multiple keys than format like ["key1", "key2"] https://airlabs.co/signup
