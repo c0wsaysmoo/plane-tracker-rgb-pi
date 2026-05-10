@@ -20,15 +20,15 @@ try:
     from config import TOMORROW_API_KEY
     from config import TEMPERATURE_UNITS
     from config import FORECAST_DAYS
+    from config import TEMPERATURE_LOCATION
 except (ModuleNotFoundError, NameError, ImportError):
     TOMORROW_API_KEY = None
     TEMPERATURE_UNITS = "metric"
     FORECAST_DAYS = 3
+    TEMPERATURE_LOCATION = ""
 
 if TEMPERATURE_UNITS not in ("metric", "imperial"):
     TEMPERATURE_UNITS = "metric"
-
-from config import TEMPERATURE_LOCATION
 
 logger = logging.getLogger(__name__)
 
