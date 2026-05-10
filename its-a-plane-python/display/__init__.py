@@ -84,8 +84,11 @@ class Display(
 ):
     def __init__(self):
         options = RGBMatrixOptions()
-        options.hardware_mapping = "regular" 
-        # CHANGE TO THIS FOR OLDER VERSION "adafruit-hat-pwm" if HAT_PWM_ENABLED else "adafruit-hat"
+        bonnet_type = os.environ.get("BONNET_TYPE", "single").lower()
+        if bonnet_type == "triple":
+            options.hardware_mapping = "regular"
+        else:
+            options.hardware_mapping = "adafruit-hat-pwm" if HAT_PWM_ENABLED else "adafruit-hat"
         options.rows = 32
         options.cols = 64
         options.chain_length = 1
