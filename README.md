@@ -31,6 +31,14 @@ Flight Radar 24 is becoming increasingly restricted. I researched community data
 
 By building a system that stacks APIs, triggers only on live ADSB data, and calculates ETAs locally, I've created a version of the clock that is sustainable for the long haul.
 
+It’s been interesting seeing how everyone is pivoting after the FR24 setback. After weighing the options, I’ve decided to go with this configuration for my setup. 
+
+[a10kiloham](https://github.com/a10kiloham/plane-tracker-rgb-pi)
+
+[yashmulgaonkar](https://github.com/yashmulgaonkar/plane-tracker-rgb-pi)
+
+[ajplotkin](https://github.com/ajplotkin/plane-tracker-rgb-pi-f24only)
+
 ---
 **Note:** *I am a solo developer working on this in my free time. I’ve stress-tested the code as much as possible, but please keep in mind that the current build is still fluid. Keep an eye on the repo for further updates!*
 
@@ -51,7 +59,7 @@ Display Features
 
 When tracking begins, the flight data will temporarily replace your three-day forecast with the following:
 
-- Status Header: Displays the logo, airline name, and route. The text is color-coded to indicate if the flight is on time or delayed.
+- Status Header: Displays the logo, airline name, and route. 
 - Progress Visual: A dynamic progress bar with a moving arrow icon. If there isn't current live data during the flight such as crossing the ocean then the arrow icon will turn red. When there is no live data the tracker will calculate time and distance remaining until it refreshes with live data. 
 - Flight Telemetry: The bottom line shows remaining time and distance, aircraft type, airspeed, and altitude (with an arrow indicating climbing or descending).
 Once the flight reaches its destination, the display will automatically switch back to the weather forecast. In the meantime, the clock will continue to show overhead flights as usual.
@@ -68,7 +76,7 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
 
 ## Flight Tracker Screen:
 - Displays the origin and destination airport codes, with distances to both airports.
-- Airport codes are color-coded based on the difference between the scheduled and actual departure times, as well as the scheduled and estimated arrival times.
+- Airport codes are color-coded based on the difference between the scheduled and actual departure times, as well as the scheduled and estimated arrival times. Note that with the switch to multiple providers the ontime data seems to be infrequent.
 
   **Departure:**
   - 0-20 mins: Green
