@@ -223,7 +223,7 @@ def grab_forecast(tag="unknown"):
         logger.debug(f"[Forecast:{tag}] Rate limit: skipping API call, using cache")
         return _cached_forecast if _cached_forecast else []
 
-    dt = datetime.now() - timedelta(days=1)
+    dt = datetime.now()
 
     try:
         _record_call()
