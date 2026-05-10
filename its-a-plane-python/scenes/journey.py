@@ -31,7 +31,7 @@ DISTANCE_FONT = fonts.extrasmall
 ARROW_POINT_POSITION = (42, 5)
 ARROW_WIDTH = 5
 ARROW_HEIGHT = 8
-    
+   
 class JourneyScene(object):
     def __init__(self):
         super().__init__()
@@ -69,7 +69,7 @@ class JourneyScene(object):
 
         departure_delay_minutes = safe_delay(time_real_departure, time_scheduled_departure)
         arrival_delay_minutes = safe_delay(time_estimated_arrival, time_scheduled_arrival)
-        
+
         # Print time differences for debugging
         #print(f"Origin: {origin}, Departure Delay (minutes): {departure_delay_minutes}")
         #print(f"Destination: {destination}, Arrival Delay (minutes): {arrival_delay_minutes}")
@@ -112,13 +112,16 @@ class JourneyScene(object):
             colours.BLACK,
         )
 
+        origin_display = JOURNEY_BLANK_FILLER if not origin or origin == "?" else origin
+        dest_display = JOURNEY_BLANK_FILLER if not destination or destination == "?" else destination
+
         text_length = graphics.DrawText(
             self.canvas,
             JOURNEY_FONT_SELECTED if origin == JOURNEY_CODE_SELECTED else JOURNEY_FONT,
             JOURNEY_POSITION[0],
             JOURNEY_HEIGHT,
             origin_color,
-            origin if origin else JOURNEY_BLANK_FILLER,
+            origin_display,
         )
 
         _ = graphics.DrawText(
@@ -127,7 +130,7 @@ class JourneyScene(object):
             JOURNEY_POSITION[0] + text_length + JOURNEY_SPACING + 1,
             JOURNEY_HEIGHT,
             destination_color,
-            destination if destination else JOURNEY_BLANK_FILLER,
+            dest_display,
         )
 
         center_x = (16 + 64) // 2
