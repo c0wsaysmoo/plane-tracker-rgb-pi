@@ -74,6 +74,36 @@ HELICOPTER_TYPES = {
     "EC45", "EC75", "S61", "S70", "H500", "BALL",
 }
 
+# Multi-brand regionals — these operators fly for multiple airlines.
+# For these, we use flight_number from flight_details to determine the
+# marketing brand (the airline the passenger bought the ticket from).
+AMBIGUOUS_REGIONALS = {
+    # US regionals
+    "RPA", "SKW", "ENY", "JIA", "EDV", "GJS", "CPZ", "ASQ", "PDT", "JZA",
+    # European regionals (operate under major carrier brands)
+    "CLH", "LHX", "DLA", "HOP", "KLC", "CFE", "ANE", "BCY", "EAI", "FCM", "GER",
+}
+
+# Marketing IATA prefix → brand display name
+MARKETING_BRANDS = {
+    # US
+    "UA": "United Airlines", "AA": "American Airlines", "DL": "Delta Air Lines",
+    "AS": "Alaska Airlines", "WN": "Southwest Airlines",
+    "B6": "JetBlue Airways", "NK": "Spirit Airlines", "F9": "Frontier Airlines",
+    # European
+    "LH": "Lufthansa", "BA": "British Airways", "AF": "Air France",
+    "KL": "KLM", "IB": "Iberia", "SK": "SAS", "EI": "Aer Lingus",
+    "AY": "Finnair", "AC": "Air Canada",
+}
+
+# IATA 2-letter → ICAO 3-letter (for logo file lookup)
+IATA_TO_ICAO = {
+    "AA": "AAL", "UA": "UAL", "DL": "DAL", "AS": "ASA", "WN": "SWA",
+    "B6": "JBU", "NK": "NKS", "F9": "FFT", "LH": "DLH", "BA": "BAW",
+    "AF": "AFR", "KL": "KLM", "IB": "IBE", "SK": "SAS", "EI": "EIN",
+    "AY": "FIN", "AC": "ACA",
+}
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 # Writable data directory — outside home dir to avoid systemd ProtectHome issues
@@ -566,17 +596,40 @@ class Overhead:
                         flight_number = self.safe_get(d, "schedule_info", "flight_number", default="")
                         airline_name = self.safe_get(d, "aircraft_info", "registered_owners", default="")
 
-                        # Enrich with local airline database (better display names for regionals)
+                        # Determine airline ICAO from callsign prefix
                         owner_icao = f.airline_icao or ""
-                        local_airline = _airline_name_lookup(owner_icao)
-                        if local_airline:
-                            airline_name = local_airline
+
+                        # Marketing brand lookup for ambiguous regionals
+                        if owner_icao in AMBIGUOUS_REGIONALS and flight_number:
+                            # flight_number is like "AA4370" — extract IATA prefix
+                            iata_prefix = flight_number[:2] if len(flight_number) >= 3 else ""
+                            brand = MARKETING_BRANDS.get(iata_prefix, "")
+                            if brand:
+                                airline_name = brand
+                                # Update logo to match marketing brand
+                                brand_icao = IATA_TO_ICAO.get(iata_prefix)
+                                if brand_icao:
+                                    owner_icao = brand_icao
+                            else:
+                                # Fallback: use local DB or registered_owners
+                                local_airline = _airline_name_lookup(owner_icao)
+                                if local_airline:
+                                    airline_name = local_airline
+                        else:
+                            # Non-regional: use local DB if available
+                            local_airline = _airline_name_lookup(owner_icao)
+                            if local_airline:
+                                airline_name = local_airline
                             stats["airline_lookups"] += 1
 
                         # Helicopter detection — override owner_icao for logo display
                         if plane in HELICOPTER_TYPES:
                             owner_icao = "HELI"
                             stats["helicopters"] += 1
+
+                        # GA airplane icon for N-number flights (no airline ICAO prefix)
+                        elif not owner_icao and f.registration and f.registration.startswith("N") and f.registration[1:2].isdigit():
+                            owner_icao = "GA"
 
                         # GA owner lookup for N-number aircraft with no airline
                         if (not airline_name and f.registration
@@ -716,57 +769,56 @@ class Overhead:
                         if retries == 0:
                             logger.warning(f"Failed to get details for {f.callsign}: {e}")
 
-            # --- STEP 2: Only look for tracked flight if sky is clear ---
-            if not overhead_data:
-                tracked_callsign = load_tracked_callsign()
-                if tracked_callsign:
-                    stats["tracked_callsign"] = tracked_callsign
+            # --- STEP 2: Tracked flight (always check; display shows it when clock is up) ---
+            tracked_callsign = load_tracked_callsign()
+            if tracked_callsign:
+                stats["tracked_callsign"] = tracked_callsign
 
-                    # If callsign changed, reset all state — new flight being tracked
-                    if tracked_callsign != self._tracked_last_callsign:
-                        self._tracked_last_callsign = tracked_callsign
-                        self._tracked_was_live = False
-                        self._tracked_miss_count = 0
-                        self._tracked_last_eta = None
-                        self._tracked_last_data = None
+                # If callsign changed, reset all state — new flight being tracked
+                if tracked_callsign != self._tracked_last_callsign:
+                    self._tracked_last_callsign = tracked_callsign
+                    self._tracked_was_live = False
+                    self._tracked_miss_count = 0
+                    self._tracked_last_eta = None
+                    self._tracked_last_data = None
 
-                    tracked_data = self._grab_tracked(tracked_callsign)
+                tracked_data = self._grab_tracked(tracked_callsign)
 
-                    if tracked_data:
-                        # Flight found — reset miss counter, store latest ETA and data
-                        self._tracked_was_live = True
-                        self._tracked_miss_count = 0
-                        self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
-                        self._tracked_last_data = tracked_data
-                    else:
-                        if self._tracked_was_live:
-                            # Was live before, now missing
-                            now_ts = time()
-                            eta    = self._tracked_last_eta
+                if tracked_data:
+                    # Flight found — reset miss counter, store latest ETA and data
+                    self._tracked_was_live = True
+                    self._tracked_miss_count = 0
+                    self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
+                    self._tracked_last_data = tracked_data
+                else:
+                    if self._tracked_was_live:
+                        # Was live before, now missing
+                        now_ts = time()
+                        eta    = self._tracked_last_eta
 
-                            if eta is not None:
-                                mins_since_eta = (now_ts - eta) / 60
-                                if mins_since_eta > 0:
-                                    # ETA has passed — use miss counter to confirm
-                                    # before wiping (avoids false wipe on brief API hiccup)
-                                    self._tracked_miss_count += 1
-                                    if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
-                                        self._do_auto_wipe()
-                                    elif self._tracked_last_data:
-                                        tracked_data = estimate_stale_data(self._tracked_last_data)
-                                else:
-                                    # ETA still in future — oceanic gap, serve estimated data
-                                    self._tracked_miss_count = 0
-                                    if self._tracked_last_data:
-                                        tracked_data = estimate_stale_data(self._tracked_last_data)
-                            else:
-                                # No ETA data — fall back to miss counter
+                        if eta is not None:
+                            mins_since_eta = (now_ts - eta) / 60
+                            if mins_since_eta > 0:
+                                # ETA has passed — use miss counter to confirm
+                                # before wiping (avoids false wipe on brief API hiccup)
                                 self._tracked_miss_count += 1
                                 if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
                                     self._do_auto_wipe()
                                 elif self._tracked_last_data:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
-                        # If never live, don't increment — pre-flight waiting
+                            else:
+                                # ETA still in future — oceanic gap, serve estimated data
+                                self._tracked_miss_count = 0
+                                if self._tracked_last_data:
+                                    tracked_data = estimate_stale_data(self._tracked_last_data)
+                        else:
+                            # No ETA data — fall back to miss counter
+                            self._tracked_miss_count += 1
+                            if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                self._do_auto_wipe()
+                            elif self._tracked_last_data:
+                                tracked_data = estimate_stale_data(self._tracked_last_data)
+                    # If never live, don't increment — pre-flight waiting
 
             # Update tracked status for pipeline summary
             if tracked_data:
