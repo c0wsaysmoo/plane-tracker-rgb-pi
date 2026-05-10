@@ -124,10 +124,47 @@ def get_session() -> Session:
 TOMORROW_API_URL = "https://api.tomorrow.io/v4"
 
 
+# ─── Persistent File Cache ───────────────────────────────────────────────────
+# Survives reboots — prevents death-spiral when Tomorrow.io 429s on startup.
+import os as _os
+import json as _json
+
+_CACHE_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), ".cache")
+_os.makedirs(_CACHE_DIR, exist_ok=True)
+_TEMP_CACHE_FILE = _os.path.join(_CACHE_DIR, "temperature.json")
+_FORECAST_CACHE_FILE = _os.path.join(_CACHE_DIR, "forecast.json")
+
+
+def _load_file_cache(path):
+    """Load cached data from file. Returns (data, timestamp) or (None, 0)."""
+    try:
+        with open(path, "r") as f:
+            obj = _json.load(f)
+            return obj.get("data"), obj.get("ts", 0)
+    except (FileNotFoundError, _json.JSONDecodeError, KeyError):
+        return None, 0
+
+
+def _save_file_cache(path, data):
+    """Save data + timestamp to file cache."""
+    try:
+        with open(path, "w") as f:
+            _json.dump({"data": data, "ts": time.time()}, f)
+    except (PermissionError, OSError) as e:
+        logger.warning(f"Cannot write cache {path}: {e}")
+
+
 # ─── Temperature & Humidity ──────────────────────────────────────────────────
 _cached_temp = None
 _cached_temp_ts = 0.0
 _TEMP_CACHE_TTL = 3600  # 1 hour
+
+# Load persistent cache on startup
+_startup_temp, _startup_temp_ts = _load_file_cache(_TEMP_CACHE_FILE)
+if _startup_temp and (time.time() - _startup_temp_ts) < _TEMP_CACHE_TTL * 2:
+    _cached_temp = tuple(_startup_temp) if isinstance(_startup_temp, list) else _startup_temp
+    _cached_temp_ts = _startup_temp_ts
+    logger.info(f"Loaded cached temperature from file: {_cached_temp}")
 
 
 def grab_temperature_and_humidity():
@@ -180,6 +217,7 @@ def grab_temperature_and_humidity():
 
         _cached_temp = (temperature, humidity)
         _cached_temp_ts = time.time()
+        _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity])
         return temperature, humidity
 
     except (RequestException, ValueError) as e:
@@ -201,6 +239,13 @@ def grab_temperature_and_humidity():
 _cached_forecast = None
 _cached_forecast_ts = 0.0
 _FORECAST_CACHE_TTL = 3600  # 1 hour
+
+# Load persistent forecast cache on startup
+_startup_fc, _startup_fc_ts = _load_file_cache(_FORECAST_CACHE_FILE)
+if _startup_fc and (time.time() - _startup_fc_ts) < _FORECAST_CACHE_TTL * 2:
+    _cached_forecast = _startup_fc
+    _cached_forecast_ts = _startup_fc_ts
+    logger.info(f"Loaded cached forecast from file ({len(_startup_fc)} intervals)")
 
 
 def grab_forecast(tag="unknown"):
@@ -275,6 +320,7 @@ def grab_forecast(tag="unknown"):
 
         _cached_forecast = intervals
         _cached_forecast_ts = time.time()
+        _save_file_cache(_FORECAST_CACHE_FILE, intervals)
         return intervals
 
     except RequestException as e:
