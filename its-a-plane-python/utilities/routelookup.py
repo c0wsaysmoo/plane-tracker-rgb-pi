@@ -47,6 +47,69 @@ except Exception:
 
 USAGE_FILE = os.path.join(BASE_DIR, "api_usage.json")
 
+# ---------------------------------------------------------------------------
+# Regional brand resolution
+# Multi-brand regionals file under the marketing carrier's callsign prefix.
+# e.g. SKW files as "SKW" but operates UA4370 → show "United Airlines"
+# ---------------------------------------------------------------------------
+
+AMBIGUOUS_REGIONALS = {
+    # US
+    "RPA", "SKW", "ENY", "JIA", "EDV", "GJS", "CPZ", "ASQ", "PDT", "JZA",
+    # European
+    "CLH", "LHX", "DLA", "HOP", "KLC", "CFE", "ANE", "BCY", "EAI", "FCM",
+}
+
+MARKETING_BRANDS = {
+    # US
+    "UA": "United Airlines",    "AA": "American Airlines",
+    "DL": "Delta Air Lines",    "AS": "Alaska Airlines",
+    "WN": "Southwest Airlines", "B6": "JetBlue Airways",
+    "NK": "Spirit Airlines",    "F9": "Frontier Airlines",
+    # European
+    "LH": "Lufthansa",   "BA": "British Airways", "AF": "Air France",
+    "KL": "KLM",         "IB": "Iberia",          "SK": "SAS",
+    "EI": "Aer Lingus",  "AY": "Finnair",          "AC": "Air Canada",
+}
+
+# ---------------------------------------------------------------------------
+# adsbdb GA owner lookup (free, no key, cached 1 hour)
+# ---------------------------------------------------------------------------
+
+import requests as _requests
+from time import time as _time
+
+_adsbdb_cache = {}
+_ADSBDB_TTL   = 3600
+
+def _adsbdb_owner(registration):
+    """Look up registered owner of an N-number aircraft via adsbdb.com.
+    Returns owner name string or empty string. Results cached 1 hour."""
+    if not registration:
+        return ""
+    cached = _adsbdb_cache.get(registration)
+    if cached and (_time() - cached["ts"]) < _ADSBDB_TTL:
+        return cached["name"]
+    try:
+        r = _requests.get(
+            f"https://api.adsbdb.com/v0/aircraft/{registration}",
+            timeout=8,
+        )
+        if r.status_code == 404:
+            _adsbdb_cache[registration] = {"name": "", "ts": _time()}
+            return ""
+        r.raise_for_status()
+        ac = r.json().get("response", {}).get("aircraft") or {}
+        name = ac.get("registered_owner", "")
+        if name and name == name.upper():
+            name = name.title()
+        _adsbdb_cache[registration] = {"name": name, "ts": _time()}
+        return name
+    except Exception:
+        # Cache failure briefly so we don't hammer on errors
+        _adsbdb_cache[registration] = {"name": "", "ts": _time() - _ADSBDB_TTL + 300}
+        return ""
+
 
 def _load_usage():
     try:
@@ -128,11 +191,12 @@ def _is_plausible(result, plane_lat, plane_lon):
     return (to_o + to_d) <= total * 1.25
 
 
-def _normalise(result, callsign, plane_lat, plane_lon):
+def _normalise(result, callsign, plane_lat, plane_lon, registration=""):
     """
     Convert any source's result into the standard entry dict
     that overhead.py / display scenes expect.
     Adds distance_origin and distance_destination.
+    Applies regional brand resolution and adsbdb GA owner fallback.
     """
     if not result:
         return None
@@ -161,15 +225,30 @@ def _normalise(result, callsign, plane_lat, plane_lon):
     dest_lat   = result.get("destination_latitude") or result.get("dest_lat")
     dest_lon   = result.get("destination_longitude") or result.get("dest_lon")
 
-
     # owner_icao used for logo — must be 3-letter ICAO, never 2-letter IATA
     owner_icao = result.get("airline_icao", "")
     if not owner_icao and len(callsign) >= 3 and callsign[:3].isalpha():
         owner_icao = callsign[:3]
-    owner_icao = owner_icao or ""  # never None
+    owner_icao = owner_icao or ""
+
+    # Airline name: start with what the source gave us
+    airline_name = result.get("airline_name", "") or result.get("operator", "") or ""
+
+    # Regional brand override — if operator is a known regional, use the
+    # marketing brand name from the callsign prefix (e.g. UA4370 → "United Airlines")
+    # but keep owner_icao as the actual operator (SKW) so the correct logo shows
+    if owner_icao in AMBIGUOUS_REGIONALS:
+        iata_prefix = callsign[:2] if len(callsign) >= 3 else ""
+        brand = MARKETING_BRANDS.get(iata_prefix, "")
+        if brand:
+            airline_name = brand
+
+    # GA fallback — N-number with no airline name → look up registered owner
+    if not airline_name and registration and registration.startswith("N") and registration[1:2].isdigit():
+        airline_name = _adsbdb_owner(registration)
 
     return {
-        "airline":               result.get("airline_name", ""),
+        "airline":               airline_name,
         "plane":                 result.get("plane_type", "") or result.get("aircraft_type", ""),
         "origin":                result.get("origin_iata", "?") or "?",
         "origin_latitude":       origin_lat,
@@ -236,7 +315,7 @@ class RouteClient:
                     print(f"[RouteClient] AirLabs {result.get('origin_iata')}-{result.get('dest_iata')} "
                           f"rejected for {callsign} — trying next source")
                 else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon)
+                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
                     if normalised:
                         return _cache_and_return(normalised)
 
@@ -249,7 +328,7 @@ class RouteClient:
                     print(f"[RouteClient] FlightAware {result.get('origin_iata')}-{result.get('dest_iata')} "
                           f"rejected for {callsign} — trying next source")
                 else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon)
+                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
                     if normalised:
                         return _cache_and_return(normalised)
 
@@ -263,7 +342,7 @@ class RouteClient:
                     print(f"[RouteClient] FR24 {result.get('origin_iata')}-{result.get('dest_iata')} "
                           f"rejected for {callsign} — all sources exhausted")
                 else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon)
+                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
                     if normalised:
                         return _cache_and_return(normalised)
 
