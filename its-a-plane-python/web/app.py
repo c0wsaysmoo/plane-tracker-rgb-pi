@@ -96,6 +96,11 @@ def lookup_flight(callsign):
         return {"found": False, "error": str(e)}
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(os.path.join(WEB_DIR, "static"), "favicon.ico", mimetype="image/x-icon")
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
