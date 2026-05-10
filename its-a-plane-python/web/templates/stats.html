@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Stats</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+  :root {
+    --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.08); --amber-bright: #ffd54f;
+    --green: #69f0ae; --red: #ff3d00; --orange: #ff9800;
+    --row-border: rgba(255,179,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--amber);
+    font-family: 'Share Tech Mono', monospace; min-height: 100vh; padding-bottom: 24px;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none; z-index: 1000;
+  }
+  .board-header {
+    background: var(--amber); color: var(--bg);
+    padding: 10px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .board-title { font-family: 'VT323', monospace; font-size: 28px; letter-spacing: 4px; text-transform: uppercase; }
+  .board-sub { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.6; margin-left: 4px; }
+  .back { font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px; margin-left: auto;
+          background: var(--bg); color: var(--amber); padding: 2px 12px; text-decoration: none; }
+
+  .content { padding: 0 16px; }
+
+  .stats-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-bottom: 16px;
+  }
+  .stat-card {
+    border: 1px solid var(--amber-dim); border-top: 2px solid var(--amber);
+    padding: 12px 14px; background: rgba(255,179,0,0.03);
+  }
+  .stat-label { font-family: 'VT323', monospace; font-size: 18px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 4px; }
+  .stat-value { font-family: 'VT323', monospace; font-size: 32px; color: var(--amber-bright); line-height: 1; }
+  .stat-sub { font-size: 13px; color: var(--amber); margin-top: 2px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .chart-full { grid-column: 1 / -1; }
+
+  .panel {
+    border: 1px solid var(--amber-dim); padding: 16px;
+    background: rgba(255,179,0,0.02);
+  }
+  .panel-title {
+    font-family: 'VT323', monospace;
+    font-size: 22px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--amber-bright); margin-bottom: 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--amber-dim);
+  }
+  canvas { max-height: 200px; }
+
+  .day-table { width: 100%; border-collapse: collapse; font-family: 'VT323', monospace; font-size: 20px; }
+  .day-table th {
+    text-align: left; padding: 5px 10px; color: var(--amber-bright);
+    font-size: 14px; letter-spacing: 2px; text-transform: uppercase;
+    border-bottom: 1px solid var(--amber-dim); font-family: 'VT323', monospace;
+  }
+  .day-table td { padding: 6px 10px; border-bottom: 1px solid var(--row-border); }
+  .day-table tr:hover td { background: var(--amber-glow); cursor: pointer; }
+  .day-table tr:last-child td { border-bottom: none; }
+  .num { color: var(--amber-bright); }
+  .dim { color: var(--amber-dim); font-size: 16px; }
+  .bar-inline {
+    display: inline-block; height: 6px;
+    background: linear-gradient(90deg, var(--amber), rgba(255,179,0,0.3));
+    vertical-align: middle; margin-left: 8px;
+  }
+
+  .loading {
+    text-align: center; padding: 60px; color: var(--amber-dim);
+    font-family: 'VT323', monospace; font-size: 24px; letter-spacing: 3px;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="board-header">
+  <span style="font-size:22px">✈</span>
+  <div class="board-title">Flight Stats<span class="board-sub"> / Overhead Analysis</span></div>
+  <a class="back" href="/">← BOARD</a>
+</div>
+
+<div class="content">
+  <div id="content"><div class="loading">Loading flight data...</div></div>
+</div>
+
+<script>
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const AIRLINE_NAMES = {
+  'AAL':'American Airlines','UAL':'United Airlines','DAL':'Delta Air Lines',
+  'SWA':'Southwest Airlines','ASA':'Alaska Airlines','JBU':'JetBlue Airways',
+  'FFT':'Frontier Airlines','NKS':'Spirit Airlines','SKW':'SkyWest Airlines',
+  'RPA':'Republic Airways','ENY':'Envoy Air','GJS':'GoJet Airlines',
+  'EDV':'Endeavor Air','JIA':'Mesa Airlines','GTI':'Atlas Air',
+  'FDX':'FedEx Express','UPS':'UPS Airlines','ACA':'Air Canada',
+  'WJA':'WestJet','AFR':'Air France','DLH':'Lufthansa','BAW':'British Airways',
+  'KLM':'KLM','UAE':'Emirates','QFA':'Qantas','SIA':'Singapore Airlines',
+  'CPA':'Cathay Pacific','JAL':'Japan Airlines','ANA':'All Nippon Airways',
+};
+const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
+
+const CHART_OPT = {
+  responsive:true, maintainAspectRatio:true,
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}}},
+    y:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}},beginAtZero:true}
+  }
+};
+
+async function loadData() {
+  const [s,f,a] = await Promise.all([
+    fetch('/counter/summary').then(r=>r.json()),
+    fetch('/counter').then(r=>r.json()),
+    fetch('/airport-code').then(r=>r.json()),
+  ]);
+  return {summary:s, full:f, airportCode:a.code};
+}
+
+function localVsFlyover(full, airportCode) {
+  let local = 0, flyover = 0, unknown = 0;
+  Object.values(full).forEach(day => (day.flights||[]).forEach(f => {
+    const origin = (f.origin || '').toUpperCase();
+    const dest   = (f.dest   || '').toUpperCase();
+    const code   = airportCode.toUpperCase();
+    if (!origin && !dest) { unknown++; }
+    else if (origin === code || dest === code) { local++; }
+    else { flyover++; }
+  }));
+  return {local, flyover, unknown};
+}
+
+function avgByHour(days) {
+  const t=new Array(24).fill(0);
+  days.forEach(d=>d.by_hour.forEach((v,i)=>t[i]+=v));
+  return t.map(v=>days.length?+(v/days.length).toFixed(1):0);
+}
+
+function avgByDow(days) {
+  const t=new Array(7).fill(0),c=new Array(7).fill(0);
+  days.forEach(d=>{const dow=new Date(d.date+'T12:00:00').getDay();t[dow]+=d.count;c[dow]++;});
+  return t.map((v,i)=>c[i]?+(v/c[i]).toFixed(1):0);
+}
+
+function airlineBreakdown(full) {
+  const tally={};
+  Object.values(full).forEach(day=>(day.flights||[]).forEach(f=>{
+    const p=f.callsign.replace(/[0-9]/g,'').slice(0,3);
+    tally[p]=(tally[p]||0)+1;
+  }));
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
+async function render() {
+  const {summary,full,airportCode} = await loadData();
+  if (!summary.length) {
+    document.getElementById('content').innerHTML='<div class="loading">No data yet — flights will appear here once logged.</div>';
+    return;
+  }
+  const totalDays=summary.length;
+  const totalFlights=summary.reduce((s,d)=>s+d.count,0);
+  const avgPerDay=(totalFlights/totalDays).toFixed(1);
+  const maxDay=summary.reduce((a,b)=>b.count>a.count?b:a);
+  const hourAvg=avgByHour(summary);
+  const peakHour=hourAvg.indexOf(Math.max(...hourAvg));
+  const dowAvg=avgByDow(summary);
+  const peakDowIdx=dowAvg.indexOf(Math.max(...dowAvg));
+  const airlines=airlineBreakdown(full);
+  const sorted=[...summary].reverse();
+  const maxCount=Math.max(...summary.map(d=>d.count));
+
+  document.getElementById('content').innerHTML=`
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Daily Average</div><div class="stat-value">${avgPerDay}</div><div class="stat-sub">flights/day over ${totalDays} days</div></div>
+      <div class="stat-card"><div class="stat-label">Busiest Day</div><div class="stat-value">${maxDay.count}</div><div class="stat-sub">${maxDay.date}</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${peakHour}:00</div><div class="stat-sub">${hourAvg[peakHour].toFixed(1)} avg flights</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Day</div><div class="stat-value">${DAYS[peakDowIdx]}</div><div class="stat-sub">${dowAvg[peakDowIdx].toFixed(1)} avg flights</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="panel chart-full"><div class="panel-title">▸ Average Flights by Hour of Day</div><canvas id="hourChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Average Flights by Day of Week</div><canvas id="dowChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airline Breakdown (Top 12)</div><canvas id="airlineChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
+        <table class="day-table">
+          <thead><tr><th>Date</th><th>Flights</th><th>First Seen</th><th>Last Seen</th><th></th></tr></thead>
+          <tbody>${sorted.map(d=>`
+            <tr onclick="window.location='/stats/${d.date}'" style="cursor:pointer">
+              <td style="color:var(--amber-bright)">${d.date}</td>
+              <td class="num">${d.count}</td>
+              <td class="dim">${d.first_seen}</td>
+              <td class="dim">${d.last_seen}</td>
+              <td><span class="bar-inline" style="width:${Math.round((d.count/maxCount)*120)}px"></span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  // Local vs flyover pie
+  const lf = localVsFlyover(full, airportCode);
+  new Chart(document.getElementById('localFlyoverChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: [`Local (${airportCode})`, 'Flyover', 'Unknown'],
+      datasets: [{
+        data: [lf.local, lf.flyover, lf.unknown],
+        backgroundColor: ['#ffb30099','#69f0ae99','#7a550099'],
+        borderColor:     ['#ffb300',  '#69f0ae',  '#7a5500'],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          const pct = total ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+          return ` ${ctx.label} — ${ctx.parsed} (${pct}%)`;
+        }}}
+      }
+    }
+  });
+
+  new Chart(document.getElementById('hourChart').getContext('2d'),{
+    type:'bar',data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:hourAvg,backgroundColor:'rgba(255,179,0,0.2)',borderColor:'#ffb300',borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+
+  new Chart(document.getElementById('dowChart').getContext('2d'),{
+    type:'bar',data:{labels:DAYS,datasets:[{data:dowAvg,backgroundColor:'rgba(255,179,0,0.2)',borderColor:'#ffb300',borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+
+  new Chart(document.getElementById('airlineChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airlines.map(([k])=>k),datasets:[{data:airlines.map(([,v])=>v),backgroundColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),borderColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
+      tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+    }}});
+}
+
+render().catch(e=>{document.getElementById('content').innerHTML=`<div class="loading">Error: ${e.message}</div>`;});
+</script>
+</body>
+</html>

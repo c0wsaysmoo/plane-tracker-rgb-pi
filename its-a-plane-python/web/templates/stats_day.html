@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Stats — Day Detail</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+  :root {
+    --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.08); --amber-bright: #ffd54f;
+    --green: #69f0ae; --red: #ff3d00; --orange: #ff9800;
+    --row-border: rgba(255,179,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--amber);
+    font-family: 'Share Tech Mono', monospace; min-height: 100vh; padding-bottom: 24px;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none; z-index: 1000;
+  }
+  .board-header {
+    background: var(--amber); color: var(--bg);
+    padding: 10px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .board-title { font-family: 'VT323', monospace; font-size: 28px; letter-spacing: 4px; text-transform: uppercase; }
+  .board-sub { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.6; margin-left: 4px; font-family: 'Share Tech Mono', monospace; }
+  .nav-links { margin-left: auto; display: flex; gap: 8px; }
+  .back { font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px;
+          background: var(--bg); color: var(--amber); padding: 2px 12px; text-decoration: none; }
+
+  .content { padding: 0 16px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 8px; margin-bottom: 16px; }
+  .stat-card { border: 1px solid var(--amber-dim); border-top: 2px solid var(--amber); padding: 12px 14px; background: rgba(255,179,0,0.03); }
+  .stat-label { font-family: 'VT323', monospace; font-size: 18px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 4px; }
+  .stat-value { font-family: 'VT323', monospace; font-size: 32px; color: var(--amber-bright); line-height: 1; }
+  .stat-sub { font-size: 13px; color: var(--amber); margin-top: 2px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chart-full { grid-column: 1 / -1; }
+
+  .panel { border: 1px solid var(--amber-dim); padding: 16px; background: rgba(255,179,0,0.02); }
+  .panel-title { font-family: 'VT323', monospace; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--amber-dim); }
+
+  canvas { max-height: 200px; }
+
+  .flight-table { width: 100%; border-collapse: collapse; font-family: 'VT323', monospace; font-size: 20px; }
+  .flight-table th { text-align: left; padding: 5px 8px; color: var(--amber-bright); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid var(--amber-dim); font-family: 'VT323', monospace; }
+  .flight-table td { padding: 5px 8px; border-bottom: 1px solid var(--row-border); }
+  .flight-table tr:last-child td { border-bottom: none; }
+  .callsign { color: var(--amber-bright); }
+  .dim { color: var(--amber-dim); }
+
+  .loading { text-align: center; padding: 60px; color: var(--amber-dim); font-family: 'VT323', monospace; font-size: 24px; letter-spacing: 3px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="board-header">
+  <span style="font-size:22px">✈</span>
+  <div>
+    <span class="board-title" id="page-title">Loading...</span>
+    <span class="board-sub" id="page-sub"></span>
+  </div>
+  <div class="nav-links">
+    <a class="back" href="/stats">← STATS</a>
+    <a class="back" href="/">← BOARD</a>
+  </div>
+</div>
+
+<div class="content">
+  <div id="content"><div class="loading">Loading flight data...</div></div>
+</div>
+
+<script>
+const AIRLINE_NAMES = {
+  'AAL':'American Airlines','UAL':'United Airlines','DAL':'Delta Air Lines',
+  'SWA':'Southwest Airlines','ASA':'Alaska Airlines','JBU':'JetBlue Airways',
+  'FFT':'Frontier Airlines','NKS':'Spirit Airlines','SKW':'SkyWest Airlines',
+  'RPA':'Republic Airways','ENY':'Envoy Air','GJS':'GoJet Airlines',
+  'EDV':'Endeavor Air','GTI':'Atlas Air','FDX':'FedEx Express',
+  'UPS':'UPS Airlines','ACA':'Air Canada','AFR':'Air France',
+  'DLH':'Lufthansa','BAW':'British Airways','KLM':'KLM','UAE':'Emirates',
+};
+const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
+
+const CHART_OPT = {
+  responsive:true, maintainAspectRatio:true,
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}}},
+    y:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}},beginAtZero:true}
+  }
+};
+
+const date = window.location.pathname.split('/').pop();
+let AIRPORT_CODE = 'ORD';
+
+function localVsFlyover(flights, airportCode) {
+  let local = 0, flyover = 0, unknown = 0;
+  flights.forEach(f => {
+    const origin = (f.origin || '').toUpperCase();
+    const dest   = (f.dest   || '').toUpperCase();
+    const code   = airportCode.toUpperCase();
+    if (!origin && !dest) { unknown++; }
+    else if (origin === code || dest === code) { local++; }
+    else { flyover++; }
+  });
+  return {local, flyover, unknown};
+}
+
+function airlineBreakdown(flights) {
+  const tally={};
+  flights.forEach(f=>{const p=f.callsign.replace(/[0-9]/g,'').slice(0,3);tally[p]=(tally[p]||0)+1;});
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
+async function render() {
+  try {
+    const ac = await fetch('/airport-code').then(r=>r.json());
+    AIRPORT_CODE = ac.code || 'ORD';
+  } catch(e) {}
+  const resp = await fetch('/counter');
+  const log  = await resp.json();
+  const day  = log[date] || null;
+
+  if (!day) {
+    document.getElementById('content').innerHTML=`<div class="loading">No data found for ${date}</div>`;
+    document.getElementById('page-title').textContent=date;
+    return;
+  }
+
+  const flights = day.flights || [];
+  const byHour  = new Array(24).fill(0);
+  flights.forEach(f=>byHour[f.hour]++);
+  const peakHour = byHour.indexOf(Math.max(...byHour));
+  const airlines = airlineBreakdown(flights);
+
+  const d = new Date(date+'T12:00:00');
+  const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+
+  document.getElementById('page-title').textContent = date;
+  document.getElementById('page-sub').textContent = ` / ${dayName}`;
+
+  document.getElementById('content').innerHTML=`
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Flights</div><div class="stat-value">${day.count}</div><div class="stat-sub">unique callsigns</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${peakHour}:00</div><div class="stat-sub">${byHour[peakHour]} flights</div></div>
+      <div class="stat-card"><div class="stat-label">First Seen</div><div class="stat-value" style="font-size:24px">${day.first_seen}</div><div class="stat-sub">${flights[0]?.callsign||''}</div></div>
+      <div class="stat-card"><div class="stat-label">Last Seen</div><div class="stat-value" style="font-size:24px">${day.last_seen}</div><div class="stat-sub">${flights[flights.length-1]?.callsign||''}</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="panel chart-full"><div class="panel-title">▸ Flights by Hour</div><canvas id="hourChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel">
+        <div class="panel-title">▸ All Flights — ${day.count} total</div>
+        <div style="max-height:280px;overflow-y:auto">
+          <table class="flight-table">
+            <thead><tr><th>#</th><th>Callsign</th><th>Time</th></tr></thead>
+            <tbody>${flights.map((f,i)=>`<tr><td class="dim">${i+1}</td><td class="callsign">${f.callsign}</td><td class="dim">${f.time}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  // Local vs flyover pie
+  const lf = localVsFlyover(flights, AIRPORT_CODE);
+  new Chart(document.getElementById('localFlyoverChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: [`Local (${AIRPORT_CODE})`, 'Flyover', 'Unknown'],
+      datasets: [{
+        data: [lf.local, lf.flyover, lf.unknown],
+        backgroundColor: ['#ffb30099','#69f0ae99','#7a550099'],
+        borderColor:     ['#ffb300',  '#69f0ae',  '#7a5500'],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          const pct = total ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+          return ` ${ctx.label} — ${ctx.parsed} (${pct}%)`;
+        }}}
+      }
+    }
+  });
+
+  new Chart(document.getElementById('hourChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:byHour,
+      backgroundColor:byHour.map((_,i)=>i===peakHour?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),
+      borderColor:byHour.map((_,i)=>i===peakHour?'#ff6b35':'#ffb300'),
+      borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+
+  new Chart(document.getElementById('airlineChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airlines.map(([k])=>k),datasets:[{data:airlines.map(([,v])=>v),
+      backgroundColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),
+      borderColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
+      tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+    }}});
+}
+
+render().catch(e=>{document.getElementById('content').innerHTML=`<div class="loading">Error: ${e.message}</div>`;});
+</script>
+</body>
+</html>
