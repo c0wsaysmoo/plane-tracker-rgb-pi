@@ -38,10 +38,6 @@ except (ImportError, ModuleNotFoundError, NameError):
                     "br_y": 41.851654, "br_x": -87.573027}
     LOCATION_DEFAULT = [41.882724, -87.623350]
 
-try:
-    from config import SEARCH_RADIUS_NM
-except (ImportError, ModuleNotFoundError, NameError):
-    SEARCH_RADIUS_NM = None
 
 # Local databases for offline lookups (no API calls needed)
 try:
@@ -122,6 +118,7 @@ HOSTNAME = socket.gethostname()
 # In-memory caches for adsbdb lookups (GA aircraft owner info)
 _aircraft_cache = {}  # registration -> {data, ts}
 _CACHE_TTL = 3600     # 1 hour
+_CACHE_MAX_SIZE = 500  # Evict oldest entries beyond this
 
 
 # Utility Functions
@@ -277,6 +274,14 @@ def _airline_name_lookup(icao_code):
     return ""
 
 
+def _evict_aircraft_cache():
+    """Evict oldest entries if cache exceeds max size."""
+    if len(_aircraft_cache) > _CACHE_MAX_SIZE:
+        sorted_keys = sorted(_aircraft_cache, key=lambda k: _aircraft_cache[k]["ts"])
+        for k in sorted_keys[:len(_aircraft_cache) - _CACHE_MAX_SIZE]:
+            del _aircraft_cache[k]
+
+
 def _adsbdb_aircraft(registration):
     """Fetch aircraft owner info by registration from adsbdb (free, cached 1hr).
     Used for GA flights (N-numbers) where FR24 has no airline name."""
@@ -289,11 +294,13 @@ def _adsbdb_aircraft(registration):
         r = requests.get(url, timeout=10)
         if r.status_code == 404:
             _aircraft_cache[registration] = {"data": {}, "ts": time()}
+            _evict_aircraft_cache()
             return {}
         r.raise_for_status()
         ac = r.json().get("response", {}).get("aircraft")
         if not ac:
             _aircraft_cache[registration] = {"data": {}, "ts": time()}
+            _evict_aircraft_cache()
             return {}
         result = {
             "owner": ac.get("registered_owner", ""),
@@ -302,6 +309,7 @@ def _adsbdb_aircraft(registration):
             "registration": ac.get("registration", ""),
         }
         _aircraft_cache[registration] = {"data": result, "ts": time()}
+        _evict_aircraft_cache()
         return result
     except Exception as e:
         logger.debug(f"adsbdb aircraft error for {registration}: {e}")
@@ -572,7 +580,6 @@ class Overhead:
             for f in flights:
                 retries = RETRIES
                 while retries:
-                    sleep(RATE_LIMIT_DELAY)
                     try:
                         d = self._api.get_flight_details(f)
                         stats["details_fetched"] += 1
@@ -809,7 +816,7 @@ class Overhead:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
                             else:
                                 # ETA still in future — oceanic gap, serve estimated data
-                                self._tracked_miss_count = 0
+                                # Don't reset miss counter (preserve accumulation for post-ETA)
                                 if self._tracked_last_data:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
                         else:
@@ -844,8 +851,6 @@ class Overhead:
 
         except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
             logger.warning(f"Overhead: Network error during _grab: {type(e).__name__}: {e}")
-            # FIX: Set _new_data = True with empty data so the main loop doesn't
-            # spin forever in `while not o.new_data` (error handler freeze bug)
             with self._lock:
                 self._data = []
                 self._tracked_data = None
@@ -853,11 +858,14 @@ class Overhead:
                 self._processing = False
         except Exception as e:
             logger.error(f"Overhead: Unexpected error in _grab: {type(e).__name__}: {e}", exc_info=True)
-            # FIX: Same — signal completion even on failure so display can proceed
             with self._lock:
                 self._data = []
                 self._tracked_data = None
                 self._new_data = True
+                self._processing = False
+        finally:
+            # Guarantee processing flag is cleared even on BaseException
+            with self._lock:
                 self._processing = False
 
     def _do_auto_wipe(self):
@@ -887,7 +895,7 @@ class Overhead:
                     None,
                 )
 
-            # Strategy 1: wide bounding box search (bypasses rate limiter)
+            # Strategy 1: wide bounding box search (respects 90s rate limit)
             if not match:
                 wide_bounds = {
                     "tl_y": 70.0,   # North
@@ -895,9 +903,8 @@ class Overhead:
                     "br_y": 10.0,   # South
                     "br_x": 40.0,   # East
                 }
-                # Reset per-key rate limit so tracked search isn't blocked
                 wide_key = self._api.cache.make_feed_cache_key(wide_bounds)
-                self._api.cache.reset_feed_key(wide_key)
+                # Use normal rate limiting — don't force reset every cycle
                 flights = self._api.get_flights(bounds=wide_bounds)
                 match = next(
                     (f for f in flights
@@ -908,7 +915,6 @@ class Overhead:
             if not match:
                 return None
 
-            sleep(RATE_LIMIT_DELAY)
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
 

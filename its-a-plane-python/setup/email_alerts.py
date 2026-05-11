@@ -24,9 +24,12 @@ def _send(subject: str, body: str, attachment_path: Optional[str] = None):
     if not EMAIL.strip():
         return
 
-    sender = "flight.tracker.alerts2025@gmail.com"
-    password = "wlst ujvs bcvu uhdr"
+    sender = os.environ.get("EMAIL_SENDER", "flight.tracker.alerts2025@gmail.com")
+    password = os.environ.get("EMAIL_PASSWORD", "")
     receiver = EMAIL
+
+    if not password:
+        return  # No email password configured
 
     if attachment_path and os.path.isfile(attachment_path):
         msg = MIMEMultipart()

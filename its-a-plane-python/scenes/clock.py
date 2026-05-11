@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from utilities.temperature import grab_forecast
 from utilities.animator import Animator
 from setup import colours, fonts, frames
@@ -68,7 +68,7 @@ class ClockScene(object):
         current_time = now.strftime(clock_format)
 
         utc_sunrise, utc_sunset = self.calculate_sunrise_sunset()
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc)
 
         if utc_sunrise is None or utc_sunset is None:
             clock_color = colours.RED

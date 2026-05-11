@@ -33,38 +33,54 @@ if TEMPERATURE_UNITS not in ("metric", "imperial"):
 logger = logging.getLogger(__name__)
 
 # ─── Rate Limiter ────────────────────────────────────────────────────────────
-# Normal mode: no more than 1 API call per hour (3600s).
+# Separate rate limiters for temperature and forecast so they don't block each other.
+# Normal mode: 1 API call per 30 minutes per endpoint.
 # Backoff mode (after 429): 1 call every 10 minutes until success.
-_NORMAL_INTERVAL_S = 3600   # 1 hour between calls
+# Backoff auto-clears after 2 hours regardless.
+_NORMAL_INTERVAL_S = 1800   # 30 min between calls per endpoint
 _BACKOFF_INTERVAL_S = 600   # 10 minutes when rate-limited
-_last_call_ts = 0.0
+_BACKOFF_AUTO_CLEAR_S = 7200  # Auto-clear backoff after 2 hours
+
+_temp_last_call_ts = 0.0
+_fc_last_call_ts = 0.0
 _in_backoff = False
+_backoff_entered_ts = 0.0
 _rate_lock = threading.Lock()
 
 
-def _rate_limited() -> bool:
+def _rate_limited(endpoint: str = "temp") -> bool:
     """Return True if we should skip this API call due to rate limiting."""
-    global _last_call_ts, _in_backoff
+    global _in_backoff, _backoff_entered_ts
     with _rate_lock:
-        elapsed = time.time() - _last_call_ts
+        # Auto-clear backoff after 2 hours
+        if _in_backoff and (time.time() - _backoff_entered_ts) > _BACKOFF_AUTO_CLEAR_S:
+            _in_backoff = False
+            logger.info("Tomorrow.io: backoff auto-cleared after 2 hours")
+
+        last_ts = _temp_last_call_ts if endpoint == "temp" else _fc_last_call_ts
+        elapsed = time.time() - last_ts
         interval = _BACKOFF_INTERVAL_S if _in_backoff else _NORMAL_INTERVAL_S
         if elapsed < interval:
             return True
         return False
 
 
-def _record_call():
+def _record_call(endpoint: str = "temp"):
     """Record that an API call was just made."""
-    global _last_call_ts
+    global _temp_last_call_ts, _fc_last_call_ts
     with _rate_lock:
-        _last_call_ts = time.time()
+        if endpoint == "temp":
+            _temp_last_call_ts = time.time()
+        else:
+            _fc_last_call_ts = time.time()
 
 
 def _enter_backoff():
     """Enter backoff mode after receiving 429."""
-    global _in_backoff
+    global _in_backoff, _backoff_entered_ts
     with _rate_lock:
         _in_backoff = True
+        _backoff_entered_ts = time.time()
     logger.warning("Tomorrow.io: entering backoff mode (retry every 10 min)")
 
 
@@ -74,7 +90,7 @@ def _exit_backoff():
     with _rate_lock:
         if _in_backoff:
             _in_backoff = False
-            logger.info("Tomorrow.io: backoff cleared, resuming 1hr interval")
+            logger.info("Tomorrow.io: backoff cleared, resuming normal interval")
 
 
 # ─── DNS helper ──────────────────────────────────────────────────────────────
@@ -183,12 +199,11 @@ def grab_temperature_and_humidity():
         return _cached_temp
 
     # Rate limit check
-    if _rate_limited():
+    if _rate_limited("temp"):
         logger.debug("Rate limit: skipping temperature API call, using cache")
         return _cached_temp if _cached_temp else (None, None)
 
     try:
-        _record_call()
         s = get_session()
         request = s.get(
             f"{TOMORROW_API_URL}/weather/realtime",
@@ -201,10 +216,12 @@ def grab_temperature_and_humidity():
         )
 
         if request.status_code == 429:
+            _record_call("temp")
             _enter_backoff()
             return _cached_temp if _cached_temp else (None, None)
 
         request.raise_for_status()
+        _record_call("temp")
         _exit_backoff()
 
         data = request.json().get("data", {}).get("values", {})
@@ -222,6 +239,7 @@ def grab_temperature_and_humidity():
 
     except (RequestException, ValueError) as e:
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        _exit_backoff()  # Non-429 failure shouldn't keep us in backoff
 
         if is_dns_error(e):
             logger.error(
@@ -264,14 +282,13 @@ def grab_forecast(tag="unknown"):
         return _cached_forecast
 
     # Rate limit check
-    if _rate_limited():
+    if _rate_limited("forecast"):
         logger.debug(f"[Forecast:{tag}] Rate limit: skipping API call, using cache")
         return _cached_forecast if _cached_forecast else []
 
     dt = datetime.now()
 
     try:
-        _record_call()
         s = get_session()
         resp = s.post(
             f"{TOMORROW_API_URL}/timelines",
@@ -301,10 +318,12 @@ def grab_forecast(tag="unknown"):
         )
 
         if resp.status_code == 429:
+            _record_call("forecast")
             _enter_backoff()
             return _cached_forecast if _cached_forecast else []
 
         resp.raise_for_status()
+        _record_call("forecast")
         _exit_backoff()
 
         data = resp.json().get("data", {})
@@ -325,6 +344,7 @@ def grab_forecast(tag="unknown"):
 
     except RequestException as e:
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        _exit_backoff()  # Non-429 failure shouldn't keep us in backoff
 
         if is_dns_error(e):
             logger.error(
