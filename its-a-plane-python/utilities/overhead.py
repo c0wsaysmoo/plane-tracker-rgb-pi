@@ -697,28 +697,29 @@ class Overhead:
 
                         # Calculate distances: prefer local airport coords, fallback to flight_progress
                         fp = self.safe_get(d, "flight_progress") or {}
-                        traversed_m = fp.get("traversed_distance", 0) or 0
-                        remaining_m = fp.get("remaining_distance", 0) or 0
+                        traversed_km = fp.get("traversed_distance", 0) or 0
+                        remaining_km = fp.get("remaining_distance", 0) or 0
 
                         # Use local airport coords for distance if available
                         if origin_lat is not None and origin_lon is not None:
                             dist_o = haversine(f.latitude, f.longitude, origin_lat, origin_lon)
-                        elif traversed_m:
-                            # Fallback to flight_progress (meters → display units)
+                        elif traversed_km:
+                            # Fallback to flight_progress (values are in km)
                             if DISTANCE_UNITS == "metric":
-                                dist_o = traversed_m / 1000.0
+                                dist_o = traversed_km
                             else:
-                                dist_o = traversed_m / 1609.344
+                                dist_o = traversed_km / 1.609344
                         else:
                             dist_o = 0
 
                         if dest_lat is not None and dest_lon is not None:
                             dist_d = haversine(f.latitude, f.longitude, dest_lat, dest_lon)
-                        elif remaining_m:
+                        elif remaining_km:
+                            # Fallback to flight_progress (values are in km)
                             if DISTANCE_UNITS == "metric":
-                                dist_d = remaining_m / 1000.0
+                                dist_d = remaining_km
                             else:
-                                dist_d = remaining_m / 1609.344
+                                dist_d = remaining_km / 1.609344
                         else:
                             dist_d = 0
 
@@ -918,10 +919,10 @@ class Overhead:
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
 
-            # Use flight_progress from the API for distances (in METERS)
+            # Use flight_progress from the API for distances (values are in KM)
             fp = self.safe_get(flight_details, "flight_progress") or {}
-            remaining_m = fp.get("remaining_distance", 0) or 0
-            total_m = fp.get("great_circle_distance", 0) or 0
+            remaining_km = fp.get("remaining_distance", 0) or 0
+            total_km = fp.get("great_circle_distance", 0) or 0
             eta = fp.get("eta", 0) or 0
 
             # Look up airport coordinates from local database for distance calculations
@@ -936,11 +937,12 @@ class Overhead:
             # Calculate distance remaining: prefer local airport coords
             if dest_lat is not None and dest_lon is not None:
                 dist_remaining = haversine(match.latitude, match.longitude, dest_lat, dest_lon)
-            elif remaining_m:
+            elif remaining_km:
+                # Fallback to flight_progress (values are in km)
                 if DISTANCE_UNITS == "metric":
-                    dist_remaining = remaining_m / 1000.0
+                    dist_remaining = remaining_km
                 else:
-                    dist_remaining = remaining_m / 1609.344
+                    dist_remaining = remaining_km / 1.609344
             else:
                 dist_remaining = None
 
@@ -950,11 +952,12 @@ class Overhead:
             if (origin_lat is not None and origin_lon is not None
                     and dest_lat is not None and dest_lon is not None):
                 total_distance = haversine(origin_lat, origin_lon, dest_lat, dest_lon)
-            elif total_m:
+            elif total_km:
+                # Fallback to flight_progress (values are in km)
                 if DISTANCE_UNITS == "metric":
-                    total_distance = total_m / 1000.0
+                    total_distance = total_km
                 else:
-                    total_distance = total_m / 1609.344
+                    total_distance = total_km / 1.609344
             else:
                 total_distance = None
 

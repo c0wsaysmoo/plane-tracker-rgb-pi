@@ -28,6 +28,7 @@ class TestAirportsModule:
 
     def _make_test_db(self, tmpdir):
         """Create a small test airports.json for testing."""
+        from utilities.airports import CACHE_VERSION
         db = {
             "ORD": {"lat": 41.978, "lon": -87.904},
             "KORD": {"lat": 41.978, "lon": -87.904},
@@ -38,9 +39,10 @@ class TestAirportsModule:
             "NBO": {"lat": -1.3192, "lon": 36.9278},  # Nairobi (near equator)
             "ACC": {"lat": 5.6052, "lon": -0.1668},   # Accra (near prime meridian)
         }
+        cache_data = {"_version": CACHE_VERSION, "airports": db}
         cache_path = os.path.join(tmpdir, "airports.json")
         with open(cache_path, "w") as f:
-            json.dump(db, f)
+            json.dump(cache_data, f)
         return cache_path, db
 
     def test_get_airport_coords_iata(self):
