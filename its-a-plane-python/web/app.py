@@ -50,7 +50,7 @@ def lookup_flight(callsign):
 
     # Convert IATA (UA353) to ICAO (UAL353)
     from utilities.overhead import IATA_TO_ICAO
-    if len(callsign) >= 3 and callsign[:2].isalpha() and callsign[2:3].isdigit():
+    if len(callsign) >= 3 and callsign[:2] in IATA_TO_ICAO and callsign[2:3].isdigit():
         icao_prefix = IATA_TO_ICAO.get(callsign[:2])
         if icao_prefix:
             callsign = icao_prefix + callsign[2:]
@@ -143,6 +143,8 @@ def tracked_json():
 def tracked_lookup():
     """Live lookup — check if a flight is currently findable before saving."""
     data = request.get_json(force=True)
+    if not data:
+        return jsonify({"found": False, "error": "Invalid request"}), 400
     callsign = data.get("callsign", "").strip().upper()
     if not callsign:
         return jsonify({"found": False, "error": "No callsign provided"})
@@ -153,6 +155,8 @@ def tracked_lookup():
 @app.post("/tracked/set")
 def tracked_set():
     data = request.get_json(force=True)
+    if not data:
+        return jsonify({"message": "Invalid request"}), 400
     callsign = data.get("callsign", "").strip().upper()[:10]
     try:
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:

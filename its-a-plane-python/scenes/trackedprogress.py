@@ -1,6 +1,6 @@
 from datetime import datetime
 from utilities.animator import Animator
-from setup import colours, screen, frames
+from setup import colours, screen
 from config import NIGHT_START, NIGHT_END
 
 LINE2_Y = 23
