@@ -43,8 +43,8 @@ class ClockScene(object):
                     forecast_date = day['startTime'][:10]
                     if forecast_date == now.strftime('%Y-%m-%d'):
                         # Parse UTC sunrise and sunset times
-                        utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ')
-                        utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ')
+                        utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                        utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
                         # Cache values
                         self.today_sunrise = utc_sunrise

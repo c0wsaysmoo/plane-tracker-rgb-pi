@@ -239,8 +239,7 @@ def grab_temperature_and_humidity():
 
     except (RequestException, ValueError) as e:
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        _exit_backoff()  # Non-429 failure shouldn't keep us in backoff
-
+        # Don't clear backoff on network errors — let auto-clear (2hr) handle it
         if is_dns_error(e):
             logger.error(
                 f"[{timestamp}] DNS failure resolving api.tomorrow.io - will retry"
@@ -344,8 +343,7 @@ def grab_forecast(tag="unknown"):
 
     except RequestException as e:
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        _exit_backoff()  # Non-429 failure shouldn't keep us in backoff
-
+        # Don't clear backoff on network errors — let auto-clear (2hr) handle it
         if is_dns_error(e):
             logger.error(
                 f"[{timestamp}] [Forecast:{tag}] DNS failure resolving api.tomorrow.io - will retry"

@@ -54,11 +54,9 @@ except ImportError:
 
 # Constants
 RETRIES = 3
-RATE_LIMIT_DELAY = 1
 MAX_FLIGHT_LOOKUP = 5
 MAX_ALTITUDE = 100000
 EARTH_RADIUS_M = 3958.8
-BLANK_FIELDS = ["", "N/A", "NONE"]
 ADSBDB_BASE = "https://api.adsbdb.com"
 
 # Helicopter types — set owner_icao to "HELI" for helicopter logo display
@@ -895,7 +893,7 @@ class Overhead:
                     None,
                 )
 
-            # Strategy 1: wide bounding box search (respects 90s rate limit)
+            # Strategy 1: wide bounding box search
             if not match:
                 wide_bounds = {
                     "tl_y": 70.0,   # North
@@ -903,8 +901,11 @@ class Overhead:
                     "br_y": 10.0,   # South
                     "br_x": 40.0,   # East
                 }
-                wide_key = self._api.cache.make_feed_cache_key(wide_bounds)
-                # Use normal rate limiting — don't force reset every cycle
+                # Reset wide key so tracked search always gets fresh data
+                # (per-key limiting means this doesn't affect zone polls)
+                self._api.cache.reset_feed_key(
+                    self._api.cache.make_feed_cache_key(wide_bounds)
+                )
                 flights = self._api.get_flights(bounds=wide_bounds)
                 match = next(
                     (f for f in flights
