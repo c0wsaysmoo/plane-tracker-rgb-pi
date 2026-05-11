@@ -52,12 +52,52 @@ def _format_speed(ground_speed):
         return f"{int(ground_speed)}", "knts"
 
 
+def _format_dep_time(dep_time_str):
+    """Format departure time from '2026-05-11 18:30'. Respects CLOCK_FORMAT."""
+    if not dep_time_str:
+        return ""
+    try:
+        parts = dep_time_str.split(" ")
+        if len(parts) < 2:
+            return dep_time_str
+        hm = parts[1].split(":")
+        hour = int(hm[0])
+        minute = int(hm[1]) if len(hm) > 1 else 0
+
+        try:
+            from config import CLOCK_FORMAT as _cf
+        except (ImportError, ModuleNotFoundError, NameError):
+            _cf = "24hr"
+
+        if _cf == "12hr":
+            ampm = "a" if hour < 12 else "p"
+            display_hour = hour % 12 or 12
+            if minute:
+                return f"{display_hour}:{minute:02d}{ampm}"
+            return f"{display_hour}{ampm}"
+        else:
+            return f"{hour}:{minute:02d}"
+    except (ValueError, IndexError):
+        return dep_time_str
+
+
 def _build_stats(data):
     """
     Build list of (text, colour) tuples for the stats line.
-    Format: 1:23 234mi nr Atlanta B738 FL350↑ 260mph
+    Live:      1:23 234mi nr Atlanta B738 FL350↑ 260mph
+    Scheduled: Departs 6:30p EWR→LAX
     """
     parts = []
+
+    # Scheduled (pre-departure) — show departure info instead of live stats
+    if data.get("is_scheduled"):
+        dep = _format_dep_time(data.get("dep_time", ""))
+        origin = data.get("origin", "")
+        dest = data.get("destination", "")
+        label = f"Departs {dep} {origin}\u2192{dest}" if dep else f"Scheduled {origin}\u2192{dest}"
+        for ch in label:
+            parts.append((ch, TIME_DIST_COLOUR))
+        return parts
 
     # Time remaining
     if data.get("time_remaining"):

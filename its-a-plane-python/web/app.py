@@ -46,6 +46,7 @@ def lookup_flight(callsign):
     Returns a dict with found=True/False and flight info if found.
     """
     callsign = callsign.strip().upper()
+    original_callsign = callsign  # preserve for AirLabs (IATA works better)
 
     # Convert IATA (UA353) to ICAO (UAL353)
     from utilities.overhead import IATA_TO_ICAO
@@ -54,8 +55,6 @@ def lookup_flight(callsign):
         if icao_prefix:
             callsign = icao_prefix + callsign[2:]
 
-    airline_icao = callsign[:3] if len(callsign) >= 3 and callsign[:3].isalpha() else None
-
     try:
         api = _fr24_client
 
@@ -63,6 +62,22 @@ def lookup_flight(callsign):
         match = api.find_by_callsign(callsign)
 
         if not match:
+            # Not airborne — try AirLabs for scheduled flight (use original IATA format)
+            from utilities.airlabs import get_flight_schedule
+            sched = get_flight_schedule(original_callsign)
+            if sched:
+                return {
+                    "found": True,
+                    "scheduled": True,
+                    "callsign": callsign,
+                    "number": sched.get("flight_number", callsign),
+                    "airline": "",
+                    "origin": sched.get("origin", "???"),
+                    "destination": sched.get("destination", "???"),
+                    "dep_time": sched.get("dep_time", ""),
+                    "status": sched.get("status", ""),
+                    "summary": f"Scheduled: {sched.get('flight_number', callsign)} {sched.get('origin', '?')}→{sched.get('destination', '?')} Dep {sched.get('dep_time', '?')}",
+                }
             return {"found": False}
 
         # Get full details for airline name and route
