@@ -21,7 +21,17 @@ from config import (
 )
 
 from setup import email_alerts
-from web import map_generator, upload_helper
+
+# Lazy imports — folium (used by map_generator) may not be installed in test envs
+map_generator = None
+upload_helper = None
+
+def _ensure_map_imports():
+    global map_generator, upload_helper
+    if map_generator is None:
+        from web import map_generator as _mg, upload_helper as _uh
+        map_generator = _mg
+        upload_helper = _uh
 
 # Optional config values
 try:
@@ -375,6 +385,7 @@ def log_flight_data(entry: dict):
         safe_write_json(LOG_FILE, top_n)
 
         if notify:
+            _ensure_map_imports()
             html = map_generator.generate_closest_map(top_n, filename="closest.html")
             url = upload_helper.upload_map_to_server(html)
             subject = f"New {ordinal(rank)} Closest Flight - {entry.get('callsign','Unknown')}"
@@ -429,9 +440,11 @@ def log_farthest_flight(entry: dict):
         safe_write_json(LOG_FILE_FARTHEST, lst)
 
         if notify or updated:
+            _ensure_map_imports()
             html = map_generator.generate_farthest_map(lst, filename="farthest.html")
 
         if notify:
+            _ensure_map_imports()
             url = upload_helper.upload_map_to_server(html)
             rank = next(i for i, f in enumerate(lst) if f["_airport"] == airport) + 1
             cs = entry.get("callsign", "UNKNOWN")
