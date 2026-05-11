@@ -891,7 +891,13 @@ class Overhead:
 
     def _grab_tracked(self, flight_input, zone_flights=None):
         flight_input = flight_input.strip().upper()
-        airline_icao = flight_input[:3] if len(flight_input) >= 3 and flight_input[:3].isalpha() else None
+
+        # Convert IATA format (UA353) to ICAO (UAL353) for gRPC filter
+        if len(flight_input) >= 3 and flight_input[:2].isalpha() and flight_input[2:3].isdigit():
+            icao_prefix = IATA_TO_ICAO.get(flight_input[:2])
+            if icao_prefix:
+                flight_input = icao_prefix + flight_input[2:]
+
         match = None
 
         try:

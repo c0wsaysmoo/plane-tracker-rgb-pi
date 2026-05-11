@@ -46,6 +46,14 @@ def lookup_flight(callsign):
     Returns a dict with found=True/False and flight info if found.
     """
     callsign = callsign.strip().upper()
+
+    # Convert IATA (UA353) to ICAO (UAL353)
+    from utilities.overhead import IATA_TO_ICAO
+    if len(callsign) >= 3 and callsign[:2].isalpha() and callsign[2:3].isdigit():
+        icao_prefix = IATA_TO_ICAO.get(callsign[:2])
+        if icao_prefix:
+            callsign = icao_prefix + callsign[2:]
+
     airline_icao = callsign[:3] if len(callsign) >= 3 and callsign[:3].isalpha() else None
 
     try:
