@@ -227,10 +227,10 @@ class FR24Client:
             logger.info(f"FR24: Cache hit ({len(cached)} flights) for key: {cache_key}")
             return cached
 
-        # Check rate limiter (90s polling interval)
-        if not self._cache.should_poll_feed():
+        # Check rate limiter (90s polling interval, per-key)
+        if not self._cache.should_poll_feed(cache_key):
             logger.info("FR24: Rate limited (90s) — returning cached or empty")
-            return cached if cached is not None else []
+            return []
 
         # Make the actual API call
         logger.info(f"FR24: Making live API call (key: {cache_key})")
@@ -251,7 +251,7 @@ class FR24Client:
 
         # Cache the result and record the poll
         self._cache.set_cached_flights(cache_key, result)
-        self._cache.record_feed_poll()
+        self._cache.record_feed_poll(cache_key)
 
         return result
 

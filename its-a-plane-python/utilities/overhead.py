@@ -895,9 +895,10 @@ class Overhead:
                     "br_y": 10.0,   # South
                     "br_x": 40.0,   # East
                 }
-                # Reset rate limiter so tracked search isn't blocked by zone scan
-                self._api.cache.feed_rate_limiter.reset()
+                # Reset per-key rate limit so tracked search isn't blocked
                 wide_key = self._api.cache.make_feed_cache_key(wide_bounds)
+                with self._api.cache._per_key_lock:
+                    self._api.cache._per_key_last_poll.pop(wide_key, None)
                 self._api.cache._feed_cache.invalidate(wide_key)
                 flights = self._api.get_flights(bounds=wide_bounds)
                 match = next(
