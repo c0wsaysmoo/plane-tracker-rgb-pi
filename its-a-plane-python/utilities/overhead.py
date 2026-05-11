@@ -902,25 +902,9 @@ class Overhead:
                     None,
                 )
 
-            # Strategy 1: wide bounding box search
+            # Strategy 1: server-side callsign filter (searches FR24's full worldwide feed)
             if not match:
-                wide_bounds = {
-                    "tl_y": 70.0,   # North
-                    "tl_x": -130.0, # West
-                    "br_y": 10.0,   # South
-                    "br_x": 40.0,   # East
-                }
-                # Reset wide key so tracked search always gets fresh data
-                # (per-key limiting means this doesn't affect zone polls)
-                self._api.cache.reset_feed_key(
-                    self._api.cache.make_feed_cache_key(wide_bounds)
-                )
-                flights = self._api.get_flights(bounds=wide_bounds)
-                match = next(
-                    (f for f in flights
-                     if (f.callsign or "").upper() == flight_input),
-                    None,
-                )
+                match = self._api.find_by_callsign(flight_input)
 
             if not match:
                 return None

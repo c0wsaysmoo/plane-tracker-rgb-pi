@@ -72,6 +72,14 @@ def _ensure_env_credentials() -> None:
 _ensure_env_credentials()
 
 from fr24 import FR24, BoundingBox  # noqa: E402
+from fr24.proto._live_feed_pb2 import (  # noqa: E402
+    LiveFeedRequest, LiveFeedResponse, LocationBoundaries,
+    VisibilitySettings, Filter,
+)
+from fr24.proto._common_pb2 import TrafficType, RestrictionVisibility  # noqa: E402
+from fr24.grpc import live_feed as _grpc_live_feed  # noqa: E402
+from fr24.proto import parse_data as _parse_data  # noqa: E402
+from google.protobuf.field_mask_pb2 import FieldMask  # noqa: E402
 
 # Force-import h2 early (before rgbmatrix drops privileges).
 # httpx lazy-imports h2 only when AsyncClient(http2=True) is constructed;
@@ -255,6 +263,67 @@ class FR24Client:
 
         return result
 
+    def find_by_callsign(self, callsign: str) -> Optional[LiveFlight]:
+        """
+        Find a specific flight by callsign using FR24's server-side gRPC filter.
+
+        Uses the LiveFeedRequest Filter.callsigns_list field to let the server
+        search its full database (~200K flights) and return only the match.
+        Works worldwide including oceanic (FR24 has Aireon satellite data).
+
+        :param callsign: ICAO callsign (e.g., "UAL353")
+        :returns: LiveFlight if found, None otherwise
+        """
+        callsign = callsign.strip().upper()
+        if not callsign:
+            return None
+
+        logger.info(f"FR24: Searching for callsign {callsign} (server-side filter)")
+        try:
+            results = self._run_with_client(
+                lambda fr24: self._find_by_callsign_async(fr24, callsign)
+            )
+            self._fr24_ok = True
+            if results:
+                logger.info(f"FR24: Found {callsign} at lat={results[0].latitude:.2f} lon={results[0].longitude:.2f}")
+                return results[0]
+            logger.info(f"FR24: {callsign} not found in live feed")
+            return None
+        except (ConnectionError, OSError) as e:
+            logger.warning(f"FR24: Connection error during callsign search: {e}")
+            self._fr24_ok = False
+            return None
+        except Exception as e:
+            logger.warning(f"FR24: Error searching for {callsign}: {e}")
+            self._fr24_ok = False
+            return None
+
+    async def _find_by_callsign_async(
+        self, fr24: FR24, callsign: str
+    ) -> list[LiveFlight]:
+        """Server-side filtered callsign search via raw gRPC protobuf."""
+        req = LiveFeedRequest(
+            bounds=LocationBoundaries(north=90, south=-90, west=-180, east=180),
+            settings=VisibilitySettings(
+                sources_list=range(10),
+                services_list=range(12),
+                traffic_type=TrafficType.ALL,
+            ),
+            filters_list=Filter(callsigns_list=[callsign]),
+            field_mask=FieldMask(paths=["flight", "reg", "route", "type"]),
+            limit=100,
+            maxage=14400,
+            restriction_mode=RestrictionVisibility.NOT_VISIBLE,
+        )
+
+        response = await _grpc_live_feed(
+            fr24.http.client, req, fr24.http.grpc_headers
+        )
+        result = _parse_data(response.content, LiveFeedResponse)
+        proto = result.unwrap()
+
+        return self._parse_flights(proto)
+
     async def _get_flights_async(
         self,
         fr24: FR24,
@@ -291,10 +360,22 @@ class FR24Client:
 
         flight_count = len(proto.flights_list)
         logger.info(f"FR24: Live feed returned {flight_count} flights")
+        flights = self._parse_flights(proto)
+
+        # Post-filter by airline ICAO if specified
+        if airline:
+            airline_upper = airline.upper()
+            flights = [
+                f for f in flights
+                if f.airline_icao.upper() == airline_upper
+            ]
+
+        return flights
+
+    def _parse_flights(self, proto) -> list[LiveFlight]:
+        """Parse a LiveFeedResponse protobuf into LiveFlight objects."""
         flights = []
         for f in proto.flights_list:
-            # Defensive null handling for protobuf fields
-            # (protobuf fields can be absent/None; getattr chains prevent crashes)
             extra = getattr(f, 'extra_info', None)
             route = getattr(extra, 'route', None) if extra else None
             origin_iata = (getattr(route, 'from', '') or '') if route else ''
@@ -304,7 +385,6 @@ class FR24Client:
             aircraft_type = (getattr(extra, 'type', '') or '') if extra else ''
             vspeed = (getattr(extra, 'vspeed', 0) or 0) if extra else 0
 
-            # ETA from schedule (defensive)
             schedule = getattr(extra, 'schedule', None) if extra else None
             eta = 0
             if schedule is not None:
@@ -332,15 +412,6 @@ class FR24Client:
                 eta=eta,
             )
             flights.append(lf)
-
-        # Post-filter by airline ICAO if specified
-        if airline:
-            airline_upper = airline.upper()
-            flights = [
-                f for f in flights
-                if f.airline_icao.upper() == airline_upper
-            ]
-
         return flights
 
     def get_flight_details(self, flight: LiveFlight) -> dict:
