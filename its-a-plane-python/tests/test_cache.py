@@ -4,7 +4,7 @@ Unit tests for the caching layer (utilities/cache.py).
 Tests cover:
   - TTLCache: set/get, expiry, invalidation, cleanup
   - RateLimiter: interval enforcement, backoff mode, reset
-  - WeatherCache: 1-hour TTL, rate limiting, 429 backoff handling
+  - Weather rate limiting (temperature.py module-level)
   - FR24Cache: 90s feed polling, 30-min flight detail TTL, cache key generation
 """
 
@@ -19,7 +19,7 @@ import pytest
 # Ensure the project root is on sys.path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utilities.cache import TTLCache, RateLimiter, WeatherCache, FR24Cache
+from utilities.cache import TTLCache, RateLimiter, FR24Cache
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -254,81 +254,6 @@ class TestRateLimiter:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# WeatherCache Tests
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestWeatherCache:
-    """Tests for the WeatherCache class (1-hour caching with 429 backoff)."""
-
-    def test_initial_state_allows_api_call(self):
-        """Initially, API calls should be allowed."""
-        wc = WeatherCache()
-        assert wc.should_call_api() is True
-
-    def test_after_call_rate_limited_for_one_hour(self):
-        """After an API call, should be rate limited."""
-        wc = WeatherCache()
-        wc.record_api_call()
-        assert wc.should_call_api() is False
-
-    def test_temperature_cache_stores_and_retrieves(self):
-        """Temperature data is cached and retrievable."""
-        wc = WeatherCache()
-        wc.set_cached_temperature((22.5, 65))
-        result = wc.get_cached_temperature()
-        assert result == (22.5, 65)
-
-    def test_temperature_cache_expires_after_one_hour(self):
-        """Temperature cache expires after 1 hour."""
-        wc = WeatherCache()
-        wc.set_cached_temperature((22.5, 65))
-
-        # Manually expire by setting TTL to 0
-        wc._cache.set("temperature", (22.5, 65), ttl=0.1)
-        time.sleep(0.15)
-        assert wc.get_cached_temperature() is None
-
-    def test_forecast_cache_stores_and_retrieves(self):
-        """Forecast data is cached and retrievable."""
-        wc = WeatherCache()
-        forecast = [{"day": 1, "temp": 20}, {"day": 2, "temp": 22}]
-        wc.set_cached_forecast(forecast)
-        assert wc.get_cached_forecast() == forecast
-
-    def test_429_handling_enters_backoff(self):
-        """handle_429() puts the rate limiter in backoff mode."""
-        wc = WeatherCache()
-        wc.handle_429()
-        assert wc.rate_limiter.in_backoff is True
-
-    def test_429_backoff_prevents_api_calls(self):
-        """After 429, API calls are blocked for the backoff interval."""
-        wc = WeatherCache()
-        wc.record_api_call()
-        wc.handle_429()
-        # Should be rate limited
-        assert wc.should_call_api() is False
-
-    def test_success_after_429_exits_backoff(self):
-        """handle_success() clears the backoff state."""
-        wc = WeatherCache()
-        wc.handle_429()
-        assert wc.rate_limiter.in_backoff is True
-        wc.handle_success()
-        assert wc.rate_limiter.in_backoff is False
-
-    def test_cache_ttl_is_one_hour(self):
-        """Verify the cache TTL constant is 3600 seconds."""
-        assert WeatherCache.CACHE_TTL == 3600.0
-
-    def test_rate_limit_interval_is_one_hour(self):
-        """Verify rate limit interval is 3600 seconds."""
-        assert WeatherCache.RATE_LIMIT_INTERVAL == 3600.0
-
-    def test_backoff_interval_is_one_hour(self):
-        """Verify backoff interval (after 429) is 3600 seconds."""
-        assert WeatherCache.BACKOFF_INTERVAL == 3600.0
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # FR24Cache Tests
@@ -491,69 +416,6 @@ class TestNoAPIHammering:
     excessive API calls (hammering).
     """
 
-    def test_weather_cache_prevents_repeated_calls_within_hour(self):
-        """
-        Simulates multiple weather API requests within 1 hour.
-        After the first successful call, subsequent calls should return
-        cached data without triggering another API call.
-        """
-        wc = WeatherCache()
-        api_call_count = 0
-
-        def mock_api_call():
-            nonlocal api_call_count
-            if not wc.should_call_api():
-                # Rate limited — return cached data
-                return wc.get_cached_temperature()
-            # Make the "API call"
-            api_call_count += 1
-            wc.record_api_call()
-            result = (20.0, 55)  # Simulated API response
-            wc.set_cached_temperature(result)
-            wc.handle_success()
-            return result
-
-        # First call should hit the API
-        r1 = mock_api_call()
-        assert r1 == (20.0, 55)
-        assert api_call_count == 1
-
-        # 10 more calls should all use cache
-        for _ in range(10):
-            r = mock_api_call()
-            assert r == (20.0, 55)
-
-        assert api_call_count == 1  # Still only 1 actual API call
-
-    def test_weather_cache_429_prevents_retry_for_one_hour(self):
-        """
-        After a 429 response, the weather cache should prevent retries
-        for at least 1 hour (backoff interval).
-        """
-        wc = WeatherCache()
-        api_call_count = 0
-
-        def mock_api_call_with_429():
-            nonlocal api_call_count
-            if not wc.should_call_api():
-                return wc.get_cached_temperature()
-            api_call_count += 1
-            wc.record_api_call()
-            # Simulate 429 response
-            wc.handle_429()
-            return None  # No data
-
-        # First call gets 429
-        mock_api_call_with_429()
-        assert api_call_count == 1
-
-        # All subsequent calls within the backoff window should be blocked
-        for _ in range(50):
-            mock_api_call_with_429()
-
-        # Only 1 actual API call was made despite 51 attempts
-        assert api_call_count == 1
-
     def test_fr24_feed_not_polled_within_90_seconds(self):
         """
         FR24 live feed should not be polled more than once per 90 seconds.
@@ -685,20 +547,6 @@ class TestNoAPIHammering:
         r2 = mock_get_flights(bounds=bounds1)
         assert api_call_count == 1  # Still 1
 
-    def test_weather_multiple_endpoints_share_rate_limiter(self):
-        """
-        Temperature and forecast share the same rate limiter so that
-        one call for temperature blocks an immediate forecast call.
-        """
-        wc = WeatherCache()
-
-        # First call allowed
-        assert wc.should_call_api() is True
-        wc.record_api_call()
-
-        # Now both temperature and forecast should be blocked
-        assert wc.should_call_api() is False
-
     def test_fr24_cache_hit_avoids_api_completely(self):
         """
         If details are in cache, no async/API code should execute at all.
@@ -721,42 +569,22 @@ class TestNoAPIHammering:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestWeatherModuleRateLimiting:
-    """
-    Tests that the rate limiting logic prevents API hammering
-    when the weather module is rate limited.
-    """
+    """Tests for the temperature.py module-level rate limiting."""
 
     def test_rate_limited_skips_call(self):
-        """
-        When rate limited, the weather cache returns cached data
-        without allowing an API call.
-        """
-        wc = WeatherCache()
-        wc.record_api_call()
-        wc.set_cached_temperature((18.0, 72))
-
-        # Should be rate limited now
-        assert wc.should_call_api() is False
-        # But cached data is still available
-        assert wc.get_cached_temperature() == (18.0, 72)
+        """Rate limiter prevents calls within the interval."""
+        from utilities import temperature as t
+        # Record a call for temp endpoint
+        t._record_call("temp")
+        assert t._rate_limited("temp") is True
 
     def test_rate_limited_returns_stale_cache_on_429(self):
-        """
-        After a 429, even if cache data is old, it's returned
-        rather than making another API call.
-        """
-        wc = WeatherCache()
-        # Simulate: first call succeeded, then got 429
-        wc.set_cached_temperature((15.0, 60))
-        wc.record_api_call()
-        wc.handle_429()
-
-        # 50 attempts should all be blocked
-        for _ in range(50):
-            assert wc.should_call_api() is False
-
-        # But the stale cached data is still available
-        assert wc.get_cached_temperature() == (15.0, 60)
+        """After 429, backoff mode is entered."""
+        from utilities import temperature as t
+        t._enter_backoff()
+        assert t._in_backoff is True
+        t._exit_backoff()
+        assert t._in_backoff is False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -789,11 +617,11 @@ class TestEdgeCases:
         fc.set_cached_flight_details("", {"empty": True})
         assert fc.get_cached_flight_details("") == {"empty": True}
 
-    def test_weather_cache_no_data_before_first_call(self):
-        """Before any API call, cache returns None."""
-        wc = WeatherCache()
-        assert wc.get_cached_temperature() is None
-        assert wc.get_cached_forecast() is None
+    def test_weather_module_initial_state(self):
+        """Temperature module rate limiter is not rate limited initially for a fresh endpoint."""
+        from utilities import temperature as t
+        # A never-used endpoint key should not be rate limited
+        assert t._rate_limited("test_fresh_endpoint") is False
 
     def test_concurrent_cache_access(self):
         """Multiple threads reading/writing the FR24 cache simultaneously."""

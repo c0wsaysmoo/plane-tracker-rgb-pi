@@ -11,6 +11,9 @@ if BASE_DIR not in sys.path:
 
 from utilities.fr24_client import FR24Client
 
+# Singleton FR24Client shared across all web requests (shares cache + rate limiter)
+_fr24_client = FR24Client()
+
 # /web is the folder that this file lives in
 WEB_DIR = os.path.dirname(__file__)
 
@@ -46,7 +49,7 @@ def lookup_flight(callsign):
     airline_icao = callsign[:3] if len(callsign) >= 3 and callsign[:3].isalpha() else None
 
     try:
-        api = FR24Client()
+        api = _fr24_client
         match = None
 
         # Strategy 1: airline filter (post-filter on callsign)
@@ -162,4 +165,4 @@ def maps(filename):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=False)

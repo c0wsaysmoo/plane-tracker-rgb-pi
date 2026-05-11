@@ -167,69 +167,6 @@ class RateLimiter:
             self._in_backoff = False
 
 
-class WeatherCache:
-    """
-    Cache layer for Tomorrow.io weather API.
-
-    - Caches temperature/humidity data for 1 hour.
-    - Caches forecast data for 1 hour.
-    - Rate limits API calls to 1 per hour.
-    - On 429 response, enters backoff mode (waits 1 hour before retrying).
-    """
-
-    CACHE_TTL = 3600.0  # 1 hour
-    RATE_LIMIT_INTERVAL = 3600.0  # 1 hour between calls
-    BACKOFF_INTERVAL = 3600.0  # 1 hour backoff on 429
-
-    def __init__(self):
-        self._cache = TTLCache(default_ttl=self.CACHE_TTL)
-        self._rate_limiter = RateLimiter(
-            normal_interval=self.RATE_LIMIT_INTERVAL,
-            backoff_interval=self.BACKOFF_INTERVAL,
-        )
-
-    @property
-    def rate_limiter(self) -> RateLimiter:
-        return self._rate_limiter
-
-    @property
-    def cache(self) -> TTLCache:
-        return self._cache
-
-    def get_cached_temperature(self) -> Optional[tuple]:
-        """Get cached temperature/humidity tuple or None."""
-        return self._cache.get("temperature")
-
-    def set_cached_temperature(self, value: tuple) -> None:
-        """Cache temperature/humidity tuple."""
-        self._cache.set("temperature", value)
-
-    def get_cached_forecast(self) -> Optional[list]:
-        """Get cached forecast data or None."""
-        return self._cache.get("forecast")
-
-    def set_cached_forecast(self, value: list) -> None:
-        """Cache forecast data."""
-        self._cache.set("forecast", value)
-
-    def should_call_api(self) -> bool:
-        """
-        Returns True if an API call is allowed (not rate limited).
-        """
-        return not self._rate_limiter.is_rate_limited()
-
-    def record_api_call(self) -> None:
-        """Record that an API call was made."""
-        self._rate_limiter.record_call()
-
-    def handle_429(self) -> None:
-        """Handle a 429 response — enter backoff mode."""
-        self._rate_limiter.enter_backoff()
-
-    def handle_success(self) -> None:
-        """Handle a successful response — exit backoff if needed."""
-        self._rate_limiter.exit_backoff()
-
 
 class FR24Cache:
     """
