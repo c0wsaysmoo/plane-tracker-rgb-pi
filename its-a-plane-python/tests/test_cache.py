@@ -3,7 +3,7 @@ Unit tests for the caching layer (utilities/cache.py).
 
 Tests cover:
   - TTLCache: set/get, expiry, invalidation, cleanup
-  - RateLimiter: interval enforcement, backoff mode, reset
+  - FR24Cache per-key rate limiting, reset_feed_key
   - Weather rate limiting (temperature.py module-level)
   - FR24Cache: 90s feed polling, 30-min flight detail TTL, cache key generation
 """
@@ -19,7 +19,7 @@ import pytest
 # Ensure the project root is on sys.path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utilities.cache import TTLCache, RateLimiter, FR24Cache
+from utilities.cache import TTLCache, FR24Cache
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -175,85 +175,6 @@ class TestTTLCache:
         assert len(errors) == 0
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# RateLimiter Tests
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestRateLimiter:
-    """Tests for the RateLimiter class."""
-
-    def test_not_rate_limited_initially(self):
-        """First call is never rate limited."""
-        rl = RateLimiter(normal_interval=60.0)
-        assert rl.is_rate_limited() is False
-
-    def test_rate_limited_after_call(self):
-        """After recording a call, subsequent check is rate limited."""
-        rl = RateLimiter(normal_interval=60.0)
-        rl.record_call()
-        assert rl.is_rate_limited() is True
-
-    def test_rate_limit_expires(self):
-        """After interval passes, no longer rate limited."""
-        rl = RateLimiter(normal_interval=0.1)
-        rl.record_call()
-        assert rl.is_rate_limited() is True
-        time.sleep(0.15)
-        assert rl.is_rate_limited() is False
-
-    def test_backoff_mode_uses_backoff_interval(self):
-        """In backoff mode, the backoff interval is used."""
-        rl = RateLimiter(normal_interval=0.1, backoff_interval=0.3)
-        rl.record_call()
-        rl.enter_backoff()
-
-        # After normal interval passes, still rate limited due to backoff
-        time.sleep(0.15)
-        assert rl.is_rate_limited() is True
-        assert rl.in_backoff is True
-
-        # After backoff interval passes, no longer rate limited
-        time.sleep(0.2)
-        assert rl.is_rate_limited() is False
-
-    def test_exit_backoff(self):
-        """exit_backoff() switches back to normal interval."""
-        rl = RateLimiter(normal_interval=0.1, backoff_interval=10.0)
-        rl.record_call()
-        rl.enter_backoff()
-        assert rl.in_backoff is True
-
-        rl.exit_backoff()
-        assert rl.in_backoff is False
-
-        # After normal interval, should be allowed
-        time.sleep(0.15)
-        assert rl.is_rate_limited() is False
-
-    def test_reset_clears_all_state(self):
-        """reset() clears last call timestamp and backoff mode."""
-        rl = RateLimiter(normal_interval=60.0, backoff_interval=120.0)
-        rl.record_call()
-        rl.enter_backoff()
-
-        rl.reset()
-        assert rl.is_rate_limited() is False
-        assert rl.in_backoff is False
-
-    def test_time_until_next_allowed(self):
-        """time_until_next_allowed returns correct remaining time."""
-        rl = RateLimiter(normal_interval=1.0)
-        rl.record_call()
-        remaining = rl.time_until_next_allowed()
-        assert 0.9 < remaining <= 1.0
-
-    def test_time_until_next_allowed_when_allowed(self):
-        """time_until_next_allowed returns 0 when call is allowed."""
-        rl = RateLimiter(normal_interval=60.0)
-        assert rl.time_until_next_allowed() == 0.0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # FR24Cache Tests
@@ -602,14 +523,6 @@ class TestEdgeCases:
         # But with any sleep it definitely will be
         time.sleep(0.01)
         assert cache.get("key") is None
-
-    def test_rate_limiter_with_zero_interval(self):
-        """Zero interval means never rate limited."""
-        rl = RateLimiter(normal_interval=0)
-        rl.record_call()
-        # With 0 interval, should not be rate limited (elapsed >= 0)
-        time.sleep(0.01)
-        assert rl.is_rate_limited() is False
 
     def test_fr24_cache_empty_flight_id(self):
         """Empty flight_id should still work (though unusual)."""

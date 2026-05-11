@@ -858,7 +858,6 @@ class Overhead:
                 self._data = overhead_data
                 self._tracked_data = tracked_data
                 self._new_data = True
-                self._processing = False
 
         except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
             logger.warning(f"Overhead: Network error during _grab: {type(e).__name__}: {e}")
@@ -866,16 +865,13 @@ class Overhead:
                 self._data = []
                 self._tracked_data = None
                 self._new_data = True
-                self._processing = False
         except Exception as e:
             logger.error(f"Overhead: Unexpected error in _grab: {type(e).__name__}: {e}", exc_info=True)
             with self._lock:
                 self._data = []
                 self._tracked_data = None
                 self._new_data = True
-                self._processing = False
         finally:
-            # Guarantee processing flag is cleared even on BaseException
             with self._lock:
                 self._processing = False
 
