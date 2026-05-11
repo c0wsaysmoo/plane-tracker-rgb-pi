@@ -22,6 +22,10 @@ BASE_DIR    = os.path.dirname(os.path.dirname(__file__))
 CACHE_FILE  = os.path.join(BASE_DIR, "airports.json")
 CSV_URL     = "https://raw.githubusercontent.com/datasets/airport-codes/master/data/airport-codes.csv"
 
+# Cache version — increment to force rebuild (e.g. when coordinate parsing changes)
+# v2: confirmed coordinates field is "latitude, longitude" order
+CACHE_VERSION = 2
+
 # In-memory lookup: both IATA and ICAO -> {lat, lon}
 _db = {}
 _loaded = False
@@ -59,9 +63,10 @@ def _download_and_build():
             if icao:
                 db[icao] = {"lat": lat, "lon": lon}
 
+        cache_data = {"_version": CACHE_VERSION, "airports": db}
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(db, f)
-        print(f"[Airports] Database built — {len(db)} entries cached to airports.json")
+            json.dump(cache_data, f)
+        print(f"[Airports] Database built — {len(db)} entries cached to airports.json (v{CACHE_VERSION})")
         return db
 
     except Exception as e:
@@ -78,10 +83,17 @@ def _load():
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                _db = json.load(f)
+                raw = json.load(f)
 
-            _loaded = True
-            return
+            # Versioned cache (v2+): {"_version": N, "airports": {...}}
+            if isinstance(raw, dict) and raw.get("_version") == CACHE_VERSION:
+                _db = raw.get("airports", {})
+                _loaded = True
+                return
+            else:
+                # Stale or unversioned cache — rebuild
+                version_found = raw.get("_version", "none") if isinstance(raw, dict) else "legacy"
+                print(f"[Airports] Cache version mismatch (found: {version_found}, need: {CACHE_VERSION}) — rebuilding")
         except Exception as e:
             print(f"[Airports] Cache load failed: {e} — re-downloading")
 
