@@ -4,7 +4,6 @@ import math
 import socket
 import logging
 import requests
-import traceback
 from time import sleep, time
 from datetime import datetime
 from threading import Thread, Lock
@@ -437,11 +436,12 @@ def log_farthest_flight(entry: dict):
         lst = lst[:MAX_FARTHEST]
         safe_write_json(LOG_FILE_FARTHEST, lst)
 
+        html = None
         if notify or updated:
             _ensure_map_imports()
             html = map_generator.generate_farthest_map(lst, filename="farthest.html")
 
-        if notify:
+        if notify and html:
             url = upload_helper.upload_map_to_server(html)
             rank = next(i for i, f in enumerate(lst) if f["_airport"] == airport) + 1
             cs = entry.get("callsign", "UNKNOWN")
@@ -452,8 +452,7 @@ def log_farthest_flight(entry: dict):
             email_alerts.send_flight_summary(subject, entry, reason, map_url=url)
 
     except Exception as e:
-        print("Failed to log farthest flight:", e)
-        traceback.print_exc()
+        logger.error(f"Failed to log farthest flight: {e}", exc_info=True)
 
 
 # Overhead Class
@@ -846,11 +845,14 @@ class Overhead:
                             elif self._tracked_last_data:
                                 tracked_data = estimate_stale_data(self._tracked_last_data)
                     else:
-                        # Never been live — try AirLabs schedule (once per callsign)
-                        if tracked_callsign not in self._tracked_schedule_cache:
-                            from utilities.airlabs import get_flight_schedule
-                            self._tracked_schedule_cache[tracked_callsign] = get_flight_schedule(tracked_callsign)
+                        # Never been live — try AirLabs schedule
+                        # Cache successful results; retry on failure (airlabs module has 5-min TTL)
                         sched = self._tracked_schedule_cache.get(tracked_callsign)
+                        if sched is None:
+                            from utilities.airlabs import get_flight_schedule
+                            sched = get_flight_schedule(tracked_callsign)
+                            if sched:
+                                self._tracked_schedule_cache[tracked_callsign] = sched
                         if sched:
                             # Convert callsign to ICAO for logo lookup (UA353 → UAL353)
                             sched_cs = tracked_callsign
