@@ -352,23 +352,39 @@ class TestFR24Cache:
     def test_initial_state_allows_feed_poll(self):
         """Initially, feed polling should be allowed."""
         fc = FR24Cache()
-        assert fc.should_poll_feed() is True
+        assert fc.should_poll_feed("zone") is True
 
     def test_after_poll_feed_is_rate_limited(self):
         """After recording a feed poll, subsequent polls are rate limited."""
         fc = FR24Cache()
-        fc.record_feed_poll()
-        assert fc.should_poll_feed() is False
+        fc.record_feed_poll("zone")
+        assert fc.should_poll_feed("zone") is False
 
-    def test_feed_rate_limit_expires_after_90s(self):
-        """Feed rate limit expires after 90 seconds (simulated with short interval)."""
+    def test_feed_rate_limit_expires(self):
+        """Feed rate limit expires after the poll interval."""
         fc = FR24Cache()
-        # Override the rate limiter for testing with a short interval
-        fc._feed_rate_limiter._normal_interval = 0.1
-        fc.record_feed_poll()
-        assert fc.should_poll_feed() is False
+        fc.FEED_POLL_INTERVAL = 0.1
+        fc.record_feed_poll("zone")
+        assert fc.should_poll_feed("zone") is False
         time.sleep(0.15)
-        assert fc.should_poll_feed() is True
+        assert fc.should_poll_feed("zone") is True
+
+    def test_per_key_rate_limiting_independence(self):
+        """Different cache keys have independent rate limits."""
+        fc = FR24Cache()
+        fc.record_feed_poll("zone")
+        assert fc.should_poll_feed("zone") is False
+        assert fc.should_poll_feed("wide") is True  # different key, not limited
+
+    def test_reset_feed_key(self):
+        """reset_feed_key clears rate limit and cache for a specific key."""
+        fc = FR24Cache()
+        fc.record_feed_poll("zone")
+        fc.set_cached_flights("zone", [{"id": "test"}])
+        assert fc.should_poll_feed("zone") is False
+        fc.reset_feed_key("zone")
+        assert fc.should_poll_feed("zone") is True
+        assert fc.get_cached_flights("zone") is None
 
     def test_flight_list_caching(self):
         """Flight list is cached and retrievable by key."""
@@ -554,12 +570,12 @@ class TestNoAPIHammering:
             if cached is not None:
                 return cached
             # Check rate limiter
-            if not fc.should_poll_feed():
+            if not fc.should_poll_feed(cache_key):
                 return cached if cached is not None else []
             # Make API call
             api_call_count += 1
             fc.set_cached_flights(cache_key, mock_flights)
-            fc.record_feed_poll()
+            fc.record_feed_poll(cache_key)
             return mock_flights
 
         # First call hits API
@@ -651,12 +667,12 @@ class TestNoAPIHammering:
             cached = fc.get_cached_flights(cache_key)
             if cached is not None:
                 return cached
-            if not fc.should_poll_feed():
+            if not fc.should_poll_feed(cache_key):
                 return []
             api_call_count += 1
             result = [{"key": cache_key}]
             fc.set_cached_flights(cache_key, result)
-            fc.record_feed_poll()
+            fc.record_feed_poll(cache_key)
             return result
 
         # First call with bounds

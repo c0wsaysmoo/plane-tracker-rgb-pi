@@ -247,10 +247,6 @@ class FR24Cache:
     def __init__(self):
         self._feed_cache = TTLCache(default_ttl=self.FEED_TTL)
         self._detail_cache = TTLCache(default_ttl=self.FLIGHT_DETAIL_TTL)
-        self._feed_rate_limiter = RateLimiter(
-            normal_interval=self.FEED_POLL_INTERVAL,
-            backoff_interval=self.FEED_POLL_INTERVAL * 2,  # Double interval on backoff
-        )
         # Per-key rate limiting: tracks last poll time per cache key
         self._per_key_last_poll: dict[str, float] = {}
         self._per_key_lock = threading.Lock()
@@ -262,10 +258,6 @@ class FR24Cache:
     @property
     def detail_cache(self) -> TTLCache:
         return self._detail_cache
-
-    @property
-    def feed_rate_limiter(self) -> RateLimiter:
-        return self._feed_rate_limiter
 
     def get_cached_flights(self, cache_key: str) -> Optional[list]:
         """
@@ -289,21 +281,22 @@ class FR24Cache:
         """Cache flight details for a specific flight."""
         self._detail_cache.set(flight_id, details)
 
-    def should_poll_feed(self, cache_key: str = "") -> bool:
+    def should_poll_feed(self, cache_key: str) -> bool:
         """Returns True if enough time has elapsed to poll this specific feed key."""
-        if not cache_key:
-            return not self._feed_rate_limiter.is_rate_limited()
         with self._per_key_lock:
             last = self._per_key_last_poll.get(cache_key, 0.0)
             return (time.time() - last) >= self.FEED_POLL_INTERVAL
 
-    def record_feed_poll(self, cache_key: str = "") -> None:
+    def record_feed_poll(self, cache_key: str) -> None:
         """Record that a feed poll was made for this specific key."""
-        if not cache_key:
-            self._feed_rate_limiter.record_call()
-            return
         with self._per_key_lock:
             self._per_key_last_poll[cache_key] = time.time()
+
+    def reset_feed_key(self, cache_key: str) -> None:
+        """Reset rate limit and invalidate cache for a specific feed key."""
+        with self._per_key_lock:
+            self._per_key_last_poll.pop(cache_key, None)
+        self._feed_cache.invalidate(cache_key)
 
     def make_feed_cache_key(
         self, bounds: Optional[dict] = None, airline: Optional[str] = None
