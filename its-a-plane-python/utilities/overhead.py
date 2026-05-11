@@ -342,7 +342,7 @@ def load_tracked_callsign():
         with open(TRACKED_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("callsign", "").strip().upper()
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError):
         return ""
 
 
@@ -1024,9 +1024,10 @@ class Overhead:
                 remaining_secs = fp.get("remaining_time", 0) or 0
                 if remaining_secs > 0:
                     mins_left = remaining_secs // 60
-                    h = mins_left // 60
-                    m = mins_left % 60
-                    time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
+                    if mins_left > 0:
+                        h = mins_left // 60
+                        m = mins_left % 60
+                        time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
             # Last fallback: distance/speed
             if not time_remaining and dist_remaining and match.ground_speed:
                 if DISTANCE_UNITS == "metric":
