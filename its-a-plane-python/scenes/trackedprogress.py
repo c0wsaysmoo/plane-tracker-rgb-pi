@@ -1,16 +1,11 @@
-from datetime import datetime
 from utilities.animator import Animator
 from setup import colours, screen
-from config import NIGHT_START, NIGHT_END
 
 LINE2_Y = 23
 
 FLOWN_COLOUR     = colours.LIMEGREEN
 REMAINING_COLOUR = colours.LIGHT_RED
 PLANE_COLOUR     = colours.WHITE
-
-NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
-NIGHT_END_TIME   = datetime.strptime(NIGHT_END,   "%H:%M")
 
 
 def _calc_progress(data):
@@ -43,11 +38,6 @@ class TrackedProgressScene(object):
 
     @Animator.KeyFrame.add(1)
     def tracked_progress(self, count):
-        # Force redraw at brightness transition times
-        now = datetime.now().replace(microsecond=0).time()
-        if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
-            return
-
         if len(self._data) > 0:
             return
 
