@@ -161,6 +161,10 @@ def tracked_set():
     try:
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:
             json.dump({"callsign": callsign}, f)
+        try:
+            os.chmod(TRACKED_FILE, 0o666)
+        except OSError:
+            pass
         msg = f"Now tracking {callsign}." if callsign else "Tracking cleared."
         return jsonify({"message": msg})
     except Exception as e:

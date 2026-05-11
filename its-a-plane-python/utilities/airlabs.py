@@ -126,7 +126,9 @@ def get_flight_schedule(callsign):
 
     except requests.exceptions.Timeout:
         logger.warning("AirLabs: Request timed out")
+        _cache[callsign] = (None, time())
         return None
     except Exception as e:
         logger.warning(f"AirLabs: Error looking up {callsign}: {e}")
+        _cache[callsign] = (None, time())
         return None
