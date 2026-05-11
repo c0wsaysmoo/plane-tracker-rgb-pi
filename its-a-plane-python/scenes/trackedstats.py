@@ -4,11 +4,16 @@ from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 from rgbmatrix import graphics
 
-# Optional SPEED_UNITS config — defaults to knots if not set
+# Optional configs — defaults for when not set
 try:
     from config import SPEED_UNITS
 except (ImportError, ModuleNotFoundError, NameError):
     SPEED_UNITS = "knots"
+
+try:
+    from config import CLOCK_FORMAT
+except (ImportError, ModuleNotFoundError, NameError):
+    CLOCK_FORMAT = "24hr"
 
 LINE3_Y = 31
 FONT = fonts.small
@@ -18,7 +23,6 @@ TIME_DIST_COLOUR = colours.LIGHT_MID_BLUE
 
 # Aircraft type, altitude, speed
 STATS_COLOUR    = colours.LIGHT_PINK
-LABEL_COLOUR    = colours.LIGHT_PINK
 AIRCRAFT_COLOUR = colours.LIGHT_PINK
 CITY_COLOUR     = colours.WHITE
 
@@ -64,12 +68,7 @@ def _format_dep_time(dep_time_str):
         hour = int(hm[0])
         minute = int(hm[1]) if len(hm) > 1 else 0
 
-        try:
-            from config import CLOCK_FORMAT as _cf
-        except (ImportError, ModuleNotFoundError, NameError):
-            _cf = "24hr"
-
-        if _cf == "12hr":
+        if CLOCK_FORMAT == "12hr":
             ampm = "a" if hour < 12 else "p"
             display_hour = hour % 12 or 12
             if minute:

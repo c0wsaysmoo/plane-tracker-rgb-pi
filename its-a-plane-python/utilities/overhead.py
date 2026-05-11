@@ -4,11 +4,12 @@ import math
 import socket
 import logging
 import requests
-from time import sleep, time
+import traceback
+from time import time
 from datetime import datetime
 from threading import Thread, Lock
 
-from utilities.fr24_client import FR24Client, LiveFlight
+from utilities.fr24_client import FR24Client
 from httpx import ConnectError, TimeoutException
 
 logger = logging.getLogger(__name__)
@@ -257,9 +258,6 @@ def distance_from_flight_to_home(flight):
     )
 
 
-def distance_to_point(flight, lat, lon):
-    return haversine(flight.latitude, flight.longitude, lat, lon)
-
 
 # --- Local database lookups (no API calls needed) ---
 
@@ -455,7 +453,6 @@ def log_farthest_flight(entry: dict):
             email_alerts.send_flight_summary(subject, entry, reason, map_url=url)
 
     except Exception as e:
-        import traceback
         print("Failed to log farthest flight:", e)
         traceback.print_exc()
 
@@ -481,6 +478,17 @@ class Overhead:
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
 
+        # Eagerly load cities DB in background (avoids blocking render on first use)
+        Thread(target=self._preload_cities, daemon=True).start()
+
+    @staticmethod
+    def _preload_cities():
+        try:
+            from utilities.cities import _load
+            _load()
+        except Exception:
+            pass
+
     def _log_pipeline_summary(self, stats: dict):
         """
         Log a pretty summary of the data pipeline cycle.
@@ -503,7 +511,6 @@ class Overhead:
             f"(min={MIN_ALTITUDE}ft, max={MAX_ALTITUDE}ft)",
             f"│ Flights processed:     {stats.get('flights_processed', 0)}",
             f"│ Details fetched (API): {stats.get('details_fetched', 0)}",
-            f"│ Details from cache:    {stats.get('details_cached', 0)}",
             "├─── Data Sources ───────────────────────────────────────",
             f"│ Local airports used:   {stats.get('airport_lookups', 0)} "
             f"({'✓ loaded' if _HAS_LOCAL_AIRPORTS else '✗ not available'})",
@@ -570,7 +577,6 @@ class Overhead:
             "zone_filtered": 0,
             "flights_processed": 0,
             "details_fetched": 0,
-            "details_cached": 0,
             "airport_lookups": 0,
             "airline_lookups": 0,
             "adsbdb_lookups": 0,
@@ -640,7 +646,7 @@ class Overhead:
                             local_airline = _airline_name_lookup(owner_icao)
                             if local_airline:
                                 airline_name = local_airline
-                            stats["airline_lookups"] += 1
+                                stats["airline_lookups"] += 1
 
                         # Helicopter detection — override owner_icao for logo display
                         if plane in HELICOPTER_TYPES:
@@ -797,7 +803,6 @@ class Overhead:
 
                 # If callsign changed, reset all state — new flight being tracked
                 if tracked_callsign != self._tracked_last_callsign:
-                    old_cs = self._tracked_last_callsign
                     self._tracked_last_callsign = tracked_callsign
                     self._tracked_was_live = False
                     self._tracked_miss_count = 0
@@ -848,8 +853,14 @@ class Overhead:
                             self._tracked_schedule_cache[tracked_callsign] = get_flight_schedule(tracked_callsign)
                         sched = self._tracked_schedule_cache.get(tracked_callsign)
                         if sched:
+                            # Convert callsign to ICAO for logo lookup (UA353 → UAL353)
+                            sched_cs = tracked_callsign
+                            if len(sched_cs) >= 3 and sched_cs[:2].isalpha() and sched_cs[2:3].isdigit():
+                                icao_pfx = IATA_TO_ICAO.get(sched_cs[:2])
+                                if icao_pfx:
+                                    sched_cs = icao_pfx + sched_cs[2:]
                             tracked_data = {
-                                "callsign": tracked_callsign,
+                                "callsign": sched_cs,
                                 "number": sched.get("flight_number", tracked_callsign),
                                 "airline_name": "",
                                 "is_live": False,

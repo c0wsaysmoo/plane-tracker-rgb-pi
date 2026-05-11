@@ -36,28 +36,23 @@ PLANE_WIDTH = 4
 class TrackedProgressScene(object):
     def __init__(self):
         super().__init__()
-        self._tp_redraw = True
 
     @Animator.KeyFrame.add(0)
     def reset_tracked_progress(self):
         self.draw_square(0, LINE2_Y - 3, screen.WIDTH, LINE2_Y + 1, colours.BLACK)
-        self._tp_redraw = True
 
     @Animator.KeyFrame.add(1)
     def tracked_progress(self, count):
         # Force redraw at brightness transition times
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
-            self._tp_redraw = True
             return
 
         if len(self._data) > 0:
-            self._tp_redraw = True
             return
 
         tracked = self.overhead.tracked_data
         if not tracked:
-            self._tp_redraw = True
             return
 
         progress = _calc_progress(tracked)
@@ -79,5 +74,3 @@ class TrackedProgressScene(object):
                     REMAINING_COLOUR.red, REMAINING_COLOUR.green, REMAINING_COLOUR.blue)
 
         _draw_plane(self.canvas, plane_x, mid_y, is_live=tracked.get("is_live", True))
-
-        self._tp_redraw = False
