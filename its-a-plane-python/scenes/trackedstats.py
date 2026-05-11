@@ -32,15 +32,15 @@ _CITY_CACHE_THRESHOLD = 0.01  # ~1km — recalculate when plane moves this far
 
 
 def _format_altitude(altitude):
-    """Format altitude as flight level (FL350) or raw feet below 1000ft."""
+    """Format altitude as flight level (FL180+) or feet below transition altitude."""
     if not altitude:
         return None
     altitude = int(altitude)
-    if altitude >= 1000:
+    if altitude >= 18000:
         fl = altitude // 100
         return f"FL{fl:03d}"
     else:
-        return f"{altitude}ft"
+        return f"{altitude:,}ft"
 
 
 def _format_speed(ground_speed):

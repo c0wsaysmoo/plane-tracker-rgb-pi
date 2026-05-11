@@ -15,16 +15,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # --- FL altitude tests ---
 
 # Copy of _format_altitude to avoid rgbmatrix import chain
+# MUST stay in sync with scenes/trackedstats.py:_format_altitude
 def _format_altitude(altitude):
-    """Format altitude as flight level (FL350) or raw feet below 1000ft."""
+    """Format altitude as flight level (FL180+) or feet below transition altitude."""
     if not altitude:
         return None
     altitude = int(altitude)
-    if altitude >= 1000:
+    if altitude >= 18000:
         fl = altitude // 100
         return f"FL{fl:03d}"
     else:
-        return f"{altitude}ft"
+        return f"{altitude:,}ft"
 
 
 class TestFormatAltitude:
@@ -36,18 +37,21 @@ class TestFormatAltitude:
     def test_cruise_altitude(self):
         assert self._format(35000) == "FL350"
 
-    def test_fl100(self):
-        assert self._format(10000) == "FL100"
+    def test_fl180_boundary(self):
+        """18000ft is the transition altitude — first FL."""
+        assert self._format(18000) == "FL180"
 
-    def test_fl010(self):
-        assert self._format(1000) == "FL010"
+    def test_below_transition_with_comma(self):
+        """Below 18000ft, show feet with comma formatting."""
+        assert self._format(10000) == "10,000ft"
 
-    def test_fl001_boundary(self):
-        """1100 feet should be FL011."""
-        assert self._format(1100) == "FL011"
+    def test_mid_altitude(self):
+        assert self._format(5000) == "5,000ft"
 
-    def test_below_1000_raw_feet(self):
-        """Below 1000ft, show raw feet."""
+    def test_low_altitude(self):
+        assert self._format(1100) == "1,100ft"
+
+    def test_below_1000_no_comma(self):
         assert self._format(500) == "500ft"
 
     def test_zero(self):
@@ -61,6 +65,9 @@ class TestFormatAltitude:
 
     def test_typical_descent(self):
         assert self._format(28500) == "FL285"
+
+    def test_just_below_transition(self):
+        assert self._format(17999) == "17,999ft"
 
 
 # --- Nearest city tests ---
