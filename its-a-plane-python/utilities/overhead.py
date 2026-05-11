@@ -932,6 +932,10 @@ class Overhead:
         try:
             with open(TRACKED_FILE, "w", encoding="utf-8") as f:
                 json.dump({"callsign": ""}, f)
+            try:
+                os.chmod(TRACKED_FILE, 0o666)
+            except OSError:
+                pass
             print("Tracked flight ended — auto-cleared.")
         except Exception as e:
             print(f"Failed to auto-clear tracked flight: {e}")
