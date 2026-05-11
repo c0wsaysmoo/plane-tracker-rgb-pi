@@ -116,7 +116,7 @@ def index():
 
 @app.get("/closest/json")
 def closest_json():
-    return jsonify(load_json(CLOSEST_FILE, {}))
+    return jsonify(load_json(CLOSEST_FILE, []))
 
 
 @app.get("/farthest/json")
@@ -153,7 +153,7 @@ def tracked_lookup():
 @app.post("/tracked/set")
 def tracked_set():
     data = request.get_json(force=True)
-    callsign = data.get("callsign", "").strip().upper()
+    callsign = data.get("callsign", "").strip().upper()[:10]
     try:
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:
             json.dump({"callsign": callsign}, f)
