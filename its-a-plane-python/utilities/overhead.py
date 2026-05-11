@@ -4,7 +4,7 @@ import math
 import socket
 import logging
 import requests
-from time import sleep, time
+from time import time
 from datetime import datetime
 from threading import Thread, Lock
 
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 from config import (
     DISTANCE_UNITS,
-    CLOCK_FORMAT,
     MAX_FARTHEST,
     MAX_CLOSEST,
 )
@@ -1125,6 +1124,7 @@ class Overhead:
 
 
 if __name__ == "__main__":
+    from time import sleep
     o = Overhead()
     o.grab_data()
     while not o.new_data:
