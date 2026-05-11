@@ -33,6 +33,7 @@ os.environ.setdefault("ZONE_BR_LAT", "51.47")
 os.environ.setdefault("ZONE_BR_LON", "-0.111")
 os.environ.setdefault("HOME_LAT", "51.55864")
 os.environ.setdefault("HOME_LON", "-0.177332")
+os.environ.setdefault("DISTANCE_UNITS", "imperial")
 os.environ.setdefault("PLANE_TRACKER_DATA_DIR", tempfile.mkdtemp())
 
 
