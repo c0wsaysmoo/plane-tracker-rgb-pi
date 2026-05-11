@@ -476,6 +476,7 @@ class Overhead:
         self._tracked_last_callsign = ""     # last callsign we polled for
         self._tracked_last_eta = None        # last known estimated arrival (unix ts)
         self._tracked_last_data = None       # last known good tracked data
+        self._tracked_schedule_cache = {}    # callsign -> AirLabs schedule result (or None)
         self._first_flight_logged = False    # log first flight details as JSON
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
@@ -796,11 +797,13 @@ class Overhead:
 
                 # If callsign changed, reset all state — new flight being tracked
                 if tracked_callsign != self._tracked_last_callsign:
+                    old_cs = self._tracked_last_callsign
                     self._tracked_last_callsign = tracked_callsign
                     self._tracked_was_live = False
                     self._tracked_miss_count = 0
                     self._tracked_last_eta = None
                     self._tracked_last_data = None
+                    self._tracked_schedule_cache.clear()
 
                 tracked_data = self._grab_tracked(tracked_callsign, zone_flights=flights)
 
@@ -838,12 +841,49 @@ class Overhead:
                                 self._do_auto_wipe()
                             elif self._tracked_last_data:
                                 tracked_data = estimate_stale_data(self._tracked_last_data)
-                    # If never live, don't increment — pre-flight waiting
+                    else:
+                        # Never been live — try AirLabs schedule (once per callsign)
+                        if tracked_callsign not in self._tracked_schedule_cache:
+                            from utilities.airlabs import get_flight_schedule
+                            self._tracked_schedule_cache[tracked_callsign] = get_flight_schedule(tracked_callsign)
+                        sched = self._tracked_schedule_cache.get(tracked_callsign)
+                        if sched:
+                            tracked_data = {
+                                "callsign": tracked_callsign,
+                                "number": sched.get("flight_number", tracked_callsign),
+                                "airline_name": "",
+                                "is_live": False,
+                                "is_scheduled": True,
+                                "origin": sched.get("origin", ""),
+                                "destination": sched.get("destination", ""),
+                                "dep_time": sched.get("dep_time", ""),
+                                "arr_time": sched.get("arr_time", ""),
+                                "schedule_status": sched.get("status", ""),
+                                "aircraft_type": "",
+                                "altitude": 0,
+                                "ground_speed": 0,
+                                "heading": 0,
+                                "vertical_speed": 0,
+                                "dist_remaining": None,
+                                "total_distance": None,
+                                "time_remaining": None,
+                                "latitude": None,
+                                "longitude": None,
+                                "last_seen_ts": 0,
+                                "dest_lat": 0,
+                                "dest_lon": 0,
+                            }
+
+            # Clear schedule cache when flight goes live
+            if tracked_data and tracked_data.get("is_live") and tracked_callsign in self._tracked_schedule_cache:
+                del self._tracked_schedule_cache[tracked_callsign]
 
             # Update tracked status for pipeline summary
             if tracked_data:
                 if tracked_data.get("is_live"):
                     stats["tracked_status"] = "LIVE"
+                elif tracked_data.get("is_scheduled"):
+                    stats["tracked_status"] = "SCHEDULED"
                 else:
                     stats["tracked_status"] = "ESTIMATED (stale)"
             elif stats.get("tracked_callsign"):
@@ -888,6 +928,7 @@ class Overhead:
         self._tracked_miss_count = 0
         self._tracked_last_eta = None
         self._tracked_last_data = None
+        self._tracked_schedule_cache.clear()
         self._tracked_last_callsign = ""
 
     def _grab_tracked(self, flight_input, zone_flights=None):
