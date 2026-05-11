@@ -1,4 +1,5 @@
 from utilities.animator import Animator
+from utilities.cities import get_nearest_city
 from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 from rgbmatrix import graphics
@@ -19,16 +20,23 @@ TIME_DIST_COLOUR = colours.LIGHT_MID_BLUE
 STATS_COLOUR    = colours.LIGHT_PINK
 LABEL_COLOUR    = colours.LIGHT_PINK
 AIRCRAFT_COLOUR = colours.LIGHT_PINK
+CITY_COLOUR     = colours.WHITE
+
+# Cache nearest city result — only recalculate when position changes significantly
+_city_cache = {"lat": None, "lon": None, "result": None}
+_CITY_CACHE_THRESHOLD = 0.01  # ~1km — recalculate when plane moves this far
 
 
 def _format_altitude(altitude):
+    """Format altitude as flight level (FL350) or raw feet below 1000ft."""
     if not altitude:
-        return None, None
-    if DISTANCE_UNITS == "metric":
-        metres = int(altitude * 0.3048)
-        return str(metres), "m"
+        return None
+    altitude = int(altitude)
+    if altitude >= 1000:
+        fl = altitude // 100
+        return f"FL{fl:03d}"
     else:
-        return str(int(altitude)), "ft"
+        return f"{altitude}ft"
 
 
 def _format_speed(ground_speed):
@@ -47,7 +55,7 @@ def _format_speed(ground_speed):
 def _build_stats(data):
     """
     Build list of (text, colour) tuples for the stats line.
-    Format: 1:23 234mi B738 35000ft^ 260mph
+    Format: 1:23 234mi nr Atlanta B738 FL350↑ 260mph
     """
     parts = []
 
@@ -65,6 +73,22 @@ def _build_stats(data):
             parts.append((ch, TIME_DIST_COLOUR))
         parts.append((" ", STATS_COLOUR))
 
+    # Nearest city (cached — only recalculate when position changes)
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    if lat is not None and lon is not None:
+        if (_city_cache["lat"] is None
+                or abs(lat - _city_cache["lat"]) > _CITY_CACHE_THRESHOLD
+                or abs(lon - _city_cache["lon"]) > _CITY_CACHE_THRESHOLD):
+            _city_cache["lat"] = lat
+            _city_cache["lon"] = lon
+            _city_cache["result"] = get_nearest_city(lat, lon)
+        nearest = _city_cache["result"]
+        if nearest:
+            for ch in f"nr {nearest['name']}":
+                parts.append((ch, CITY_COLOUR))
+            parts.append((" ", STATS_COLOUR))
+
     # Aircraft type
     aircraft = data.get("aircraft_type", "")
     if aircraft and aircraft not in ("", "N/A"):
@@ -72,14 +96,12 @@ def _build_stats(data):
             parts.append((ch, AIRCRAFT_COLOUR))
         parts.append((" ", STATS_COLOUR))
 
-    # Altitude + vertical speed arrow (no space between value and unit)
-    alt_val, alt_unit = _format_altitude(data.get("altitude"))
-    if alt_val:
-        for ch in alt_val:
+    # Altitude + vertical speed arrow
+    alt_str = _format_altitude(data.get("altitude"))
+    if alt_str:
+        for ch in alt_str:
             parts.append((ch, STATS_COLOUR))
-        for ch in alt_unit:
-            parts.append((ch, STATS_COLOUR))
-        # Vertical speed arrow immediately after unit
+        # Vertical speed arrow immediately after
         vs = data.get("vertical_speed", 0) or 0
         if vs > 64:
             parts.append(("\u2191", colours.LIGHT_GREEN))
