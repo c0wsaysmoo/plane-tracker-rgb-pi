@@ -3,8 +3,8 @@ Unified caching layer for API calls.
 
 Provides:
   - TTLCache: A generic thread-safe time-to-live cache.
-  - WeatherCache: Weather API wrapper with 1-hour TTL and 429 backoff.
-  - FR24Cache: FlightRadar24 cache with 90s feed TTL and 30-min flight detail TTL.
+  - RateLimiter: Thread-safe rate limiter with backoff support.
+  - FR24Cache: FlightRadar24 cache with per-key 90s feed TTL and 30-min flight detail TTL.
 """
 
 from __future__ import annotations
