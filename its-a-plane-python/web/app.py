@@ -58,27 +58,9 @@ def lookup_flight(callsign):
 
     try:
         api = _fr24_client
-        match = None
 
-        # Strategy 1: airline filter (post-filter on callsign)
-        if airline_icao:
-            try:
-                flights = api.get_flights(airline=airline_icao)
-                match = next(
-                    (f for f in flights if (f.callsign or "").upper() == callsign),
-                    None,
-                )
-            except Exception:
-                pass
-
-        # Strategy 2: global live feed search matching on callsign
-        if not match:
-            flights = api.get_flights()
-            match = next(
-                (f for f in flights
-                 if (f.callsign or "").upper() == callsign),
-                None,
-            )
+        # Server-side callsign filter (searches FR24's full worldwide feed)
+        match = api.find_by_callsign(callsign)
 
         if not match:
             return {"found": False}
