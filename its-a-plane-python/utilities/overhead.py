@@ -5,7 +5,7 @@ import socket
 import logging
 import requests
 import traceback
-from time import time
+from time import sleep, time
 from datetime import datetime
 from threading import Thread, Lock
 
@@ -187,7 +187,7 @@ def haversine(lat1, lon1, lat2, lon2):
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     miles = EARTH_RADIUS_M * c
-    return miles * 1.609 if DISTANCE_UNITS == "metric" else miles
+    return miles * 1.609344 if DISTANCE_UNITS == "metric" else miles
 
 
 def estimate_stale_data(last_data):
@@ -855,7 +855,7 @@ class Overhead:
                         if sched:
                             # Convert callsign to ICAO for logo lookup (UA353 → UAL353)
                             sched_cs = tracked_callsign
-                            if len(sched_cs) >= 3 and sched_cs[:2].isalpha() and sched_cs[2:3].isdigit():
+                            if len(sched_cs) >= 3 and sched_cs[:2] in IATA_TO_ICAO and sched_cs[2:3].isdigit():
                                 icao_pfx = IATA_TO_ICAO.get(sched_cs[:2])
                                 if icao_pfx:
                                     sched_cs = icao_pfx + sched_cs[2:]
@@ -945,11 +945,9 @@ class Overhead:
     def _grab_tracked(self, flight_input, zone_flights=None):
         flight_input = flight_input.strip().upper()
 
-        # Convert IATA format (UA353) to ICAO (UAL353) for gRPC filter
-        if len(flight_input) >= 3 and flight_input[:2].isalpha() and flight_input[2:3].isdigit():
-            icao_prefix = IATA_TO_ICAO.get(flight_input[:2])
-            if icao_prefix:
-                flight_input = icao_prefix + flight_input[2:]
+        # Convert IATA format (UA353, B6555) to ICAO (UAL353, JBU555) for gRPC filter
+        if len(flight_input) >= 3 and flight_input[:2] in IATA_TO_ICAO and flight_input[2:3].isdigit():
+            flight_input = IATA_TO_ICAO[flight_input[:2]] + flight_input[2:]
 
         match = None
 
