@@ -3,7 +3,6 @@ Unified caching layer for API calls.
 
 Provides:
   - TTLCache: A generic thread-safe time-to-live cache.
-  - RateLimiter: Thread-safe rate limiter with backoff support.
   - FR24Cache: FlightRadar24 cache with per-key 90s feed TTL and 30-min flight detail TTL.
 """
 
@@ -95,76 +94,6 @@ class TTLCache:
                 removed += 1
         return removed
 
-
-class RateLimiter:
-    """
-    Thread-safe rate limiter that enforces a minimum interval between operations.
-    Supports a backoff mode for handling 429 (rate limit) responses.
-    """
-
-    def __init__(
-        self,
-        normal_interval: float = 3600.0,
-        backoff_interval: float = 3600.0,
-    ):
-        """
-        :param normal_interval: Minimum seconds between calls in normal mode.
-        :param backoff_interval: Minimum seconds between calls in backoff mode.
-        """
-        self._normal_interval = normal_interval
-        self._backoff_interval = backoff_interval
-        self._last_call_ts: float = 0.0
-        self._in_backoff: bool = False
-        self._lock = threading.Lock()
-
-    @property
-    def in_backoff(self) -> bool:
-        with self._lock:
-            return self._in_backoff
-
-    @property
-    def last_call_ts(self) -> float:
-        with self._lock:
-            return self._last_call_ts
-
-    def is_rate_limited(self) -> bool:
-        """Return True if a call should be skipped due to rate limiting."""
-        with self._lock:
-            elapsed = time.time() - self._last_call_ts
-            interval = self._backoff_interval if self._in_backoff else self._normal_interval
-            return elapsed < interval
-
-    def time_until_next_allowed(self) -> float:
-        """Return seconds until the next call is allowed (0 if allowed now)."""
-        with self._lock:
-            elapsed = time.time() - self._last_call_ts
-            interval = self._backoff_interval if self._in_backoff else self._normal_interval
-            remaining = interval - elapsed
-            return max(0.0, remaining)
-
-    def record_call(self) -> None:
-        """Record that an API call was just made."""
-        with self._lock:
-            self._last_call_ts = time.time()
-
-    def enter_backoff(self) -> None:
-        """Enter backoff mode (e.g., after receiving HTTP 429)."""
-        with self._lock:
-            self._in_backoff = True
-        logger.warning("Rate limiter: entering backoff mode")
-
-    def exit_backoff(self) -> None:
-        """Exit backoff mode after a successful response."""
-        with self._lock:
-            if self._in_backoff:
-                self._in_backoff = False
-                logger.info("Rate limiter: backoff cleared, resuming normal interval")
-
-    def reset(self) -> None:
-        """Reset all state."""
-        with self._lock:
-            self._last_call_ts = 0.0
-            self._in_backoff = False
 
 
 
