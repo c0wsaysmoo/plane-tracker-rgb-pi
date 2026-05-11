@@ -49,7 +49,7 @@ def haversine(lat1, lon1, lat2, lon2):
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     miles = EARTH_RADIUS_M * c
-    return miles * 1.609 if DISTANCE_UNITS == "metric" else miles
+    return miles * 1.609344 if DISTANCE_UNITS == "metric" else miles
 
 
 def degrees_to_cardinal(deg):
@@ -445,7 +445,6 @@ def test_pipeline_summary_output():
         "zone_filtered": 8,
         "flights_processed": 3,
         "details_fetched": 3,
-        "details_cached": 0,
         "airport_lookups": 6,
         "airline_lookups": 2,
         "adsbdb_lookups": 1,

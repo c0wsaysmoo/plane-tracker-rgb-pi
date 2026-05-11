@@ -78,10 +78,8 @@ def get_flight_schedule(callsign):
     params = {"api_key": AIRLABS_API_KEY}
     if len(callsign) >= 4 and callsign[:3].isalpha() and callsign[3:].isdigit():
         params["flight_icao"] = callsign
-    elif len(callsign) >= 3 and callsign[:2].isalpha() and callsign[2:].isdigit():
-        params["flight_iata"] = callsign
     else:
-        params["flight_iata"] = callsign  # best guess
+        params["flight_iata"] = callsign
 
     try:
         logger.info(f"AirLabs: Looking up schedule for {callsign}")
