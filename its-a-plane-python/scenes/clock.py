@@ -19,6 +19,7 @@ class ClockScene(object):
         self.today_sunrise = None
         self.today_sunset = None
         self.last_fetch_date = None  # Store the date of the last forecast fetch
+        self._forecast_retry_after = 0  # Epoch time: don't retry before this
 
     def calculate_sunrise_sunset(self):
         now = datetime.now()
@@ -26,9 +27,14 @@ class ClockScene(object):
         try:
             # Only fetch forecast if it's a new day or if no cached data
             if self.last_fetch_date != now.date():
+                # Cooldown: don't hammer the API on repeated failures
+                if datetime.now(timezone.utc).timestamp() < self._forecast_retry_after:
+                    return self.today_sunrise, self.today_sunset
+
                 forecast = grab_forecast(tag="ClockScene")
                 if not forecast:  # None or empty list
                     logging.error("Forecast data missing or API error.")
+                    self._forecast_retry_after = datetime.now(timezone.utc).timestamp() + 300  # 5 min
                     return None, None
 
                 for day in forecast:

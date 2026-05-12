@@ -94,6 +94,7 @@
 </head>
 <body>
     <h1>Flight Tracker Dashboard</h1>
+    <div id="location-label" style="color:#666; font-size:15px; margin-bottom:14px;"></div>
 
     <div class="track-box">
         <h2>Track a Flight</h2>
@@ -109,6 +110,17 @@
             <button class="btn-cancel" onclick="cancelSave()">Cancel</button>
         </div>
         <p class="note">Enter the ICAO callsign (e.g. UAL1134, AAL1234, DAL1234). If the flight isn't found, it may not be supported by the data source.</p>
+    </div>
+
+    <div class="track-box">
+        <h2>Route Search</h2>
+        <div class="track-row">
+            <input type="text" id="origin-input" placeholder="Origin (EWR)" maxlength="4" style="width:90px;" />
+            <span style="font-size:18px;">→</span>
+            <input type="text" id="dest-input" placeholder="Dest (LAX)" maxlength="4" style="width:90px;" />
+            <button id="btn-route" onclick="searchRoute()">Search</button>
+        </div>
+        <div id="route-results" style="margin-top:12px; font-size:14px;"></div>
     </div>
 
     <hr>
@@ -220,11 +232,58 @@
             loadCurrent();
         }
 
+        async function loadLocation() {
+            try {
+                const res = await fetch("/airport-code");
+                const data = await res.json();
+                const label = data.name ? `${data.code} — ${data.name}` : data.code;
+                document.getElementById("location-label").textContent = label;
+            } catch (e) {}
+        }
+
+        async function searchRoute() {
+            const origin = document.getElementById("origin-input").value.trim().toUpperCase();
+            const dest = document.getElementById("dest-input").value.trim().toUpperCase();
+            if (!origin || !dest) return;
+
+            const btn = document.getElementById("btn-route");
+            const results = document.getElementById("route-results");
+            btn.disabled = true;
+            btn.textContent = "Searching...";
+            results.textContent = `Searching ${origin}→${dest}...`;
+
+            try {
+                const res = await fetch("/route/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ origin, destination: dest })
+                });
+                const data = await res.json();
+                if (data.flights && data.flights.length > 0) {
+                    let html = `<strong>${data.count} flight(s) found:</strong><br>`;
+                    for (const f of data.flights) {
+                        html += `${f.callsign} — ${f.aircraft || '?'} — FL${Math.round(f.altitude/100)} — ${Math.round(f.speed)}kts<br>`;
+                    }
+                    results.innerHTML = html;
+                } else {
+                    results.textContent = `No live flights found on ${origin}→${dest}.`;
+                }
+            } catch (e) {
+                results.textContent = "Search failed — check your connection.";
+            }
+            btn.disabled = false;
+            btn.textContent = "Search";
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("callsign-input").addEventListener("keydown", e => {
                 if (e.key === "Enter") lookupAndTrack();
             });
+            document.getElementById("dest-input").addEventListener("keydown", e => {
+                if (e.key === "Enter") searchRoute();
+            });
             loadCurrent();
+            loadLocation();
         });
     </script>
 </body>

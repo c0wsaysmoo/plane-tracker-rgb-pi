@@ -14,11 +14,16 @@ class PlaneDetailsScene(object):
     def __init__(self):
         super().__init__()
         self.plane_position = screen.WIDTH
+        self.plane_details_complete = False
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
         # Guard against no data
         if len(self._data) == 0:
+            return
+
+        # Skip rendering after scroll complete (waiting for other regions)
+        if self.plane_details_complete:
             return
 
         # Extract data
@@ -31,10 +36,6 @@ class PlaneDetailsScene(object):
         # Construct the plane details strings
         plane_name_text = f'{plane_name} '
         distance_text = f'{distance:.2f}{distance_units} {direction}'
-
-        # Calculate the widths of each section
-        plane_name_width = len(plane_name_text) * 5
-        distance_direction_text_width = max(len(distance_text) * 5, screen.WIDTH)
 
         # Draw background
         self.draw_square(
@@ -70,11 +71,15 @@ class PlaneDetailsScene(object):
         # Handle scrolling
         self.plane_position -= 1
 
-        # Loop scroll back to start when text scrolls off
-        # (page advancing is handled by FlightDetailsScene only)
+        # Mark scroll complete when text scrolls off (wait for other regions)
         if self.plane_position + total_text_width < 0:
-            self.plane_position = screen.WIDTH
+            if len(self._data) > 1:
+                self.plane_details_complete = True
+                self.mark_scroll_complete("plane_details")
+            else:
+                self.plane_position = screen.WIDTH
 
     @Animator.KeyFrame.add(0)
-    def reset_scrolling(self):
+    def reset_plane_details_scroll(self):
         self.plane_position = screen.WIDTH
+        self.plane_details_complete = False

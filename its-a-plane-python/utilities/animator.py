@@ -17,7 +17,6 @@ class Animator(object):
         self.keyframes = []
         self.frame = 0
         self._delay = DELAY_DEFAULT
-        self._reset_scene = True
 
         self._register_keyframes()
 
@@ -57,7 +56,6 @@ class Animator(object):
                     else:
                         keyframe.properties["count"] += 1
 
-            self._reset_scene = False
             self.frame += 1
             sleep(self._delay)
 

@@ -188,6 +188,60 @@ def haversine(lat1, lon1, lat2, lon2):
     return miles * 1.609344 if DISTANCE_UNITS == "metric" else miles
 
 
+def _estimate_eta_3phase(altitude_ft, vspeed_fpm, ground_speed_kts, dist_remaining_nm):
+    """3-phase ETA estimate: climb/cruise/descent with approach buffer.
+
+    Concept from c0wsaysmoo/plane-tracker-rgb-pi calculate_eta().
+    Returns estimated minutes to destination, or None if inputs are invalid.
+    """
+    if not ground_speed_kts or ground_speed_kts <= 0 or dist_remaining_nm <= 0:
+        return None
+
+    altitude_ft = altitude_ft or 0
+    vspeed_fpm = vspeed_fpm or 0
+
+    CRUISE_ALT = 35000  # typical cruise altitude in feet
+    CLIMB_RATE = 2000   # feet per minute
+    DESCENT_RATE = 1500  # feet per minute
+    DESCENT_RATIO = 3    # 3:1 glide rule — 3nm per 1000ft descent
+
+    remaining_nm = dist_remaining_nm
+
+    # Estimate descent distance (top-of-descent to destination)
+    descent_alt = min(altitude_ft, CRUISE_ALT)
+    tod_nm = (descent_alt / 1000) * DESCENT_RATIO
+    descent_speed = ground_speed_kts * 0.75
+    descent_mins = (tod_nm / descent_speed * 60) if descent_speed > 0 else 0
+
+    if vspeed_fpm > 200:
+        # Climbing — estimate time to cruise, then cruise the rest
+        alt_to_climb = max(0, CRUISE_ALT - altitude_ft)
+        climb_mins = alt_to_climb / CLIMB_RATE if CLIMB_RATE > 0 else 0
+        climb_nm = (climb_mins / 60) * ground_speed_kts
+
+        cruise_nm = max(0, remaining_nm - climb_nm - tod_nm)
+        cruise_mins = (cruise_nm / ground_speed_kts * 60) if ground_speed_kts > 0 else 0
+        total_mins = climb_mins + cruise_mins + descent_mins
+
+    elif vspeed_fpm < -200:
+        # Descending — use reduced speed for remaining distance
+        total_mins = (remaining_nm / descent_speed * 60) if descent_speed > 0 else 0
+
+    else:
+        # Cruising — cruise to top-of-descent, then descent
+        cruise_nm = max(0, remaining_nm - tod_nm)
+        cruise_mins = (cruise_nm / ground_speed_kts * 60) if ground_speed_kts > 0 else 0
+        total_mins = cruise_mins + descent_mins
+
+    # Approach maneuvering buffer
+    if remaining_nm <= 15:
+        total_mins += (6 / ground_speed_kts * 60)  # 6nm buffer
+    elif remaining_nm <= 50:
+        total_mins *= 1.15  # 15% buffer
+
+    return max(0, total_mins)
+
+
 def estimate_stale_data(last_data):
     data = dict(last_data)
     data["is_live"] = False
@@ -554,7 +608,7 @@ class Overhead:
 
     def safe_get(self, d, *keys, default=None):
         for key in keys:
-            if not d or not isinstance(d, dict):
+            if d is None or not isinstance(d, dict):
                 return default
             d = d.get(key)
         return d if d is not None else default
@@ -1032,15 +1086,20 @@ class Overhead:
                         h = mins_left // 60
                         m = mins_left % 60
                         time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"
-            # Last fallback: distance/speed
+            # Last fallback: 3-phase ETA (climb/cruise/descent model)
             if not time_remaining and dist_remaining and match.ground_speed:
                 if DISTANCE_UNITS == "metric":
                     dist_nm = dist_remaining * 0.539957
                 else:
                     dist_nm = dist_remaining * 0.868976
-                hrs_left = dist_nm / match.ground_speed
-                mins_left = int(hrs_left * 60)
-                if mins_left > 0:
+                mins_left = _estimate_eta_3phase(
+                    match.altitude or 0,
+                    match.vertical_speed or 0,
+                    match.ground_speed,
+                    dist_nm,
+                )
+                if mins_left and mins_left > 0:
+                    mins_left = int(mins_left)
                     h = mins_left // 60
                     m = mins_left % 60
                     time_remaining = f"{h}:{m:02d}" if h > 0 else f"{m}m"

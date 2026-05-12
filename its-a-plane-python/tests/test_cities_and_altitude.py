@@ -5,31 +5,26 @@ import math
 import os
 import sys
 import tempfile
+import types
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 # Ensure project root is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Mock rgbmatrix so we can import scenes/trackedstats.py without Pi hardware
+if "rgbmatrix" not in sys.modules:
+    _mock_rgbmatrix = types.ModuleType("rgbmatrix")
+    _mock_rgbmatrix.graphics = MagicMock()
+    _mock_rgbmatrix.RGBMatrix = MagicMock
+    _mock_rgbmatrix.RGBMatrixOptions = MagicMock
+    sys.modules["rgbmatrix"] = _mock_rgbmatrix
 
-# --- FL altitude tests ---
-
-# Copy of _format_altitude to avoid rgbmatrix import chain
-# MUST stay in sync with scenes/trackedstats.py:_format_altitude
-def _format_altitude(altitude):
-    """Format altitude as flight level (FL180+) or feet below transition altitude."""
-    if not altitude:
-        return None
-    altitude = int(altitude)
-    if altitude >= 18000:
-        fl = altitude // 100
-        return f"FL{fl:03d}"
-    else:
-        return f"{altitude:,}ft"
+from scenes.trackedstats import _format_altitude
 
 
 class TestFormatAltitude:
-    """Test _format_altitude (copy of scenes/trackedstats.py version)."""
+    """Test _format_altitude imported directly from scenes/trackedstats.py."""
 
     def _format(self, altitude):
         return _format_altitude(altitude)
