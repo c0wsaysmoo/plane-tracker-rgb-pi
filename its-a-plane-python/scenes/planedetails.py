@@ -14,12 +14,17 @@ class PlaneDetailsScene(object):
     def __init__(self):
         super().__init__()
         self.plane_position = screen.WIDTH
+        self.plane_details_complete = False
         self._data_all_looped = False
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
         # Guard against no data
         if len(self._data) == 0:
+            return
+
+        # Skip rendering after scroll complete (waiting for other regions)
+        if self.plane_details_complete:
             return
 
         # Extract data
@@ -71,14 +76,15 @@ class PlaneDetailsScene(object):
         # Handle scrolling
         self.plane_position -= 1
 
-        # Check if the text has completely scrolled off the screen
+        # Mark scroll complete when text scrolls off (wait for other regions)
         if self.plane_position + total_text_width < 0:
-            self.plane_position = screen.WIDTH
             if len(self._data) > 1:
-                self._data_index = (self._data_index + 1) % len(self._data)
-                self._data_all_looped = (not self._data_index) or self._data_all_looped 
-                self.reset_scene()
+                self.plane_details_complete = True
+                self.mark_scroll_complete("plane_details")
+            else:
+                self.plane_position = screen.WIDTH
 
     @Animator.KeyFrame.add(0)
-    def reset_scrolling(self):
+    def reset_plane_details_scroll(self):
         self.plane_position = screen.WIDTH
+        self.plane_details_complete = False
