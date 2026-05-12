@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.cache/
+.pytest_cache/
+airports.json
+cities.json
+flight_counter.json
+closest.txt
+farthest.txt
