@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight Statistics</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; max-width: 900px; margin: 0 auto; }
+        h1 { margin-bottom: 5px; }
+        #location-label { color: #666; font-size: 15px; margin-bottom: 14px; }
+        a.back { font-size: 14px; color: #0066cc; text-decoration: none; }
+        .cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+        .card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
+        .card .label { font-size: 12px; color: #888; text-transform: uppercase; }
+        .card .value { font-size: 22px; font-weight: bold; margin-top: 2px; }
+        .card .sub { font-size: 12px; color: #666; }
+        .chart-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+        .chart-box { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 14px; flex: 1; min-width: 280px; }
+        .chart-full { width: 100%; }
+        .chart-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        th { color: #888; font-size: 12px; text-transform: uppercase; }
+        tr.clickable { cursor: pointer; }
+        tr.clickable:hover { background: #f0f0f0; }
+        .bar-cell { display: flex; align-items: center; gap: 8px; }
+        .bar-fill { height: 14px; background: #ffb300; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <a class="back" href="/">← Dashboard</a>
+    <h1>Flight Statistics</h1>
+    <div id="location-label"></div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Daily Average</div><div class="value" id="avg">—</div></div>
+        <div class="card"><div class="label">Busiest Day</div><div class="value" id="busiest-val">—</div><div class="sub" id="busiest-sub"></div></div>
+        <div class="card"><div class="label">Peak Hour</div><div class="value" id="peak-hour">—</div></div>
+        <div class="card"><div class="label">Peak Day of Week</div><div class="value" id="peak-dow">—</div></div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-box chart-full">
+            <h3>Average Flights by Hour</h3>
+            <canvas id="hourChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-box">
+            <h3>Average Flights by Day of Week</h3>
+            <canvas id="dowChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <h3>Airline Breakdown (Top 12)</h3>
+            <canvas id="airlineChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <h3>Local vs Flyover</h3>
+            <canvas id="localChart"></canvas>
+        </div>
+    </div>
+
+    <h3>Daily Flight Log</h3>
+    <table>
+        <thead><tr><th>Date</th><th>Flights</th><th></th><th>First</th><th>Last</th></tr></thead>
+        <tbody id="log-body"></tbody>
+    </table>
+
+    <script>
+        const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
+        const DOWS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+        let airportCode = '';
+
+        async function loadAll() {
+            const [summaryRes, fullRes, locRes] = await Promise.all([
+                fetch('/counter/summary'), fetch('/counter'), fetch('/airport-code')
+            ]);
+            const summary = await summaryRes.json();
+            const full = await fullRes.json();
+            const loc = await locRes.json();
+            airportCode = (loc.code || '').toUpperCase();
+
+            if (loc.name) document.getElementById('location-label').textContent = `${loc.code} — ${loc.name}`;
+
+            if (!summary.length) return;
+
+            // Stats cards
+            const totalFlights = summary.reduce((s,d) => s + d.count, 0);
+            const totalDays = summary.length;
+            document.getElementById('avg').textContent = (totalFlights / totalDays).toFixed(1);
+
+            const busiest = summary.reduce((a,b) => a.count > b.count ? a : b);
+            document.getElementById('busiest-val').textContent = busiest.count;
+            document.getElementById('busiest-sub').textContent = busiest.date;
+
+            // Average by hour
+            const hourTotals = Array(24).fill(0);
+            summary.forEach(d => d.by_hour.forEach((v,i) => hourTotals[i] += v));
+            const avgByHour = hourTotals.map(v => v / totalDays);
+            const peakHourIdx = avgByHour.indexOf(Math.max(...avgByHour));
+            document.getElementById('peak-hour').textContent = `${peakHourIdx}:00`;
+
+            // Average by DOW
+            const dowTotals = Array(7).fill(0);
+            const dowCounts = Array(7).fill(0);
+            summary.forEach(d => {
+                const dow = new Date(d.date + 'T12:00:00').getDay();
+                dowTotals[dow] += d.count;
+                dowCounts[dow]++;
+            });
+            const avgByDow = dowTotals.map((v,i) => dowCounts[i] ? v / dowCounts[i] : 0);
+            const peakDow = avgByDow.indexOf(Math.max(...avgByDow));
+            document.getElementById('peak-dow').textContent = DOWS[peakDow];
+
+            // Airline breakdown from full data
+            const airlines = {};
+            for (const day of Object.values(full)) {
+                for (const f of (day.flights || [])) {
+                    const p = f.callsign.replace(/[0-9]/g,'').slice(0,3);
+                    if (p) airlines[p] = (airlines[p] || 0) + 1;
+                }
+            }
+            const sorted = Object.entries(airlines).sort((a,b) => b[1] - a[1]).slice(0, 12);
+
+            // Local vs flyover
+            let local = 0, flyover = 0, unknown = 0;
+            for (const day of Object.values(full)) {
+                for (const f of (day.flights || [])) {
+                    const o = (f.origin || '').toUpperCase();
+                    const d = (f.dest || '').toUpperCase();
+                    if (!o && !d) unknown++;
+                    else if (o === airportCode || d === airportCode) local++;
+                    else flyover++;
+                }
+            }
+
+            // Charts
+            const chartOpt = {
+                responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } } },
+                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
+                }
+            };
+
+            new Chart(document.getElementById('hourChart'), {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length:24}, (_,i) => `${i}:00`),
+                    datasets: [{ data: avgByHour, backgroundColor: 'rgba(255,179,0,0.3)', borderColor: '#ffb300', borderWidth: 1 }]
+                },
+                options: chartOpt
+            });
+
+            new Chart(document.getElementById('dowChart'), {
+                type: 'bar',
+                data: {
+                    labels: DOWS,
+                    datasets: [{ data: avgByDow, backgroundColor: 'rgba(255,107,53,0.3)', borderColor: '#ff6b35', borderWidth: 1 }]
+                },
+                options: chartOpt
+            });
+
+            new Chart(document.getElementById('airlineChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: sorted.map(s => s[0]),
+                    datasets: [{ data: sorted.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
+                },
+                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+            });
+
+            new Chart(document.getElementById('localChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Local', 'Flyover', 'Unknown'],
+                    datasets: [{ data: [local, flyover, unknown], backgroundColor: ['#69f0ae99','#ffb30099','#cccccc99'], borderColor: ['#69f0ae','#ffb300','#ccc'], borderWidth: 1 }]
+                },
+                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+            });
+
+            // Daily log table
+            const maxCount = Math.max(...summary.map(d => d.count));
+            const tbody = document.getElementById('log-body');
+            for (const d of summary.slice().reverse()) {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable';
+                tr.onclick = () => window.location = `/stats/${d.date}`;
+                tr.innerHTML = `
+                    <td>${d.date}</td>
+                    <td>${d.count}</td>
+                    <td><div class="bar-cell"><div class="bar-fill" style="width:${d.count/maxCount*120}px"></div></div></td>
+                    <td>${d.first_seen}</td>
+                    <td>${d.last_seen}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadAll);
+    </script>
+</body>
+</html>
