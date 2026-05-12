@@ -16,6 +16,7 @@ Usage:
 import json
 import math
 import os
+import threading
 import zipfile
 from io import BytesIO
 
@@ -30,6 +31,7 @@ CACHE_VERSION = 1
 # In-memory list: [[name, lat, lon], ...]
 _db = []
 _loaded = False
+_load_lock = threading.Lock()
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):
@@ -76,28 +78,32 @@ def _download_and_build():
 
 
 def _load():
-    """Load from cache file or download if not present."""
+    """Load from cache file or download if not present. Thread-safe."""
     global _db, _loaded
     if _loaded:
         return
 
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
+    with _load_lock:
+        if _loaded:  # double-check after acquiring lock
+            return
 
-            if isinstance(raw, dict) and raw.get("_version") == CACHE_VERSION:
-                _db = raw.get("cities", [])
-                _loaded = True
-                return
-            else:
-                version_found = raw.get("_version", "none") if isinstance(raw, dict) else "legacy"
-                print(f"[Cities] Cache version mismatch (found: {version_found}, need: {CACHE_VERSION}) — rebuilding")
-        except Exception as e:
-            print(f"[Cities] Cache load failed: {e} — re-downloading")
+        if os.path.exists(CACHE_FILE):
+            try:
+                with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
 
-    _db = _download_and_build()
-    _loaded = True
+                if isinstance(raw, dict) and raw.get("_version") == CACHE_VERSION:
+                    _db = raw.get("cities", [])
+                    _loaded = True
+                    return
+                else:
+                    version_found = raw.get("_version", "none") if isinstance(raw, dict) else "legacy"
+                    print(f"[Cities] Cache version mismatch (found: {version_found}, need: {CACHE_VERSION}) — rebuilding")
+            except Exception as e:
+                print(f"[Cities] Cache load failed: {e} — re-downloading")
+
+        _db = _download_and_build()
+        _loaded = True
 
 
 def get_nearest_city(latitude, longitude):

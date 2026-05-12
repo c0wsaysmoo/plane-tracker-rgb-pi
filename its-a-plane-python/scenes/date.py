@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from utilities.temperature import grab_forecast
 from utilities.animator import Animator

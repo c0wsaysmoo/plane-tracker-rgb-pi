@@ -171,6 +171,85 @@ def tracked_set():
         return jsonify({"message": f"Error saving: {e}"}), 500
 
 
+@app.post("/route/search")
+def route_search():
+    """Search for live flights by origin→destination using gRPC server-side filter."""
+    import re
+    data = request.get_json(force=True)
+    if not data:
+        return jsonify({"flights": [], "error": "Invalid request"}), 400
+    origin = data.get("origin", "").strip().upper()
+    destination = data.get("destination", "").strip().upper()
+    if not origin or not destination:
+        return jsonify({"flights": [], "error": "Origin and destination required"}), 400
+    if not re.match(r'^[A-Z]{3,4}$', origin) or not re.match(r'^[A-Z]{3,4}$', destination):
+        return jsonify({"flights": [], "error": "Airport codes must be 3-4 letters"}), 400
+    try:
+        matches = _fr24_client.find_by_route(origin, destination)
+        flights = []
+        for m in matches:
+            flights.append({
+                "callsign": m.callsign,
+                "origin": m.origin_airport_iata or origin,
+                "destination": m.destination_airport_iata or destination,
+                "aircraft": m.aircraft_code or "",
+                "altitude": m.altitude,
+                "speed": m.ground_speed,
+                "latitude": m.latitude,
+                "longitude": m.longitude,
+            })
+        return jsonify({"flights": flights, "count": len(flights)})
+    except Exception as e:
+        return jsonify({"flights": [], "error": str(e)}), 500
+
+
+# Location name (reverse geocode via Nominatim).
+# Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+_location_cache = {}
+
+@app.get("/airport-code")
+def airport_code():
+    """Return home airport code and reverse-geocoded location name."""
+    if _location_cache:
+        return jsonify(_location_cache)
+
+    try:
+        from config import JOURNEY_CODE_SELECTED, LOCATION_HOME
+        code = JOURNEY_CODE_SELECTED or "???"
+        lat, lon = LOCATION_HOME[0], LOCATION_HOME[1]
+    except Exception:
+        return jsonify({"code": "???", "name": ""})
+
+    import requests as http_req
+    location_name = ""
+    try:
+        r = http_req.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "json", "zoom": 13},
+            headers={"User-Agent": "plane-tracker-rgb-pi/1.0"},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            addr = r.json().get("address", {})
+            neighbourhood = (
+                addr.get("neighbourhood")
+                or addr.get("suburb")
+                or addr.get("quarter")
+                or addr.get("village")
+            )
+            city = addr.get("city") or addr.get("town") or addr.get("county")
+            if neighbourhood and city:
+                location_name = f"{neighbourhood}, {city}"
+            elif city:
+                location_name = city
+    except Exception:
+        pass
+
+    result = {"code": code, "name": location_name}
+    _location_cache.update(result)
+    return jsonify(result)
+
+
 # Serve map files from the data directory
 @app.get("/maps/<path:filename>")
 def maps(filename):

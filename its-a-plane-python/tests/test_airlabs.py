@@ -3,12 +3,21 @@
 import json
 import os
 import sys
+import types
 from time import time
 from unittest.mock import patch, MagicMock
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# Mock rgbmatrix so we can import scenes/trackedstats.py without Pi hardware
+if "rgbmatrix" not in sys.modules:
+    _mock_rgbmatrix = types.ModuleType("rgbmatrix")
+    _mock_rgbmatrix.graphics = MagicMock()
+    _mock_rgbmatrix.RGBMatrix = MagicMock
+    _mock_rgbmatrix.RGBMatrixOptions = MagicMock
+    sys.modules["rgbmatrix"] = _mock_rgbmatrix
 
 
 class TestAirLabsModule:
@@ -141,56 +150,44 @@ class TestAirLabsModule:
 
 
 class TestFormatDepTime:
-    """Test _format_dep_time from trackedstats.py (copy to avoid rgbmatrix)."""
+    """Test _format_dep_time imported from scenes/trackedstats.py."""
 
-    def _format(self, dep_time_str, clock_format="12hr"):
-        # Copy of the function to avoid rgbmatrix import chain
-        if not dep_time_str:
-            return ""
-        try:
-            parts = dep_time_str.split(" ")
-            if len(parts) < 2:
-                return dep_time_str
-            hm = parts[1].split(":")
-            hour = int(hm[0])
-            minute = int(hm[1]) if len(hm) > 1 else 0
-            if clock_format == "12hr":
-                ampm = "a" if hour < 12 else "p"
-                display_hour = hour % 12 or 12
-                if minute:
-                    return f"{display_hour}:{minute:02d}{ampm}"
-                return f"{display_hour}{ampm}"
-            else:
-                return f"{hour}:{minute:02d}"
-        except (ValueError, IndexError):
-            return dep_time_str
+    def _format_12hr(self, dep_time_str):
+        import scenes.trackedstats as ts
+        ts.CLOCK_FORMAT = "12hr"
+        return ts._format_dep_time(dep_time_str)
+
+    def _format_24hr(self, dep_time_str):
+        import scenes.trackedstats as ts
+        ts.CLOCK_FORMAT = "24hr"
+        return ts._format_dep_time(dep_time_str)
 
     def test_afternoon_12hr(self):
-        assert self._format("2026-05-11 18:30") == "6:30p"
+        assert self._format_12hr("2026-05-11 18:30") == "6:30p"
 
     def test_morning_12hr(self):
-        assert self._format("2026-05-11 09:15") == "9:15a"
+        assert self._format_12hr("2026-05-11 09:15") == "9:15a"
 
     def test_noon_12hr(self):
-        assert self._format("2026-05-11 12:00") == "12p"
+        assert self._format_12hr("2026-05-11 12:00") == "12p"
 
     def test_midnight_12hr(self):
-        assert self._format("2026-05-11 00:00") == "12a"
+        assert self._format_12hr("2026-05-11 00:00") == "12a"
 
     def test_on_the_hour_12hr(self):
-        assert self._format("2026-05-11 14:00") == "2p"
+        assert self._format_12hr("2026-05-11 14:00") == "2p"
 
     def test_afternoon_24hr(self):
-        assert self._format("2026-05-11 18:30", clock_format="24hr") == "18:30"
+        assert self._format_24hr("2026-05-11 18:30") == "18:30"
 
     def test_morning_24hr(self):
-        assert self._format("2026-05-11 09:15", clock_format="24hr") == "9:15"
+        assert self._format_24hr("2026-05-11 09:15") == "9:15"
 
     def test_midnight_24hr(self):
-        assert self._format("2026-05-11 00:00", clock_format="24hr") == "0:00"
+        assert self._format_24hr("2026-05-11 00:00") == "0:00"
 
     def test_empty(self):
-        assert self._format("") == ""
+        assert self._format_12hr("") == ""
 
     def test_none(self):
-        assert self._format(None) == ""
+        assert self._format_12hr(None) == ""

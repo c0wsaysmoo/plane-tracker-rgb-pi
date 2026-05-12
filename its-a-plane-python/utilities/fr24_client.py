@@ -74,7 +74,7 @@ _ensure_env_credentials()
 from fr24 import FR24, BoundingBox  # noqa: E402
 from fr24.proto._live_feed_pb2 import (  # noqa: E402
     LiveFeedRequest, LiveFeedResponse, LocationBoundaries,
-    VisibilitySettings, Filter,
+    VisibilitySettings, Filter, AirportFilter,
 )
 from fr24.proto._common_pb2 import TrafficType, RestrictionVisibility  # noqa: E402
 from fr24.grpc import live_feed as _grpc_live_feed  # noqa: E402
@@ -298,6 +298,39 @@ class FR24Client:
             self._fr24_ok = False
             return None
 
+    def find_by_route(self, origin_iata: str, destination_iata: str) -> list[LiveFlight]:
+        """
+        Find live flights by origin and destination airport using gRPC server-side filter.
+
+        Uses Filter.origins_list and destinations_list to let the server filter
+        its full database. Free, no credits, server-side filtered.
+
+        :param origin_iata: Origin airport IATA code (e.g., "EWR")
+        :param destination_iata: Destination airport IATA code (e.g., "LAX")
+        :returns: List of matching LiveFlight objects
+        """
+        origin_iata = origin_iata.strip().upper()
+        destination_iata = destination_iata.strip().upper()
+        if not origin_iata or not destination_iata:
+            return []
+
+        logger.info(f"FR24: Searching route {origin_iata}→{destination_iata} (server-side filter)")
+        try:
+            results = self._run_with_client(
+                lambda fr24: self._find_by_route_async(fr24, origin_iata, destination_iata)
+            )
+            self._fr24_ok = True
+            logger.info(f"FR24: Found {len(results)} flights on {origin_iata}→{destination_iata}")
+            return results
+        except (ConnectionError, OSError) as e:
+            logger.warning(f"FR24: Connection error during route search: {e}")
+            self._fr24_ok = False
+            return []
+        except Exception as e:
+            logger.warning(f"FR24: Error searching route {origin_iata}→{destination_iata}: {e}")
+            self._fr24_ok = False
+            return []
+
     async def _find_by_callsign_async(
         self, fr24: FR24, callsign: str
     ) -> list[LiveFlight]:
@@ -310,6 +343,35 @@ class FR24Client:
                 traffic_type=TrafficType.ALL,
             ),
             filters_list=Filter(callsigns_list=[callsign]),
+            field_mask=FieldMask(paths=["flight", "reg", "route", "type"]),
+            limit=100,
+            maxage=14400,
+            restriction_mode=RestrictionVisibility.NOT_VISIBLE,
+        )
+
+        response = await _grpc_live_feed(
+            fr24.http.client, req, fr24.http.grpc_headers
+        )
+        result = _parse_data(response.content, LiveFeedResponse)
+        proto = result.unwrap()
+
+        return self._parse_flights(proto)
+
+    async def _find_by_route_async(
+        self, fr24: FR24, origin: str, destination: str
+    ) -> list[LiveFlight]:
+        """Server-side filtered route search via raw gRPC protobuf."""
+        req = LiveFeedRequest(
+            bounds=LocationBoundaries(north=90, south=-90, west=-180, east=180),
+            settings=VisibilitySettings(
+                sources_list=range(10),
+                services_list=range(12),
+                traffic_type=TrafficType.ALL,
+            ),
+            filters_list=Filter(
+                origins_list=[AirportFilter(iata=origin)],
+                destinations_list=[AirportFilter(iata=destination)],
+            ),
             field_mask=FieldMask(paths=["flight", "reg", "route", "type"]),
             limit=100,
             maxage=14400,

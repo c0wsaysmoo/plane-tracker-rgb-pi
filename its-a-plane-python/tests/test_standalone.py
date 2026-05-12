@@ -123,6 +123,7 @@ def check(description, condition):
     else:
         _tests_failed += 1
         print(f"  ✗ FAIL: {description}")
+    assert condition, f"FAIL: {description}"
 
 
 def approx(a, b, tolerance=1.0):

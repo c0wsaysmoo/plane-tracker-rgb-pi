@@ -29,6 +29,11 @@ def flight_updated(flights_a, flights_b):
     return updatable_a == updatable_b
 
 
+# Scroll sync: both regions must finish scrolling before advancing to next flight.
+# Adopted from c0wsaysmoo/plane-tracker-rgb-pi PR #28.
+SCROLL_REGIONS = ("flight_details", "plane_details")
+
+
 try:
     from config import (
         BRIGHTNESS,
@@ -113,6 +118,7 @@ class Display(
 
         self._data_index = 0
         self._data = []
+        self._scroll_complete = {r: False for r in SCROLL_REGIONS}
 
         # Single Overhead instance handles both zone and tracked flight
         self.overhead = Overhead()
@@ -140,12 +146,30 @@ class Display(
             if data_is_different:
                 self._data_index = 0
                 self._data_all_looped = False
+                self.reset_scroll_completion()
                 self._data = new_data
 
             reset_required = there_is_data and data_is_different
 
             if reset_required:
                 self.reset_scene()
+
+    def mark_scroll_complete(self, region):
+        if region in self._scroll_complete:
+            self._scroll_complete[region] = True
+
+    def reset_scroll_completion(self):
+        self._scroll_complete = {r: False for r in SCROLL_REGIONS}
+
+    @Animator.KeyFrame.add(1)
+    def advance_completed_scroll(self, count):
+        if len(self._data) <= 1:
+            return
+        if all(self._scroll_complete.values()):
+            self._data_index = (self._data_index + 1) % len(self._data)
+            self._data_all_looped = self._data_index == 0 or self._data_all_looped
+            self.reset_scroll_completion()
+            self.reset_scene()
 
     @Animator.KeyFrame.add(1)
     def sync(self, count):
@@ -156,7 +180,7 @@ class Display(
     def grab_new_data(self, count):
         # One call to overhead.grab_data() handles both zone scan
         # and tracked flight lookup (tracked only if zone is empty)
-        if not (self.overhead.processing and self.overhead.new_data) and (
+        if not self.overhead.processing and (
             self._data_all_looped or len(self._data) <= 1
         ):
             self.overhead.grab_data()
