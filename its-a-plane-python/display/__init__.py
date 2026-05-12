@@ -1,5 +1,4 @@
 import sys
-import json
 import os
 from datetime import datetime
 from setup import frames
@@ -175,7 +174,7 @@ class Display(
     def grab_new_data(self, count):
         # One call to overhead.grab_data() handles both zone scan
         # and tracked flight lookup (tracked only if zone is empty)
-        if not (self.overhead.processing and self.overhead.new_data) and (
+        if not self.overhead.processing and (
             self._data_all_looped or len(self._data) <= 1
         ):
             self.overhead.grab_data()
