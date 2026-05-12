@@ -189,13 +189,22 @@
                 const tr = document.createElement('tr');
                 tr.className = 'clickable';
                 tr.onclick = () => window.location = `/stats/${d.date}`;
-                tr.innerHTML = `
-                    <td>${d.date}</td>
-                    <td>${d.count}</td>
-                    <td><div class="bar-cell"><div class="bar-fill" style="width:${d.count/maxCount*120}px"></div></div></td>
-                    <td>${d.first_seen}</td>
-                    <td>${d.last_seen}</td>
-                `;
+                const cells = [d.date, d.count, '', d.first_seen, d.last_seen];
+                cells.forEach((val, i) => {
+                    const td = document.createElement('td');
+                    if (i === 2) {
+                        const bar = document.createElement('div');
+                        bar.className = 'bar-cell';
+                        const fill = document.createElement('div');
+                        fill.className = 'bar-fill';
+                        fill.style.width = `${d.count/maxCount*120}px`;
+                        bar.appendChild(fill);
+                        td.appendChild(bar);
+                    } else {
+                        td.textContent = val;
+                    }
+                    tr.appendChild(td);
+                });
                 tbody.appendChild(tr);
             }
         }

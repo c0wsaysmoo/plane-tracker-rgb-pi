@@ -251,7 +251,7 @@ def airport_code():
 
 
 # Flight counter and stats (concept from c0wsaysmoo/plane-tracker-rgb-pi)
-COUNTER_FILE = os.path.join(DATA_DIR, "flight_counter.json")
+from utilities.overhead import COUNTER_FILE
 
 
 @app.get("/counter")
@@ -279,7 +279,9 @@ def flight_counter_summary():
         for day, data in sorted(log.items()):
             by_hour = [0] * 24
             for flight in data.get("flights", []):
-                by_hour[flight.get("hour", 0)] += 1
+                h = int(flight.get("hour") or 0)
+                if 0 <= h <= 23:
+                    by_hour[h] += 1
             summary.append({
                 "date": day,
                 "count": data.get("count", 0),

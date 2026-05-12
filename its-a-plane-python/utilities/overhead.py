@@ -402,17 +402,11 @@ def log_flight_count(callsign, entry=None):
     now_str = now.strftime("%H:%M:%S")
 
     try:
-        log = safe_load_json(COUNTER_FILE)
-        # safe_load_json returns [] for non-list; counter is a dict
+        with open(COUNTER_FILE, "r", encoding="utf-8") as f:
+            log = json.load(f)
         if not isinstance(log, dict):
-            try:
-                with open(COUNTER_FILE, "r", encoding="utf-8") as f:
-                    log = json.load(f)
-                if not isinstance(log, dict):
-                    log = {}
-            except (FileNotFoundError, json.JSONDecodeError):
-                log = {}
-    except Exception:
+            log = {}
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
         log = {}
 
     if today not in log:
