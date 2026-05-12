@@ -84,7 +84,8 @@
                 return;
             }
 
-            const dayOfWeek = DOWS[new Date(date + 'T12:00:00').getDay()];
+            const dateObj = new Date(date + 'T12:00:00');
+            const dayOfWeek = isNaN(dateObj.getTime()) ? '' : DOWS[dateObj.getDay()];
             document.getElementById('page-title').textContent = date;
             document.getElementById('page-sub').textContent = dayOfWeek;
 
@@ -169,9 +170,13 @@
             // Flights table
             const tbody = document.getElementById('flights-body');
             flights.forEach((f, i) => {
-                const route = (f.origin && f.dest) ? `${f.origin}→${f.dest}` : (f.origin || f.dest || '—');
+                const route = (f.origin && f.dest) ? `${f.origin}\u2192${f.dest}` : (f.origin || f.dest || '\u2014');
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${i+1}</td><td>${f.callsign}</td><td>${route}</td><td>${f.time}</td>`;
+                [i+1, f.callsign, route, f.time].forEach(val => {
+                    const td = document.createElement('td');
+                    td.textContent = val;
+                    tr.appendChild(td);
+                });
                 tbody.appendChild(tr);
             });
         }

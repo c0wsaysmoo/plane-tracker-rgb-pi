@@ -227,3 +227,89 @@ class TestLocationName:
         city = addr.get("city") or addr.get("town") or addr.get("county")
         assert neighbourhood is None
         assert city == "Newark"
+
+
+# ====================================================================
+# Flight Counter (concept from c0wsaysmoo/plane-tracker-rgb-pi)
+# ====================================================================
+
+class TestFlightCounter:
+    """Test log_flight_count function."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        """Set up temp counter file."""
+        import utilities.overhead as oh
+        self.oh = oh
+        self.orig_counter = oh.COUNTER_FILE
+        self.counter_file = str(tmp_path / "flight_counter.json")
+        oh.COUNTER_FILE = self.counter_file
+        yield
+        oh.COUNTER_FILE = self.orig_counter
+
+    def test_first_flight_creates_file(self):
+        self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX"})
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert today in data
+        assert data[today]["count"] == 1
+        assert data[today]["flights"][0]["callsign"] == "UAL123"
+        assert data[today]["flights"][0]["origin"] == "EWR"
+        assert data[today]["flights"][0]["dest"] == "LAX"
+
+    def test_deduplication(self):
+        """Same callsign counted only once per day."""
+        self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX"})
+        self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX"})
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert data[today]["count"] == 1
+
+    def test_multiple_callsigns(self):
+        self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX"})
+        self.oh.log_flight_count("DAL456", {"origin": "JFK", "destination": "ATL"})
+        self.oh.log_flight_count("AAL789", {"origin": "DFW", "destination": "ORD"})
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert data[today]["count"] == 3
+
+    def test_empty_callsign_skipped(self):
+        self.oh.log_flight_count("", {"origin": "EWR", "destination": "LAX"})
+        assert not os.path.exists(self.counter_file)
+
+    def test_none_entry(self):
+        """None entry should not crash."""
+        self.oh.log_flight_count("UAL123", None)
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert data[today]["count"] == 1
+        assert data[today]["flights"][0]["origin"] == ""
+
+    def test_hour_field(self):
+        """Hour field should be an integer 0-23."""
+        self.oh.log_flight_count("UAL123")
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        hour = data[today]["flights"][0]["hour"]
+        assert isinstance(hour, int)
+        assert 0 <= hour <= 23
+
+    def test_first_last_seen(self):
+        self.oh.log_flight_count("UAL123")
+        self.oh.log_flight_count("DAL456")
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert data[today]["first_seen"]
+        assert data[today]["last_seen"]
