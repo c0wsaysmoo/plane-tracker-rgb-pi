@@ -65,7 +65,8 @@ HAT_PWM_ENABLED = _bool(os.environ.get("HAT_PWM_ENABLED", "True"))
 # --- Flight filtering ---
 MIN_ALTITUDE = int(os.environ.get("MIN_ALTITUDE", "0"))
 JOURNEY_CODE_SELECTED = _require("JOURNEY_CODE_SELECTED")
-JOURNEY_BLANK_FILLER = os.environ.get("JOURNEY_BLANK_FILLER", " ? ")
+_raw_filler = os.environ.get("JOURNEY_BLANK_FILLER", "").strip()
+JOURNEY_BLANK_FILLER = f" {_raw_filler} " if _raw_filler else " ? "
 SPEED_UNITS = os.environ.get("SPEED_UNITS", "metric")
 
 # --- Logging & notifications ---
