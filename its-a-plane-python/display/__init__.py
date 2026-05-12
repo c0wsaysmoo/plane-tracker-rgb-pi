@@ -1,5 +1,4 @@
 import sys
-import json
 import os
 from datetime import datetime
 from setup import frames
