@@ -202,8 +202,7 @@ def _estimate_eta_3phase(altitude_ft, vspeed_fpm, ground_speed_kts, dist_remaini
 
     CRUISE_ALT = 35000  # typical cruise altitude in feet
     CLIMB_RATE = 2000   # feet per minute
-    DESCENT_RATE = 1500  # feet per minute
-    DESCENT_RATIO = 3    # 3:1 glide rule — 3nm per 1000ft descent
+    DESCENT_RATIO = 3   # 3:1 glide rule — 3nm per 1000ft descent
 
     remaining_nm = dist_remaining_nm
 
