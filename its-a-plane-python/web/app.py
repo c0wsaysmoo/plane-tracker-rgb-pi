@@ -250,6 +250,58 @@ def airport_code():
     return jsonify(result)
 
 
+# Flight counter and stats (concept from c0wsaysmoo/plane-tracker-rgb-pi)
+COUNTER_FILE = os.path.join(DATA_DIR, "flight_counter.json")
+
+
+@app.get("/counter")
+def flight_counter():
+    """Return full flight counter log (date-keyed dict)."""
+    try:
+        with open(COUNTER_FILE, "r", encoding="utf-8") as f:
+            log = json.load(f)
+        if not isinstance(log, dict):
+            return jsonify({})
+        return jsonify(log)
+    except Exception:
+        return jsonify({})
+
+
+@app.get("/counter/summary")
+def flight_counter_summary():
+    """Return daily summary stats for graphing."""
+    try:
+        with open(COUNTER_FILE, "r", encoding="utf-8") as f:
+            log = json.load(f)
+        if not isinstance(log, dict):
+            return jsonify([])
+        summary = []
+        for day, data in sorted(log.items()):
+            by_hour = [0] * 24
+            for flight in data.get("flights", []):
+                by_hour[flight.get("hour", 0)] += 1
+            summary.append({
+                "date": day,
+                "count": data.get("count", 0),
+                "by_hour": by_hour,
+                "first_seen": data.get("first_seen", ""),
+                "last_seen": data.get("last_seen", ""),
+            })
+        return jsonify(summary)
+    except Exception:
+        return jsonify([])
+
+
+@app.get("/stats")
+def stats_page():
+    return render_template("stats.html")
+
+
+@app.get("/stats/<date>")
+def stats_day_page(date):
+    return render_template("stats_day.html")
+
+
 # Serve map files from the data directory
 @app.get("/maps/<path:filename>")
 def maps(filename):

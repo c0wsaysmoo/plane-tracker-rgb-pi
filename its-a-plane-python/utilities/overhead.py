@@ -119,6 +119,7 @@ TRACKED_FILE = os.path.join(DATA_DIR, "tracked_flight.json")
 MAPS_DIR = os.path.join(DATA_DIR, "maps")
 os.makedirs(MAPS_DIR, exist_ok=True)
 ROUTE_AUDIT_LOG = os.path.join(DATA_DIR, "route_audit.log")
+COUNTER_FILE = os.path.join(DATA_DIR, "flight_counter.json")
 
 HOSTNAME = socket.gethostname()
 
@@ -387,6 +388,49 @@ def _log_route_audit(callsign, aircraft_type, distance, source, origin, destinat
             f.write(line)
     except Exception:
         pass
+
+
+def log_flight_count(callsign, entry=None):
+    """Log unique callsign to daily flight counter. De-duplicates per day.
+    Concept from c0wsaysmoo/plane-tracker-rgb-pi."""
+    if not callsign:
+        return
+    if entry is None:
+        entry = {}
+    now = datetime.now()
+    today = str(now.date())
+    now_str = now.strftime("%H:%M:%S")
+
+    try:
+        log = safe_load_json(COUNTER_FILE)
+        # safe_load_json returns [] for non-list; counter is a dict
+        if not isinstance(log, dict):
+            try:
+                with open(COUNTER_FILE, "r", encoding="utf-8") as f:
+                    log = json.load(f)
+                if not isinstance(log, dict):
+                    log = {}
+            except (FileNotFoundError, json.JSONDecodeError):
+                log = {}
+    except Exception:
+        log = {}
+
+    if today not in log:
+        log[today] = {"date": today, "count": 0, "flights": [],
+                      "first_seen": now_str, "last_seen": now_str}
+
+    seen = {e["callsign"] for e in log[today].get("flights", [])}
+    if callsign not in seen:
+        log[today]["flights"].append({
+            "callsign": callsign,
+            "time": now_str,
+            "hour": now.hour,
+            "origin": entry.get("origin", ""),
+            "dest": entry.get("destination", ""),
+        })
+        log[today]["count"] = len(log[today]["flights"])
+        log[today]["last_seen"] = now_str
+        safe_write_json(COUNTER_FILE, log)
 
 
 def load_tracked_callsign():
@@ -839,6 +883,7 @@ class Overhead:
 
                         log_flight_data(entry)
                         log_farthest_flight(entry)
+                        log_flight_count(callsign, entry)
                         break
 
                     except Exception as e:
