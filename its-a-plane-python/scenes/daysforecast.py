@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from PIL import Image
 
 from utilities.animator import Animator

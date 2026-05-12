@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-import colorsys
+from datetime import datetime
 from rgbmatrix import graphics
 from utilities.animator import Animator
 from setup import colours, fonts, frames, screen

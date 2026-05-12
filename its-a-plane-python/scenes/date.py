@@ -3,19 +3,10 @@ from utilities.temperature import grab_forecast
 from utilities.animator import Animator
 from setup import colours, fonts, frames
 from rgbmatrix import graphics
-import logging
-from config import NIGHT_START, NIGHT_END
-
-# Configure logging
-#logging.basicConfig(filename='myapp.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Setup
 DATE_FONT = fonts.extrasmall
 DATE_POSITION = (40, 11)
-
-# Convert NIGHT_START and NIGHT_END to datetime objects
-NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
-NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
 
 class DateScene(object):
     def __init__(self):

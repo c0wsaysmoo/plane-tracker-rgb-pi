@@ -4,21 +4,13 @@ from utilities.animator import Animator
 from setup import colours, fonts, frames
 from rgbmatrix import graphics
 import logging
-from config import CLOCK_FORMAT, NIGHT_END, NIGHT_START
-
-# Configure logging
-#logging.basicConfig(filename='myapp.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from config import CLOCK_FORMAT
 
 # Setup
 CLOCK_FONT = fonts.large_bold
 CLOCK_POSITION = (0, 11)
 DAY_COLOUR = colours.LIGHT_ORANGE
 NIGHT_COLOUR = colours.LIGHT_BLUE
-
-
-# Convert NIGHT_START and NIGHT_END to datetime objects 
-NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M") 
-NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
 
 class ClockScene(object):
     def __init__(self):
