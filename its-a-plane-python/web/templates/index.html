@@ -262,7 +262,8 @@
                 if (data.flights && data.flights.length > 0) {
                     let html = `<strong>${data.count} flight(s) found:</strong><br>`;
                     for (const f of data.flights) {
-                        html += `${f.callsign} — ${f.aircraft || '?'} — FL${Math.round(f.altitude/100)} — ${Math.round(f.speed)}kts<br>`;
+                        const alt = f.altitude >= 18000 ? `FL${Math.round(f.altitude/100)}` : `${f.altitude.toLocaleString()}ft`;
+                        html += `${f.callsign} — ${f.aircraft || '?'} — ${alt} — ${Math.round(f.speed)}kts<br>`;
                     }
                     results.innerHTML = html;
                 } else {
