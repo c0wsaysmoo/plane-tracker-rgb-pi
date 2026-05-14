@@ -1,6 +1,4 @@
 import sys
-import json
-import os
 from datetime import datetime
 from setup import frames
 from utilities.animator import Animator
@@ -28,6 +26,9 @@ def flight_updated(flights_a, flights_b):
     updatable_a = set(get_callsigns(flights_a))
     updatable_b = set(get_callsigns(flights_b))
     return updatable_a == updatable_b
+
+
+SCROLL_REGIONS = ("flight_details", "plane_details")
 
 
 try:
@@ -108,6 +109,7 @@ class Display(
 
         self._data_index = 0
         self._data = []
+        self._scroll_complete = {region: False for region in SCROLL_REGIONS}
 
         # Single Overhead instance handles both zone and tracked flight
         self.overhead = Overhead()
@@ -120,6 +122,13 @@ class Display(
     def draw_square(self, x0, y0, x1, y1, colour):
         for x in range(x0, x1):
             _ = graphics.DrawLine(self.canvas, x, y0, x, y1, colour)
+
+    def mark_scroll_complete(self, region):
+        if region in self._scroll_complete:
+            self._scroll_complete[region] = True
+
+    def reset_scroll_completion(self):
+        self._scroll_complete = {region: False for region in SCROLL_REGIONS}
 
     @Animator.KeyFrame.add(0)
     def clear_screen(self):
@@ -135,6 +144,7 @@ class Display(
             if data_is_different:
                 self._data_index = 0
                 self._data_all_looped = False
+                self.reset_scroll_completion()
                 self._data = new_data
 
             reset_required = there_is_data and data_is_different
@@ -143,15 +153,24 @@ class Display(
                 self.reset_scene()
 
     @Animator.KeyFrame.add(1)
+    def advance_completed_scroll(self, count):
+        if len(self._data) <= 1:
+            return
+
+        if all(self._scroll_complete.values()):
+            self._data_index = (self._data_index + 1) % len(self._data)
+            self._data_all_looped = self._data_index == 0 or self._data_all_looped
+            self.reset_scroll_completion()
+            self.reset_scene()
+
+    @Animator.KeyFrame.add(1)
     def sync(self, count):
         _ = self.matrix.SwapOnVSync(self.canvas)
         adjust_brightness(self.matrix)
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 30)
     def grab_new_data(self, count):
-        # One call to overhead.grab_data() handles both zone scan
-        # and tracked flight lookup (tracked only if zone is empty)
-        if not (self.overhead.processing and self.overhead.new_data) and (
+        if not self.overhead.processing and (
             self._data_all_looped or len(self._data) <= 1
         ):
             self.overhead.grab_data()
