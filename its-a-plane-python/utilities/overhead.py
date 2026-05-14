@@ -5,7 +5,7 @@ import socket
 import logging
 import requests
 from time import time
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Thread, Lock
 
 from utilities.fr24_client import FR24Client
@@ -929,12 +929,39 @@ class Overhead:
                                 if self._tracked_last_data:
                                     tracked_data = estimate_stale_data(self._tracked_last_data)
                         else:
-                            # No ETA data — fall back to miss counter
-                            self._tracked_miss_count += 1
-                            if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
-                                self._do_auto_wipe()
-                            elif self._tracked_last_data:
-                                tracked_data = estimate_stale_data(self._tracked_last_data)
+                            # No ETA data — check AirLabs scheduled arrival as reality check
+                            sched = self._tracked_schedule_cache.get(tracked_callsign)
+                            sched_arr_utc = sched.get("arr_time_utc") if sched else None
+                            sched_status = sched.get("status", "") if sched else ""
+                            if sched_arr_utc and sched_status != "cancelled":
+                                try:
+                                    arr_ts = datetime.strptime(sched_arr_utc, "%Y-%m-%d %H:%M").replace(
+                                        tzinfo=timezone.utc).timestamp()
+                                    if now_ts < arr_ts:
+                                        # Scheduled arrival still in future — don't wipe
+                                        if self._tracked_last_data:
+                                            tracked_data = estimate_stale_data(self._tracked_last_data)
+                                    else:
+                                        # Past scheduled arrival — use miss counter
+                                        self._tracked_miss_count += 1
+                                        if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                            self._do_auto_wipe()
+                                        elif self._tracked_last_data:
+                                            tracked_data = estimate_stale_data(self._tracked_last_data)
+                                except (ValueError, TypeError):
+                                    # Bad date format — fall through to miss counter
+                                    self._tracked_miss_count += 1
+                                    if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                        self._do_auto_wipe()
+                                    elif self._tracked_last_data:
+                                        tracked_data = estimate_stale_data(self._tracked_last_data)
+                            else:
+                                # No schedule data either — fall back to miss counter
+                                self._tracked_miss_count += 1
+                                if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                    self._do_auto_wipe()
+                                elif self._tracked_last_data:
+                                    tracked_data = estimate_stale_data(self._tracked_last_data)
                     else:
                         # Never been live — try AirLabs schedule
                         # Cache successful results; retry on failure (airlabs module has 5-min TTL)
@@ -977,9 +1004,9 @@ class Overhead:
                                 "dest_lon": 0,
                             }
 
-            # Clear schedule cache when flight goes live
-            if tracked_data and tracked_data.get("is_live") and tracked_callsign in self._tracked_schedule_cache:
-                del self._tracked_schedule_cache[tracked_callsign]
+            # Keep schedule cache even after flight goes live — arr_time_utc
+            # is used as reality check to prevent premature auto-wipe when
+            # a taxiing plane briefly appears then drops from the feed.
 
             # Update tracked status for pipeline summary
             if tracked_data:
