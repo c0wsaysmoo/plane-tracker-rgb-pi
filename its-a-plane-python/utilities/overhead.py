@@ -660,8 +660,13 @@ else:
                                         if self._tracked_last_data:
                                             tracked_data = estimate_stale_data(self._tracked_last_data)
                                 else:
+                                    # No ETA — use higher threshold if plane was on/near ground
+                                    # (likely taxiing, brief FR24 data gap). Normal threshold
+                                    # for airborne flights without ETA.
+                                    last_alt = (self._tracked_last_data or {}).get("altitude", 0) or 0
+                                    threshold = 60 if last_alt < 1000 else self._TRACKED_MISS_THRESHOLD
                                     self._tracked_miss_count += 1
-                                    if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                    if self._tracked_miss_count >= threshold:
                                         self._do_auto_wipe()
                                     elif self._tracked_last_data:
                                         tracked_data = estimate_stale_data(self._tracked_last_data)
