@@ -137,7 +137,14 @@ class DaysForecastScene(object):
                     except AttributeError:
                         resample = Image.ANTIALIAS
                     image.thumbnail((ICON_SIZE, ICON_SIZE), resample)
-                    self.matrix.SetImage(image.convert("RGB"), icon_x, ICON_POSITION)
+                    # Draw pixel-by-pixel (avoids Pillow/rgbmatrix unsafe_ptrs crash)
+                    rgb = image.convert("RGB")
+                    pixels = rgb.load()
+                    w, h = rgb.size
+                    for py in range(h):
+                        for px in range(w):
+                            r, g, b = pixels[px, py]
+                            self.canvas.SetPixel(px + icon_x, py + ICON_POSITION, r, g, b)
                 except FileNotFoundError:
                     pass
 
