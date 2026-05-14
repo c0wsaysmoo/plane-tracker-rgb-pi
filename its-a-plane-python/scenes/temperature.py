@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
+import time
 import colorsys
 from rgbmatrix import graphics
 from utilities.animator import Animator
 from setup import colours, fonts, frames, screen
-from utilities.temperature import grab_temperature_and_humidity
+from utilities.temperature import grab_temperature_and_humidity, _load_file_cache, _TEMP_CACHE_FILE, _CACHE_TTL
 from config import NIGHT_START, NIGHT_END
 
 # Scene Setup
@@ -18,10 +19,16 @@ class TemperatureScene(object):
         super().__init__()
         self._last_temperature = None
         self._last_temperature_str = None
-        self._last_updated = None
-        self._cached_temp = None
-        self._cached_humidity = None
         self._redraw_temp = True
+
+        # Pre-load from file cache to avoid unnecessary API hit on reboot
+        cached, ts = _load_file_cache(_TEMP_CACHE_FILE)
+        if cached and (time.time() - ts) < _CACHE_TTL:
+            self._cached_temp = tuple(cached) if isinstance(cached, list) else cached
+            self._last_updated = datetime.fromtimestamp(ts)
+        else:
+            self._cached_temp = None
+            self._last_updated = None
 
     def colour_gradient(self, colour_A, colour_B, ratio):
         return graphics.Color(
@@ -36,9 +43,9 @@ class TemperatureScene(object):
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
             self._redraw_temp = True
-            return  
+            return
 
-        # Ensure redraw when there's new data
+        # Yield when a plane is overhead
         if len(self._data):
             self._redraw_temp = True
             return
@@ -67,21 +74,21 @@ class TemperatureScene(object):
                     self._cached_temp = (current_temperature, current_humidity)
                     self._last_updated = datetime.now()
                 else:
-                    # Keep ERR displayed and schedule retry in 1 minute
-                    current_temperature, current_humidity = None, None
-                    if self._cached_temp is None:
-                        # Adjust _last_updated so next fetch occurs in 1 minute
-                        self._last_updated = datetime.now() - timedelta(seconds=TEMPERATURE_REFRESH_SECONDS - retry_interval_on_error)
+                    # Use in-memory cache if available, schedule retry in 1 minute
+                    if self._cached_temp:
+                        current_temperature, current_humidity = self._cached_temp
+                    else:
+                        current_temperature, current_humidity = None, None
+                        if self._last_updated is None:
+                            self._last_updated = datetime.now() - timedelta(seconds=TEMPERATURE_REFRESH_SECONDS - retry_interval_on_error)
 
             # Clear old temperature
             if self._last_temperature_str is not None:
-                self.draw_square(
-                    40, 0, 64, 5, colours.BLACK
-                )
+                self.draw_square(40, 0, 64, 5, colours.BLACK)
 
             # Determine display string and color
             if current_temperature is None or current_humidity is None:
-                display_str = "ERR"
+                display_str = ":("
                 temp_colour = colours.RED
             else:
                 display_str = f"{round(current_temperature)}°"
