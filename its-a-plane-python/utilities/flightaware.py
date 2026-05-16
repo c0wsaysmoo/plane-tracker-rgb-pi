@@ -28,9 +28,17 @@ def _to_unix(dt_str):
             return None
 
 try:
-    from config import FLIGHTAWARE_API_KEY
+    from config import FLIGHTAWARE_API_KEYS
+    if isinstance(FLIGHTAWARE_API_KEYS, str):
+        FLIGHTAWARE_API_KEYS = [FLIGHTAWARE_API_KEYS]
+    FLIGHTAWARE_API_KEY = FLIGHTAWARE_API_KEYS[0] if FLIGHTAWARE_API_KEYS else None
 except (ImportError, ModuleNotFoundError, NameError):
-    FLIGHTAWARE_API_KEY = None
+    try:
+        from config import FLIGHTAWARE_API_KEY
+        FLIGHTAWARE_API_KEYS = [FLIGHTAWARE_API_KEY] if FLIGHTAWARE_API_KEY else []
+    except (ImportError, ModuleNotFoundError, NameError):
+        FLIGHTAWARE_API_KEY  = None
+        FLIGHTAWARE_API_KEYS = []
 
 try:
     from config import FLIGHTAWARE_MONTHLY_LIMIT
@@ -39,7 +47,7 @@ except (ImportError, ModuleNotFoundError, NameError):
 
 BASE_URL         = "https://aeroapi.flightaware.com/aeroapi"
 COST_PER_CALL    = 0.005
-CACHE_TTL        = 3600  # 1 hour
+CACHE_TTL        = 3600
 
 BASE_DIR         = os.path.dirname(os.path.dirname(__file__))
 USAGE_FILE       = os.path.join(BASE_DIR, "flightaware_usage.json")
@@ -51,7 +59,7 @@ _cache = {}
 
 
 def is_available():
-    return bool(FLIGHTAWARE_API_KEY)
+    return bool(FLIGHTAWARE_API_KEYS) and _get_active_key() is not None
 
 
 def _load_usage():
@@ -59,10 +67,10 @@ def _load_usage():
         with open(USAGE_FILE, "r") as f:
             usage = json.load(f)
         if usage.get("month") != datetime.now().strftime("%Y-%m"):
-            return {"month": datetime.now().strftime("%Y-%m"), "calls": 0, "cost": 0.0}
+            return {"month": datetime.now().strftime("%Y-%m"), "keys": {}}
         return usage
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"month": datetime.now().strftime("%Y-%m"), "calls": 0, "cost": 0.0}
+        return {"month": datetime.now().strftime("%Y-%m"), "keys": {}}
 
 
 def _save_usage(usage):
@@ -71,6 +79,28 @@ def _save_usage(usage):
             json.dump(usage, f, indent=2)
     except Exception as e:
         print(f"[FlightAware] Failed to save usage: {e}")
+
+
+def _get_active_key():
+    """Return first key under its monthly cost limit."""
+    if not FLIGHTAWARE_API_KEYS:
+        return None
+    usage = _load_usage()
+    keys  = usage.get("keys", {})
+    for key in FLIGHTAWARE_API_KEYS:
+        if keys.get(key, {}).get("cost", 0.0) < FLIGHTAWARE_MONTHLY_LIMIT:
+            return key
+    print(f"[FlightAware] All keys have hit monthly limit of ${FLIGHTAWARE_MONTHLY_LIMIT:.2f}")
+    return None
+
+
+def _increment_usage(key):
+    usage = _load_usage()
+    entry = usage.setdefault("keys", {}).setdefault(key, {"calls": 0, "cost": 0.0})
+    entry["calls"] += 1
+    entry["cost"]   = round(entry["cost"] + COST_PER_CALL, 3)
+    _save_usage(usage)
+    return entry["calls"], entry["cost"]
 
 
 
@@ -129,7 +159,11 @@ def get_flight_details(callsign):
     Look up route info for an overhead callsign.
     Returns standardised dict or empty dict if not found/over budget.
     """
-    if not FLIGHTAWARE_API_KEY:
+    if not FLIGHTAWARE_API_KEYS:
+        return {}
+
+    key = _get_active_key()
+    if not key:
         return {}
 
     now    = time()
@@ -137,24 +171,19 @@ def get_flight_details(callsign):
     if cached and (now - cached["ts"]) < CACHE_TTL:
         return cached["data"]
 
-    usage = _load_usage()
-    if usage["cost"] >= FLIGHTAWARE_MONTHLY_LIMIT:
-        return {}
-
     try:
         r = requests.get(
             f"{BASE_URL}/flights/{callsign}",
-            headers={"x-apikey": FLIGHTAWARE_API_KEY},
+            headers={"x-apikey": key},
             params={"max_pages": 1},
             timeout=10,
         )
         if r.status_code != 200:
-                return {}
+            return {}
 
         flights = r.json().get("flights", [])
-        usage["calls"] += 1
-        usage["cost"]  += COST_PER_CALL
-        _save_usage(usage)
+        calls, cost = _increment_usage(key)
+        print(f"[FlightAware] Key ...{key[-6:]} — call {calls} / ${cost:.3f} of ${FLIGHTAWARE_MONTHLY_LIMIT:.2f}")
 
         if not flights:
             _cache[callsign] = {"data": {}, "ts": now}
@@ -209,17 +238,17 @@ def get_tracked_flight(callsign):
     Search for a specific tracked flight globally.
     Returns enriched dict or None.
     """
-    if not FLIGHTAWARE_API_KEY:
+    if not FLIGHTAWARE_API_KEYS:
         return None
 
-    usage = _load_usage()
-    if usage["cost"] >= FLIGHTAWARE_MONTHLY_LIMIT:
+    key = _get_active_key()
+    if not key:
         return None
 
     try:
         r = requests.get(
             f"{BASE_URL}/flights/{callsign}",
-            headers={"x-apikey": FLIGHTAWARE_API_KEY},
+            headers={"x-apikey": key},
             params={"max_pages": 1},
             timeout=10,
         )
@@ -227,9 +256,7 @@ def get_tracked_flight(callsign):
             return None
 
         flights = r.json().get("flights", [])
-        usage["calls"] += 1
-        usage["cost"]  += COST_PER_CALL
-        _save_usage(usage)
+        _increment_usage(key)
 
         if not flights:
             return None

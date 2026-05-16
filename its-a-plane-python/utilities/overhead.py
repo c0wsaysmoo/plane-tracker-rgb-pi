@@ -57,9 +57,12 @@ if MASTER_TRACKER:
         return flights
 
     def _url(path):
-        host = MASTER_TRACKER.rstrip("/")
+        host = MASTER_TRACKER.strip().rstrip("/")
         if not host.startswith("http"):
-            host = f"http://{host}.local:8080"
+            if ":" not in host:
+                host = f"http://{host}.local:8080"
+            else:
+                host = f"http://{host}"
         return f"{host}{path}"
 
     class Overhead:

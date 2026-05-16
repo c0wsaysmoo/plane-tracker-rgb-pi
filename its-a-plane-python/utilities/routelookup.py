@@ -1,21 +1,3 @@
-"""
-routelookup.py — Orchestrates route lookup across available APIs.
-Auto-detects which API keys are configured and uses them in order:
-  1. AirLabs  (free tier, 1,000 calls/month)
-  2. FlightAware (free $5 credit, ~1,000 calls/month)
-  3. FR24 (paid, reliable fallback)
-
-Only uses APIs that have keys configured in config.py.
-Logs usage counts per source to api_usage.log.
-
-Examples:
-  Only AIRLABS_API_KEY set        → uses AirLabs only
-  Only FLIGHTAWARE_API_KEY set    → uses FlightAware only
-  Only FR24 credentials set       → uses FR24 only
-  All three set                   → AirLabs → FlightAware → FR24
-  AIRLABS + FLIGHTAWARE set       → AirLabs → FlightAware (no FR24)
-"""
-
 import json
 import os
 from datetime import datetime
@@ -94,9 +76,6 @@ def _log_usage(source, callsign, origin, dest):
         pass
 
 
-
-
-
 def _is_plausible(result, plane_lat, plane_lon):
     """
     Check that the plane's current position lies roughly between
@@ -130,17 +109,9 @@ def _normalise(result, callsign, plane_lat, plane_lon, registration=""):
     """
     Convert any source's result into the standard entry dict
     that overhead.py / display scenes expect.
-    airline_name and airline_icao are already resolved correctly by each source.
     """
     if not result:
         return None
-
-    import math
-
-    try:
-        from config import DISTANCE_UNITS
-    except Exception:
-        DISTANCE_UNITS = "imperial"
 
     # Support both naming conventions
     origin_lat = result.get("origin_latitude") or result.get("origin_lat")
@@ -176,20 +147,19 @@ def _normalise(result, callsign, plane_lat, plane_lon, registration=""):
 class RouteClient:
     """
     Unified route lookup client.
-    Tries available APIs in order: AirLabs → FlightAware → FR24.
-    Only calls APIs that have keys configured.
+    Tries available APIs in config-defined order.
     """
 
     def __init__(self):
-        sources = []
-        if _airlabs_ok():
-            sources.append("AirLabs")
-        if _fa_ok():
-            sources.append("FlightAware")
-        if _has_fr24:
-            sources.append("FR24")
-        if sources:
-            print(f"[RouteClient] Active sources: {' → '.join(sources)}")
+        try:
+            from config import API_SOURCE_ORDER as _order, API_SOURCE_ENABLED as _enabled
+        except ImportError:
+            _order   = ["AirLabs", "FlightAware", "FR24"]
+            _enabled = {}
+            
+        active = [s for s in _order if _enabled.get(s, True)]
+        if active:
+            print(f"[RouteClient] Active sources: {' → '.join(active)}")
         else:
             print("[RouteClient] WARNING: No API keys configured — flights will show callsign only")
 
@@ -199,62 +169,72 @@ class RouteClient:
 
     def get_flight_details(self, callsign, plane_lat, plane_lon,
                            plane_type="", registration="", distance=0.0):
-        """Try each source in order, return first successful result."""
+        """Try each source in configuration order, return first successful result."""
         from time import time
+        import re as _re
 
         # Check module-level cache first
         cached = _route_cache.get(callsign)
         if cached is not None and (time() - cached["ts"]) < CACHE_TTL:
             return cached["data"]  # may be {} for a cached miss
 
-        from time import time
-
         def _cache_and_return(data):
             _route_cache[callsign] = {"data": data, "ts": time()}
             return data
 
-        # 1. AirLabs
-        if _airlabs_ok():
-            result = _airlabs_details(callsign)
-            _log_usage("AirLabs", callsign, result.get("origin_iata") if result else None, result.get("dest_iata") if result else None)
-            if result and result.get("origin_iata"):
-                if not _is_plausible(result, plane_lat, plane_lon):
-                    print(f"[RouteClient] AirLabs {result.get('origin_iata')}-{result.get('dest_iata')} "
-                          f"rejected for {callsign} — trying next source")
-                else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
-                    if normalised:
-                        return _cache_and_return(normalised)
+        # Check callsign structure eligibility (matches private implementation logic)
+        _is_icao = bool(_re.match(r"^[A-Z]{3}[A-Z0-9]+$", callsign))
+        if not _is_icao:
+            # Fallback early to default values if it's a tail registration number (e.g. N487CB)
+            return _cache_and_return({
+                "airline": "Private", "plane": plane_type,
+                "origin": "?", "origin_latitude": None, "origin_longitude": None,
+                "destination": "?", "destination_latitude": None, "destination_longitude": None,
+                "owner_iata": "N/A", "owner_icao": callsign[:3] if len(callsign) >= 3 else "",
+                "time_scheduled_departure": None, "time_scheduled_arrival": None,
+                "time_real_departure": None, "time_estimated_arrival": None,
+                "distance_origin": 0, "distance_destination": 0, "trail": [],
+            })
 
-        # 2. FlightAware
-        if _fa_ok():
-            result = _fa_details(callsign)
-            _log_usage("FlightAware", callsign, result.get("origin_iata") if result else None, result.get("dest_iata") if result else None)
-            if result and result.get("origin_iata"):
-                if not _is_plausible(result, plane_lat, plane_lon):
-                    print(f"[RouteClient] FlightAware {result.get('origin_iata')}-{result.get('dest_iata')} "
-                          f"rejected for {callsign} — trying next source")
-                else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
-                    if normalised:
-                        return _cache_and_return(normalised)
+        # Load API execution configs dynamically
+        try:
+            from config import API_SOURCE_ORDER as _order, API_SOURCE_ENABLED as _enabled
+        except ImportError:
+            _order   = ["AirLabs", "FlightAware", "FR24"]
+            _enabled = {}
 
-        # 3. FR24
-        if _has_fr24 and _fr24_client:
-            result = _fr24_client.get_flight_details(callsign, plane_lat, plane_lon,
-                                                      plane_type, registration, distance)
-            _log_usage("FR24", callsign, result.get("origin_iata") if result else None, result.get("dest_iata") if result else None)
+        # Dictionary routing setup mapping config strings to actual functional methods and checks
+        _SOURCE_FNS = {
+            "AirLabs":     (lambda cs: _airlabs_details(cs), _airlabs_ok),
+            "FlightAware": (lambda cs: _fa_details(cs),      _fa_ok),
+            "FR24":        (lambda cs: _fr24_client.get_flight_details(cs, plane_lat, plane_lon, plane_type, registration, distance) 
+                            if _fr24_client else None, lambda: bool(_has_fr24 and _fr24_client))
+        }
+
+        # Dynamically loop through order configuration
+        for source in _order:
+            if not _enabled.get(source, True):
+                continue
+            if source not in _SOURCE_FNS:
+                continue
+                
+            fn, check = _SOURCE_FNS[source]
+            if not check():
+                continue
+
+            result = fn(callsign)
+            _log_usage(source, callsign, result.get("origin_iata") if result else None, result.get("dest_iata") if result else None)
+            
             if result and result.get("origin_iata") not in ("?", "", None):
                 if not _is_plausible(result, plane_lat, plane_lon):
-                    print(f"[RouteClient] FR24 {result.get('origin_iata')}-{result.get('dest_iata')} "
-                          f"rejected for {callsign} — all sources exhausted")
+                    print(f"[RouteClient] {source} {result.get('origin_iata')}-{result.get('dest_iata')} "
+                          f"rejected for {callsign} — trying next source")
                 else:
                     normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
                     if normalised:
                         return _cache_and_return(normalised)
 
-        # All failed — cache the miss so we don't hammer APIs repeatedly
-        from time import time
+        # All configuration steps exhausted failed — cache the miss 
         _route_cache[callsign] = {"data": {}, "ts": time()}
         _log_usage("NONE", callsign, None, None)
         return {
@@ -269,26 +249,34 @@ class RouteClient:
 
     def get_tracked_flight(self, callsign):
         """Search for a tracked flight globally across available sources."""
+        try:
+            from config import API_SOURCE_ORDER as _order, API_SOURCE_ENABLED as _enabled
+        except ImportError:
+            _order   = ["AirLabs", "FlightAware", "FR24"]
+            _enabled = {}
 
-        # 1. AirLabs
-        if _airlabs_ok():
-            result = _airlabs_tracked(callsign)
-            if result and result.get("is_live"):
-                _log_usage("AirLabs(tracked)", callsign, result.get("origin"), result.get("destination"))
-                return result
+        _TRACK_FNS = {
+            "AirLabs":     (_airlabs_tracked, _airlabs_ok),
+            "FlightAware": (_fa_tracked,      _fa_ok),
+            "FR24":        (lambda cs: _fr24_client.get_tracked_flight(cs) if _fr24_client else None, 
+                            lambda: bool(_has_fr24 and _fr24_client))
+        }
 
-        # 2. FlightAware
-        if _fa_ok():
-            result = _fa_tracked(callsign)
-            if result and result.get("is_live"):
-                _log_usage("FlightAware(tracked)", callsign, result.get("origin"), result.get("destination"))
-                return result
+        for source in _order:
+            if not _enabled.get(source, True):
+                continue
+            if source not in _TRACK_FNS:
+                continue
 
-        # 3. FR24
-        if _has_fr24 and _fr24_client:
-            result = _fr24_client.get_tracked_flight(callsign)
+            fn, check = _TRACK_FNS[source]
+            if not check():
+                continue
+
+            result = fn(callsign)
             if result:
-                _log_usage("FR24(tracked)", callsign, result.get("origin"), result.get("destination"))
-                return result
+                # Check signature compatibility differences between APIs for live validation
+                if source == "FR24" or result.get("is_live"):
+                    _log_usage(f"{source}(tracked)", callsign, result.get("origin"), result.get("destination"))
+                    return result
 
         return None
