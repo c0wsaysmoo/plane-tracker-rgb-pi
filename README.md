@@ -1,6 +1,111 @@
-## Flight Tracker v2.0: Update
+## 🚀 What's New & Improved
 
-I have essentially rewritten the flight logic from the ground up to address the shifting landscape of flight data APIs. The goal was to move away from "temporary workarounds" and build a permanent solution that is both robust and cost-effective.
+I’ve polished up some existing issues and implemented a few major upgrades to make managing your clock a lot easier and more efficient:
+
+*   **New Web Configuration Page:** No more digging through raw files. You can now easily fill out and update all your settings directly from a clean, user-friendly webpage. REMEMBER your local webpage is going to be http://hostname.local:8080 where hostname is the name of the PI (not your username)
+*   **Smart Multi-Clock Sync:** If you run multiple clocks in the same house, they now work as a team. One clock acts as the **MASTER** to fetch weather data, and then seamlessly passes it to the other clocks. This saves system resources and ensures you only need a single weather API key, just like it does with the overhead flights!
+*   **System Service Integration:** I highly recommend migrating away from `crontab -e` and running the clock as a dedicated system service. 
+
+### Why switch to a System Service?
+*   **Automatic Restarts:** If the script crashes or the power cuts out, the system will automatically restart it.
+*   **Boot Management:** It starts reliably exactly when the system boots up, waiting properly for network dependencies.
+*   **Better Logging:** You can easily track errors and performance logs using standard system tools.
+
+## Step 1 — Find your project path
+
+Open a terminal on your Pi and run:
+
+```bash
+cd ~/its-a-plane-python
+pwd
+```
+
+Copy the path it shows — you'll need it in the next step. It will look something like `/home/pi/its-a-plane-python` or `/home/flight/its-a-plane-python`.
+
+---
+
+## Step 2 — Create the service file
+
+Run these commands **from inside your project folder** (after the `cd` above):
+
+```bash
+cat > /tmp/its-a-plane.service << EOF
+[Unit]
+Description=Plane Tracker
+After=network.target
+
+[Service]
+User=$(whoami)
+WorkingDirectory=$HOME
+ExecStart=$(pwd)/its-a-plane.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+> ⚠️ **Important:** Run the `cd` command first or the paths will be wrong!
+
+---
+
+## Step 3 — Install and start the service
+
+```bash
+sudo cp /tmp/its-a-plane.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable its-a-plane
+sudo systemctl start its-a-plane
+```
+
+Check it's running:
+
+```bash
+sudo systemctl status its-a-plane
+```
+
+You should see `Active: active (running)` in green. If it shows an error, jump to the Troubleshooting section below.
+
+---
+
+## Step 4 — Disable your old crontab entry
+
+If you were previously using crontab to auto-start, disable it so they don't conflict:
+
+```bash
+crontab -e
+```
+
+Find the line that looks like:
+
+```
+@reboot sleep 30 && /home/youruser/its-a-plane-python/its-a-plane.py ...
+```
+
+Put a `#` at the start of the line to comment it out, then save and exit.
+
+---
+
+## Step 5 (Optional) — Enable the web UI restart button
+
+If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
+
+```bash
+sudo visudo
+```
+
+This opens a text editor. Scroll to the very bottom and add this line (replace `pi` with your actual username — same as what `whoami` showed you):
+
+```
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart its-a-plane
+```
+
+Save and exit. Now the web UI restart button will work.
+
+---
+
+
 
 ### 1. The "Waterfall" API Stack
 To keep the tracker free for as many users as possible, the system now uses a prioritized "waterfall" logic. It exhausts free credits across multiple providers before tapping into paid tiers.
@@ -285,7 +390,7 @@ rmdir ~/logo ~/logo2
 # 7. Install Python dependencies
 
 ```
-pip install pytz requests beautifulsoup4 FlightRadarAPI folium selenium pillow flask --break-system-packages
+pip install pytz requests beautifulsoup4 folium selenium pillow flask --break-system-packages
 ```
 If **Bookworm**
 ```
@@ -311,22 +416,15 @@ nano ~/its-a-plane-python/config.py
 ```
 
 # 10. Run the Script
+Test the script manually by running
 
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-Set Up the Script to Run on Boot
+# 11. Fill in the Config file.
 
-To ensure the script runs on boot, use crontab -e to edit the cron jobs and add the following line:
+You can only do so IF the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
 
-```
-@reboot sleep 60 && ~/its-a-plane-python/its-a-plane.py
-```
-
-You can also run it like so to create a log file in case there are issues. 
-```
-@reboot sleep 60 && ~/its-a-plane-python/its-a-plane.py >> ~/its-a-plane-python/workdammit.log 2>&1
-```
 
 Optional: Add a Power Button
 If you'd like to add a power button, you can solder the button to the **GND/SCL** pins on the bonnet. Then, run the following commands:
