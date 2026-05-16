@@ -41,6 +41,4 @@ def upload_map_to_server(local_path: str) -> str:
             return f"https://c0wsaysmoo.ddnsgeek.com/maps/{uploaded_name}"
     except Exception as e:
         print(f"⚠️ Failed to upload map: {e}")
-
         return ""
-
