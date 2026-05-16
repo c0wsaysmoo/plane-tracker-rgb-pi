@@ -26,8 +26,19 @@ class DaysForecastScene(object):
     def __init__(self):
         super().__init__()
         self._redraw_forecast = True
-        self._last_hour = None
         self._cached_forecast = None
+
+        # Pre-load from disk cache — restore last_hour from cache timestamp
+        # so we don't refetch immediately after a reboot
+        from utilities.temperature import _load_file_cache, _FORECAST_CACHE_FILE
+        import time as _time
+        from datetime import datetime as _dt
+        cached, ts = _load_file_cache(_FORECAST_CACHE_FILE)
+        if cached and (_time.time() - ts) < 7200:
+            self._cached_forecast = cached
+            self._last_hour = _dt.fromtimestamp(ts).hour
+        else:
+            self._last_hour = None
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):

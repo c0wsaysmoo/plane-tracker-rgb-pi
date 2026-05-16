@@ -84,6 +84,8 @@ class TrackedRouteScene(object):
         tracked = self.overhead.tracked_data
         if not tracked:
             return
+        if tracked.get("pre_flight"):
+            return
 
         airline_name = tracked.get("airline_name", "")
         number       = tracked.get("number", tracked.get("callsign", ""))

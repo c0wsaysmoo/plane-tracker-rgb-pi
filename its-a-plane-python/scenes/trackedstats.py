@@ -1,4 +1,5 @@
 from utilities.animator import Animator
+from utilities.landmarks import get_nearest_landmark
 from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 from rgbmatrix import graphics
@@ -19,16 +20,19 @@ TIME_DIST_COLOUR = colours.LIGHT_MID_BLUE
 STATS_COLOUR    = colours.LIGHT_PINK
 LABEL_COLOUR    = colours.LIGHT_PINK
 AIRCRAFT_COLOUR = colours.LIGHT_PINK
+CITY_COLOUR     = colours.WHITE
 
 
 def _format_altitude(altitude):
     if not altitude:
         return None, None
+    altitude = int(altitude)
     if DISTANCE_UNITS == "metric":
         metres = int(altitude * 0.3048)
         return str(metres), "m"
-    else:
-        return str(int(altitude)), "ft"
+    if altitude >= 18000:
+        return f"FL{altitude // 100}", ""
+    return f"{altitude:,}", "ft"
 
 
 def _format_speed(ground_speed):
@@ -47,7 +51,7 @@ def _format_speed(ground_speed):
 def _build_stats(data):
     """
     Build list of (text, colour) tuples for the stats line.
-    Format: 1:23 234mi B738 35000ft^ 260mph
+    Format: 1:23 234mi nr Grand Canyon B738 FL350↑ 260knts
     """
     parts = []
 
@@ -64,6 +68,16 @@ def _build_stats(data):
         for ch in dist_str:
             parts.append((ch, TIME_DIST_COLOUR))
         parts.append((" ", STATS_COLOUR))
+
+    # Nearest landmark or city
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    if lat is not None and lon is not None:
+        nearest = get_nearest_landmark(lat, lon)
+        if nearest:
+            for ch in f"nr {nearest['name']}":
+                parts.append((ch, CITY_COLOUR))
+            parts.append((" ", STATS_COLOUR))
 
     # Aircraft type
     aircraft = data.get("aircraft_type", "")
@@ -119,8 +133,6 @@ class TrackedStatsScene(object):
             return
 
         char_list = _build_stats(tracked)
-
-        # Clear row
         self.draw_square(0, LINE3_Y - 6, screen.WIDTH, LINE3_Y, colours.BLACK)
 
         # Draw scrolling text

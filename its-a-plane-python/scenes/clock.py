@@ -1,9 +1,11 @@
 from datetime import datetime
-from utilities.temperature import grab_forecast
+from utilities.temperature import grab_forecast, _load_file_cache, _save_file_cache
 from utilities.animator import Animator
 from setup import colours, fonts, frames
 from rgbmatrix import graphics
 import logging
+import os
+import time
 from config import CLOCK_FORMAT, NIGHT_END, NIGHT_START
 
 # Configure logging
@@ -15,6 +17,11 @@ CLOCK_POSITION = (0, 11)
 DAY_COLOUR = colours.LIGHT_ORANGE
 NIGHT_COLOUR = colours.LIGHT_BLUE
 
+# File cache settings
+_SUN_CACHE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "suntimes.json"
+)
+_SUN_CACHE_TTL = 86400  # 24 hours
 
 # Convert NIGHT_START and NIGHT_END to datetime objects 
 NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M") 
@@ -27,6 +34,26 @@ class ClockScene(object):
         self.today_sunrise = None
         self.today_sunset = None
         self.last_fetch_date = None  # Store the date of the last forecast fetch
+
+        # Pre-load from disk cache so sun times show immediately on reboot
+        cached, ts = _load_file_cache(_SUN_CACHE_FILE)
+        if cached is not None and (time.time() - ts) < _SUN_CACHE_TTL:
+            try:
+                # Convert the cached ISO strings back to datetime objects
+                self.today_sunrise = datetime.strptime(cached['sunrise'], '%Y-%m-%dT%H:%M:%SZ')
+                self.today_sunset = datetime.strptime(cached['sunset'], '%Y-%m-%dT%H:%M:%SZ')
+                # Restore the date so we don't re-fetch until midnight
+                from datetime import datetime as _dt
+                self.last_fetch_date = _dt.fromtimestamp(ts).date()
+            except Exception as e:
+                logging.error(f"Error parsing cached sun times: {e}")
+                self.today_sunrise = None
+                self.today_sunset = None
+                self.last_fetch_date = None
+        else:
+            self.today_sunrise = None
+            self.today_sunset = None
+            self.last_fetch_date = None
 
     def calculate_sunrise_sunset(self):
         now = datetime.now()
@@ -46,10 +73,18 @@ class ClockScene(object):
                         utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ')
                         utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ')
 
-                        # Cache values
+                        # Cache values in memory
                         self.today_sunrise = utc_sunrise
                         self.today_sunset = utc_sunset
                         self.last_fetch_date = now.date()
+
+                        # Save to disk cache as a dictionary of strings
+                        cache_data = {
+                            'sunrise': day['values']['sunriseTime'],
+                            'sunset': day['values']['sunsetTime']
+                        }
+                        _save_file_cache(_SUN_CACHE_FILE, cache_data)
+                        break
 
         except Exception as e:
             logging.error(f"Error fetching forecast: {e}")

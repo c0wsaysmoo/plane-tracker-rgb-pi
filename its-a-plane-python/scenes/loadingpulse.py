@@ -3,8 +3,9 @@ from setup import colours
 
 # Setup
 BLINKER_POSITION = (63, 0)
-BLINKER_STEPS = 10
-BLINKER_COLOUR = colours.GREY
+BLINKER_STEPS    = 30
+COLOUR_OK        = colours.GREEN  # FR24 working
+COLOUR_ERROR     = colours.RED        # FR24 blocked/failed
 
 
 class LoadingPulseScene(object):
@@ -14,24 +15,25 @@ class LoadingPulseScene(object):
     @Animator.KeyFrame.add(2)
     def loading_pulse(self, count):
         reset_count = True
+
         if self.overhead.processing:
-            # Calculate the brightness scaler and
-            # ensure it's within a sensible range
+            # Pick colour based on FR24 status
+            blinker_colour = COLOUR_OK if self.overhead.fr24_ok else COLOUR_ERROR
+
+            # Calculate pulsing brightness
             brightness = (1 - (count / BLINKER_STEPS)) / 2
             brightness = 0 if (brightness < 0 or brightness > 1) else brightness
 
             self.canvas.SetPixel(
                 BLINKER_POSITION[0],
                 BLINKER_POSITION[1],
-                brightness * BLINKER_COLOUR.red,
-                brightness * BLINKER_COLOUR.green,
-                brightness * BLINKER_COLOUR.blue,
+                int(brightness * blinker_colour.red),
+                int(brightness * blinker_colour.green),
+                int(brightness * blinker_colour.blue),
             )
-
-            # Only count 0 -> (BLINKER_STEPS - 1)
             reset_count = count == (BLINKER_STEPS - 1)
         else:
-            # Not processing, blank the square
+            # Not processing — blank the pixel
             self.canvas.SetPixel(BLINKER_POSITION[0], BLINKER_POSITION[1], 0, 0, 0)
 
         return reset_count
