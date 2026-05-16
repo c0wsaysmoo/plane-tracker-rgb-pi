@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plane Tracker — Config</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+:root {
+  --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+  --amber-bright: #ffd54f; --amber-glow: rgba(255,179,0,0.07);
+  --red: #ff3d00; --green: #69f0ae; --orange: #ff9800;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--amber); font-family: 'Share Tech Mono', monospace; min-height: 100vh; }
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none; z-index: 1000;
+}
+.board-header {
+  background: var(--amber); color: var(--bg);
+  padding: 10px 20px; display: flex; align-items: center; gap: 12px;
+}
+.board-title { font-family: 'VT323', monospace; font-size: 28px; letter-spacing: 4px; text-transform: uppercase; }
+.back { font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px; margin-left: auto;
+        background: var(--bg); color: var(--amber); padding: 2px 12px; text-decoration: none; }
+.content { padding: 12px 16px 100px; max-width: 1100px; margin: 0 auto; }
+.section { border: 1px solid var(--amber-dim); margin-bottom: 10px; }
+.section-header {
+  font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 3px;
+  text-transform: uppercase; padding: 8px 14px; cursor: pointer;
+  background: rgba(255,179,0,0.04); color: var(--amber-bright);
+  display: flex; justify-content: space-between; user-select: none;
+}
+.section-header:hover { background: var(--amber-glow); }
+.section-body {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; padding: 16px; border-top: 1px solid var(--amber-dim);
+}
+.section-body.single { grid-template-columns: 1fr; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--amber-dim); }
+.field input, .field select {
+  background: transparent; border: none; border-bottom: 1px solid var(--amber-dim);
+  color: var(--amber); font-family: 'Share Tech Mono', monospace; font-size: 14px;
+  padding: 4px 2px; outline: none; width: 100%;
+}
+.field input:focus, .field select:focus { border-color: var(--amber); }
+.field select option { background: #1a1a0f; color: var(--amber); }
+.hint { font-size: 10px; color: var(--amber-dim); letter-spacing: 0.5px; margin-top: 2px; }
+.field.checkbox { flex-direction: row; align-items: center; gap: 8px; }
+.field.checkbox input { width: auto; border: none; accent-color: var(--amber); }
+.keys-list { display: flex; flex-direction: column; gap: 6px; }
+.key-row { display: flex; gap: 6px; align-items: center; }
+.key-row input { flex: 1; }
+.key-btn {
+  background: transparent; border: 1px solid var(--amber-dim); color: var(--amber-dim);
+  font-family: 'VT323', monospace; font-size: 16px; padding: 1px 8px; cursor: pointer;
+}
+.key-btn:hover { border-color: var(--amber); color: var(--amber); }
+.source-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border: 1px solid var(--amber-dim); background: rgba(255,179,0,0.02);
+}
+.source-row input[type=checkbox] { accent-color: var(--amber); width: 14px; height: 14px; flex-shrink: 0; }
+.source-label { font-family: 'VT323', monospace; font-size: 18px; letter-spacing: 1px; white-space: nowrap; }
+.source-hint { font-size: 10px; color: var(--amber-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.source-info { flex: 1; min-width: 0; }
+.source-arrows { display: flex; gap: 3px; flex-shrink: 0; }
+.actions {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg); border-top: 2px solid var(--amber-dim);
+  padding: 10px 20px; display: flex; gap: 10px; justify-content: flex-end; z-index: 100;
+}
+.btn {
+  font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px;
+  padding: 4px 20px; cursor: pointer; border: 1px solid; text-transform: uppercase;
+}
+.btn-save    { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+.btn-restart { background: transparent; color: var(--amber); border-color: var(--amber-dim); }
+.btn-back    { background: transparent; color: var(--amber-dim); border-color: var(--amber-dim); text-decoration: none; display: inline-block; }
+.save-msg { font-family: 'VT323', monospace; font-size: 18px; padding: 4px 12px; display: none; }
+.save-msg.ok  { color: var(--green); display: block; }
+.save-msg.err { color: var(--red);   display: block; }
+@media (max-width: 600px) { .section-body { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="board-header">
+  <span style="font-size:22px">✈</span>
+  <div class="board-title">Configuration</div>
+  <a class="back" href="/">← BOARD</a>
+</div>
+
+<div class="content" id="config-content">
+  <div style="color:var(--amber-dim);padding:40px;text-align:center;font-family:'VT323',monospace;font-size:24px;letter-spacing:3px">LOADING...</div>
+</div>
+
+<div class="actions">
+  <span class="save-msg" id="save-msg"></span>
+  <a class="btn btn-back" href="/">← Back</a>
+  <button class="btn btn-restart" onclick="restartService()">Restart Service</button>
+  <button class="btn btn-save" onclick="saveConfig()">Save Config</button>
+</div>
+
+<script>
+const gv = id => (document.getElementById(id)||{}).value||"";
+const gi = id => parseInt(gv(id))||0;
+const gf = id => parseFloat(gv(id))||0;
+const gc = id => !!(document.getElementById(id)||{}).checked;
+
+function renderKeysList(ns, keys) {
+  return (keys.length?keys:[""]).map((k,i)=>`
+    <div class="key-row" id="${ns}-key-row-${i}">
+      <input id="${ns}-key-${i}" value="${k}" placeholder="API key ${i+1}">
+      <button class="key-btn" onclick="removeKey('${ns}',${i})">✕</button>
+    </div>`).join("");
+}
+function addKey(ns) {
+  const list=document.getElementById(`${ns}-keys`);
+  const i=list.querySelectorAll(".key-row").length;
+  const div=document.createElement("div");
+  div.className="key-row"; div.id=`${ns}-key-row-${i}`;
+  div.innerHTML=`<input id="${ns}-key-${i}" value="" placeholder="API key ${i+1}">
+    <button class="key-btn" onclick="removeKey('${ns}',${i})">✕</button>`;
+  list.appendChild(div);
+}
+function removeKey(ns,i){ const el=document.getElementById(`${ns}-key-row-${i}`); if(el)el.remove(); }
+function getKeys(ns){
+  const list=document.getElementById(`${ns}-keys`);
+  if(!list)return[];
+  return[...list.querySelectorAll("input")].map(el=>el.value.trim()).filter(Boolean);
+}
+function toggleSection(el){ const b=el.nextElementSibling; if(b)b.style.display=b.style.display==="none"?"":"none"; }
+
+const _ALL_SOURCES=[
+  {id:"AirLabs",     label:"AirLabs",       hint:"Free tier, 1,000 calls/month per key — requires API key"},
+  {id:"FlightAware", label:"FlightAware",   hint:"Free $5 credit (~1,000 calls) per key — requires API key"},
+  {id:"FR24",        label:"FR24 Official", hint:"Paid — 1 credit per call, most reliable fallback"},
+];
+function renderApiSources(order,enabled){
+  const container=document.getElementById("api-sources-list");
+  const knownIds=_ALL_SOURCES.map(s=>s.id);
+  const ordered=order.filter(sid=>knownIds.includes(sid));
+  _ALL_SOURCES.forEach(s=>{if(!ordered.includes(s.id))ordered.push(s.id);});
+  container.innerHTML=ordered.map((sid,i)=>{
+    const src=_ALL_SOURCES.find(s=>s.id===sid)||{id:sid,label:sid,hint:""};
+    return`<div class="source-row" id="src-${sid}">
+      <input type="checkbox" id="src-en-${sid}" ${enabled[sid]!==false?"checked":""}>
+      <div class="source-info">
+        <div class="source-label">${i+1}. ${src.label}</div>
+        <div class="source-hint">${src.hint}</div>
+      </div>
+      <div class="source-arrows">
+        <button class="key-btn" onclick="moveSource('${sid}',-1)">↑</button>
+        <button class="key-btn" onclick="moveSource('${sid}',1)">↓</button>
+      </div></div>`;
+  }).join("");
+}
+function moveSource(sid,dir){
+  const rows=[...document.querySelectorAll("#api-sources-list .source-row")];
+  const idx=rows.findIndex(r=>r.id===`src-${sid}`);
+  const newIdx=idx+dir;
+  if(newIdx<0||newIdx>=rows.length)return;
+  const c=document.getElementById("api-sources-list");
+  if(dir===-1)c.insertBefore(rows[idx],rows[newIdx]); else c.insertBefore(rows[newIdx],rows[idx]);
+  [...c.querySelectorAll(".source-label")].forEach((el,i)=>{
+    el.textContent=(i+1)+". "+el.textContent.replace(/^\d+\.\s*/,"");
+  });
+}
+function getApiSources(){
+  const order=[],enabled={};
+  document.querySelectorAll("[id^='src-']").forEach(row=>{
+    const sid=row.id.replace("src-","");
+    order.push(sid);
+    enabled[sid]=!!(document.getElementById(`src-en-${sid}`)||{}).checked;
+  });
+  return{order,enabled};
+}
+
+function buildForm(_cfg,_sec){
+  const loc=_cfg.location||{},disp=_cfg.display||{},fl=_cfg.flights||{},ms=_cfg.master_slave||{},apis=_cfg.api_sources||{};
+  document.getElementById("config-content").innerHTML=`
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ Location &amp; Zone</div>
+      <div class="section-body">
+        <div class="field"><label>Home Airport Code</label><input id="journey_code" value="${loc.journey_code||'ORD'}" maxlength="4" style="text-transform:uppercase"><div class="hint">Nearest major airport ICAO code</div></div>
+        <div class="field"><label>Clock Format</label><select id="clock_format"><option value="12hr" ${(loc.clock_format||'12hr')==='12hr'?'selected':''}>12hr</option><option value="24hr" ${(loc.clock_format||'')==='24hr'?'selected':''}>24hr</option></select></div>
+        <div class="field"><label>Temperature Units</label><select id="temperature_units"><option value="imperial" ${(loc.temperature_units||'imperial')==='imperial'?'selected':''}>Imperial (°F)</option><option value="metric" ${(loc.temperature_units||'')==='metric'?'selected':''}>Metric (°C)</option></select></div>
+        <div class="field"><label>Distance Units</label><select id="distance_units"><option value="imperial" ${(loc.distance_units||'imperial')==='imperial'?'selected':''}>Imperial (mi)</option><option value="metric" ${(loc.distance_units||'')==='metric'?'selected':''}>Metric (km)</option></select></div>
+        <div class="field"><label>Speed Units</label><select id="speed_units"><option value="imperial" ${(loc.speed_units||'imperial')==='imperial'?'selected':''}>Imperial (mph)</option><option value="metric" ${(loc.speed_units||'')==='metric'?'selected':''}>Metric (km/h)</option><option value="knots" ${(loc.speed_units||'')==='knots'?'selected':''}>Knots (kts)</option></select></div>
+        <div class="field"><label>Home Lat, Lon</label><input id="location_home" value="${(loc.location_home||[]).join(', ')}"><div class="hint">e.g. 41.9265, -87.6954</div></div>
+        <div class="field"><label>Temperature Location (Lat, Lon)</label><input id="temperature_location" value="${loc.temperature_location||''}"><div class="hint">Same as home lat,lon usually</div></div>
+        <div class="field"><label>Top-Left Zone (Lat, Lon)</label><input id="zone_tl" value="${(loc.zone_home||{}).tl_y||''}, ${(loc.zone_home||{}).tl_x||''}" placeholder="41.904, -87.647"></div>
+        <div class="field"><label>Bottom-Right Zone (Lat, Lon)</label><input id="zone_br" value="${(loc.zone_home||{}).br_y||''}, ${(loc.zone_home||{}).br_x||''}" placeholder="41.851, -87.573"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ Display</div>
+      <div class="section-body">
+        <div class="field"><label>Brightness (0-100)</label><input id="brightness" type="number" min="0" max="100" value="${disp.brightness??80}"></div>
+        <div class="field"><label>Night Brightness (0-100)</label><input id="brightness_night" type="number" min="0" max="100" value="${disp.brightness_night??20}"></div>
+        <div class="field checkbox"><input id="night_brightness" type="checkbox" ${disp.night_brightness?'checked':''}><label for="night_brightness">Enable Night Brightness</label></div>
+        <div class="field"><label>Night Start (HH:MM)</label><input id="night_start" value="${disp.night_start||'22:00'}"></div>
+        <div class="field"><label>Night End (HH:MM)</label><input id="night_end" value="${disp.night_end||'07:00'}"></div>
+        <div class="field"><label>GPIO Slowdown (1-4)</label><input id="gpio_slowdown" type="number" min="1" max="4" value="${disp.gpio_slowdown??2}"></div>
+        <div class="field checkbox"><input id="hat_pwm_enabled" type="checkbox" ${disp.hat_pwm_enabled!==false?'checked':''}><label for="hat_pwm_enabled">HAT PWM Enabled</label></div>
+        <div class="field"><label>Forecast Days (1-5)</label><input id="forecast_days" type="number" min="1" max="5" value="${disp.forecast_days??3}"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ Flights</div>
+      <div class="section-body">
+        <div class="field"><label>Min Altitude (ft)</label><input id="min_altitude" type="number" value="${fl.min_altitude??0}"></div>
+        <div class="field"><label>Max Farthest Flights Logged</label><input id="max_farthest" type="number" value="${fl.max_farthest??10}"></div>
+        <div class="field"><label>Max Closest Flights Logged</label><input id="max_closest" type="number" value="${fl.max_closest??10}"></div>
+        <div class="field"><label>Alert Email</label><input id="email" value="${fl.email||''}"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ Master / Slave</div>
+      <div class="section-body">
+        <div class="field"><label>Master Tracker Hostname</label><input id="master_tracker" value="${ms.master_tracker||''}"><div class="hint">Leave blank if this is the master</div></div>
+        <div class="field"><label>Other Tracker Hostnames</label><input id="other_tracker_hostnames" value="${(ms.other_tracker_hostnames||[]).join(', ')}"><div class="hint">Comma-separated slave hostnames</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ API Sources &amp; Keys</div>
+      <div class="section-body">
+        <div>
+          <div class="hint" style="margin-bottom:8px">Enable sources and set priority order. OpenSky provides position data only.</div>
+          <div id="api-sources-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="field"><label>Tomorrow.io Weather Key</label><input id="tomorrow_api_key" value="${_sec.tomorrow_api_key||''}"></div>
+          <div class="field"><label>OpenSky Client ID</label><input id="opensky_client_id" value="${_sec.opensky_client_id||''}"></div>
+          <div class="field"><label>OpenSky Client Secret</label><input id="opensky_client_secret" value="${_sec.opensky_client_secret||''}"></div>
+          <div class="field">
+            <label>AirLabs API Keys</label>
+            <div class="keys-list" id="airlabs-keys">${renderKeysList('airlabs',_sec.airlabs_api_keys||(_sec.airlabs_api_key?[_sec.airlabs_api_key]:['']))}</div>
+            <button class="key-btn" style="margin-top:4px;align-self:flex-start" onclick="addKey('airlabs')">+ Add Key</button>
+          </div>
+          <div class="field">
+            <label>FlightAware API Keys</label>
+            <div class="keys-list" id="flightaware-keys">${renderKeysList('flightaware',_sec.flightaware_api_keys||(_sec.flightaware_api_key?[_sec.flightaware_api_key]:['']))}</div>
+            <button class="key-btn" style="margin-top:4px;align-self:flex-start" onclick="addKey('flightaware')">+ Add Key</button>
+          </div>
+          <div class="field"><label>FlightAware Monthly $ Limit per Key</label><input id="flightaware_monthly_limit" type="number" step="0.5" value="${_sec.flightaware_monthly_limit??4.00}"></div>
+          <div class="field"><label>FR24 API Key (Official/Paid)</label><input id="flightradar24_key" value="${_sec.flightradar24_key||''}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ System Status &amp; API Usage</div>
+      <div class="section-body single" style="padding:16px">
+        <div id="system-status" style="color:var(--amber-dim);font-size:12px;letter-spacing:2px">Loading...</div>
+      </div>
+    </div>`;
+
+  renderApiSources(apis.order||["AirLabs","FlightAware","FR24"],apis.enabled||{});
+}
+
+function collectConfig(){
+  const homeParts=gv('location_home').split(',').map(s=>parseFloat(s.trim()));
+  const tlParts=gv('zone_tl').split(',').map(s=>parseFloat(s.trim()));
+  const brParts=gv('zone_br').split(',').map(s=>parseFloat(s.trim()));
+  const apis=getApiSources();
+  return{
+    config:{
+      location:{
+        journey_code:gv('journey_code').toUpperCase(),
+        clock_format:gv('clock_format'),
+        temperature_units:gv('temperature_units'),
+        distance_units:gv('distance_units'),
+        speed_units:gv('speed_units'),
+        location_home:homeParts,
+        temperature_location:gv('temperature_location'),
+        journey_blank_filler:' ? ',
+        zone_home:{tl_y:tlParts[0]||0,tl_x:tlParts[1]||0,br_y:brParts[0]||0,br_x:brParts[1]||0},
+      },
+      display:{brightness:gi('brightness'),brightness_night:gi('brightness_night'),night_brightness:gc('night_brightness'),night_start:gv('night_start'),night_end:gv('night_end'),gpio_slowdown:gi('gpio_slowdown'),hat_pwm_enabled:gc('hat_pwm_enabled'),forecast_days:gi('forecast_days')},
+      flights:{min_altitude:gi('min_altitude'),max_farthest:gi('max_farthest'),max_closest:gi('max_closest'),email:gv('email')},
+      master_slave:{master_tracker:gv('master_tracker'),other_tracker_hostnames:gv('other_tracker_hostnames').split(',').map(s=>s.trim()).filter(Boolean)},
+      api_sources:{order:apis.order,enabled:apis.enabled},
+    },
+    secrets:{
+      tomorrow_api_key:gv('tomorrow_api_key'),
+      opensky_client_id:gv('opensky_client_id'),
+      opensky_client_secret:gv('opensky_client_secret'),
+      airlabs_api_keys:getKeys('airlabs'),
+      flightaware_api_keys:getKeys('flightaware'),
+      flightaware_monthly_limit:gf('flightaware_monthly_limit'),
+      flightradar24_key:gv('flightradar24_key'),
+    }
+  };
+}
+
+async function saveConfig(){
+  const msg=document.getElementById("save-msg");
+  msg.className="save-msg"; msg.textContent="Saving..."; msg.style.display="block";
+  try{
+    const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectConfig())});
+    const data=await r.json();
+    if(data.ok){msg.className="save-msg ok";msg.textContent="✓ Saved";}
+    else{msg.className="save-msg err";msg.textContent="✗ "+(data.errors||[]).join(", ");}
+  }catch(e){msg.className="save-msg err";msg.textContent="✗ "+e.message;}
+  setTimeout(()=>{msg.style.display="none";},3000);
+}
+
+async function restartService(){
+  if(!confirm("Restart the plane tracker service?"))return;
+  try{
+    await fetch("/api/restart",{method:"POST"});
+    document.getElementById("save-msg").className="save-msg ok";
+    document.getElementById("save-msg").textContent="✓ Restarting...";
+    document.getElementById("save-msg").style.display="block";
+  }catch(e){}
+}
+
+async function loadSystemStatus(){
+  try{
+    const[sys,usage]=await Promise.all([
+      fetch('/api/system').then(r=>r.json()).catch(()=>({})),
+      fetch('/api/usage').then(r=>r.json()).catch(()=>({})),
+    ]);
+    function fmt_dur(secs){
+      if(!secs)return'—';
+      const d=Math.floor(secs/86400),h=Math.floor((secs%86400)/3600),m=Math.floor((secs%3600)/60);
+      return d>0?`${d}d ${h}h ${m}m`:h>0?`${h}h ${m}m`:`${m}m`;
+    }
+    const tempC=sys.cpu_temp_c,tempF=tempC!=null?(tempC*9/5+32).toFixed(1):null;
+    const tempStr=tempC!=null?`${tempC}°C / ${tempF}°F`:'—',tempWarn=tempC!=null&&tempC>=70;
+    const al=usage.AirLabs??0,fa=usage.FlightAware??0,fr=usage.FR24??0,mon=usage.month??'';
+    document.getElementById('system-status').innerHTML=`
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">PI UPTIME</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fmt_dur(sys.uptime_secs)}</div>
+        </div>
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">SERVICE UPTIME</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fmt_dur(sys.service_uptime_secs)}</div>
+        </div>
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid ${tempWarn?'var(--red)':'var(--amber)'};padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">CPU TEMP</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:${tempWarn?'var(--red)':'var(--amber-bright)'}">${tempStr}${tempWarn?' ⚠':''}</div>
+        </div>
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid ${al>=900?'var(--red)':'var(--amber)'};padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">AIRLABS ${mon}</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:${al>=900?'var(--red)':'var(--amber-bright)'}">${al}<span style="font-size:13px;color:var(--amber-dim)">/1,000${al>=900?' ⚠':''}</span></div>
+        </div>
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid ${fa>=4.5?'var(--red)':'var(--amber)'};padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FLIGHTAWARE ${mon}</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:${fa>=4.5?'var(--red)':'var(--amber-bright)'}">$${fa.toFixed(2)}<span style="font-size:13px;color:var(--amber-dim)">/$5.00${fa>=4.5?' ⚠':''}</span></div>
+        </div>
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 ${mon}</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fr} <span style="font-size:13px;color:var(--amber-dim)">calls</span></div>
+        </div>
+      </div>`;
+  }catch(e){document.getElementById('system-status').textContent='Could not load system status.';}
+}
+
+async function loadConfig(){
+  try{
+    const r=await fetch("/api/config");
+    const data=await r.json();
+    buildForm(data.config||{},data.secrets||{});
+    loadSystemStatus();
+  }catch(e){
+    document.getElementById("config-content").innerHTML=
+      `<div style="color:var(--red);padding:40px;font-family:'VT323',monospace;font-size:20px">Error loading config: ${e.message}</div>`;
+  }
+}
+loadConfig();
+</script>
+</body>
+</html>
