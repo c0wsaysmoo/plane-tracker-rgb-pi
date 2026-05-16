@@ -179,6 +179,34 @@ def icao_to_iata(icao_code):
     return icao_code
 
 
+def get_nearest_airport(lat, lon, max_dist_km=15):
+    """
+    Find the nearest airport IATA code to given coordinates.
+    Returns IATA code string or None if nothing within max_dist_km.
+    """
+    _load()
+    if not lat or not lon:
+        return None
+
+    best_code = None
+    best_dist = float("inf")
+
+    for code, entry in _db.items():
+        if len(code) != 3:  # IATA codes only
+            continue
+        dlat = entry.get("lat", 0) - lat
+        dlon = entry.get("lon", 0) - lon
+        dist = (dlat**2 + dlon**2) ** 0.5  # degrees
+        if dist < best_dist:
+            best_dist = dist
+            best_code = code
+
+    # Convert rough degree distance to km (1 degree ~ 111km)
+    if best_dist * 111 <= max_dist_km:
+        return best_code
+    return None
+
+
 def refresh():
     """Force re-download of airport database."""
     global _db, _loaded

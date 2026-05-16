@@ -17,13 +17,22 @@ import requests
 from datetime import datetime, timezone
 
 try:
-    from config import AIRLABS_API_KEY
+    from config import AIRLABS_API_KEYS
+    if isinstance(AIRLABS_API_KEYS, str):
+        AIRLABS_API_KEYS = [AIRLABS_API_KEYS]
+    AIRLABS_API_KEY = AIRLABS_API_KEYS[0] if AIRLABS_API_KEYS else None
 except (ImportError, ModuleNotFoundError, NameError):
-    AIRLABS_API_KEY = None
+    try:
+        from config import AIRLABS_API_KEY
+        AIRLABS_API_KEYS = [AIRLABS_API_KEY] if AIRLABS_API_KEY else []
+    except (ImportError, ModuleNotFoundError, NameError):
+        AIRLABS_API_KEY  = None
+        AIRLABS_API_KEYS = []
 
 BASE_DIR      = os.path.dirname(os.path.dirname(__file__))
 USAGE_FILE    = os.path.join(BASE_DIR, "airlabs_usage.json")
 MONTHLY_LIMIT = 1000
+TOTAL_LIMIT   = len(AIRLABS_API_KEYS) * 1050
 BASE_URL      = "https://airlabs.co/api/v9"
 
 from utilities.airports import get_airport_coords as _airport_coords
@@ -77,13 +86,23 @@ def _increment_usage():
 
 
 def is_available():
-    if not AIRLABS_API_KEY:
+    if not AIRLABS_API_KEYS:
         return False
     usage = _load_usage()
-    if usage["calls"] >= MONTHLY_LIMIT:
-        print(f"[AirLabs] Monthly limit of {MONTHLY_LIMIT} calls reached — disabled for this month")
+    if usage.get("calls", 0) >= TOTAL_LIMIT:
+        print(f"[AirLabs] All keys exhausted ({TOTAL_LIMIT} calls used)")
         return False
     return True
+
+
+def get_current_key():
+    """Return the active key based on call count (rotates every 1000 calls)."""
+    usage = _load_usage()
+    calls = usage.get("calls", 0)
+    key_index = calls // 1000
+    if key_index < len(AIRLABS_API_KEYS):
+        return AIRLABS_API_KEYS[key_index]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -114,17 +133,15 @@ def get_flight_details(callsign):
     try:
         r = requests.get(
             f"{BASE_URL}/flight",
-            params={"flight_icao": callsign, "api_key": AIRLABS_API_KEY},
+            params={"flight_icao": callsign, "api_key": get_current_key()},
             timeout=10,
         )
         if r.status_code != 200:
-                return {}
-
+            return {}
         data = r.json().get("response") or {}
         if not data:
-                return {}
-
-        calls = _increment_usage()
+            return {}
+        _increment_usage()
 
         origin_iata = data.get("dep_iata", "")
         dest_iata   = data.get("arr_iata", "")
@@ -184,7 +201,7 @@ def get_tracked_flight(callsign):
     try:
         r = requests.get(
             f"{BASE_URL}/flight",
-            params={"flight_icao": callsign, "api_key": AIRLABS_API_KEY},
+            params={"flight_icao": callsign, "api_key": get_current_key()},
             timeout=10,
         )
         if r.status_code != 200:
