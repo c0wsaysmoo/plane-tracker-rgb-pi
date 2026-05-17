@@ -1,6 +1,6 @@
 ## 🚀 What's New & Improved
 
-I’ve polished up some existing issues and implemented a few major upgrades to make managing your clock a lot easier and more efficient:
+I’ve polished up some existing issues and implemented a few major upgrades to make managing your clock a lot easier and more efficient. Also thank you for the people who have reached out with help and ideas. This clock has been a passion project for years and I hope years to come.
 
 *   **New Web Configuration Page:** No more digging through raw files. You can now easily fill out and update all your settings directly from a clean, user-friendly webpage. At the bottom, it also tells you the system stats and the current API usage for each service. REMEMBER your local webpage is going to be http://hostname.local:8080 where hostname is the name of the PI (not your username). If you pull this version **BEFORE** you do, make a copy of your current config file. Afterwords use the old one to fill out the infomration in the new one.  
 *   **Smart Multi-Clock Sync:** If you run multiple clocks in the same house, they now work as a team. One clock acts as the **MASTER** to fetch weather data, and then seamlessly passes it to the other clocks. This saves system resources and ensures you only need a single weather API key, just like it does with the overhead flights!
