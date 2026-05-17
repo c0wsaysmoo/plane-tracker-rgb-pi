@@ -630,25 +630,34 @@ def api_restart():
 @app.get("/api/system")
 def api_system():
     import subprocess
+    import os
     result = {}
     try:
         with open("/sys/class/thermal/thermal_zone0/temp") as f:
             result["cpu_temp_c"] = round(int(f.read().strip()) / 1000, 1)
     except Exception: result["cpu_temp_c"] = None
     try:
+        # Added back here to pull the first value from the split list
         with open("/proc/uptime") as f:
             result["uptime_secs"] = int(float(f.read().split()[0]))
     except Exception: result["uptime_secs"] = None
     try:
+        # Copy the existing environment and safely add/override TZ and LANG
+        custom_env = os.environ.copy()
+        custom_env["LANG"] = "C"
+        custom_env["TZ"] = "UTC"
+        
         r = subprocess.run(["systemctl", "show", "its-a-plane", "--property=ActiveEnterTimestamp"],
-                           capture_output=True, text=True, timeout=3)
+                           capture_output=True, text=True, timeout=3, env=custom_env)
         ts_str = r.stdout.strip().replace("ActiveEnterTimestamp=", "")
         if ts_str and ts_str != "n/a":
             from datetime import timezone as _tz
-            dt = datetime.strptime(ts_str, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=_tz.utc)
+            dt = datetime.strptime(ts_str, "%a %Y-%m-%d %H:%M:%S UTC").replace(tzinfo=_tz.utc)
             result["service_uptime_secs"] = int((datetime.now(_tz.utc) - dt).total_seconds())
         else: result["service_uptime_secs"] = None
-    except Exception: result["service_uptime_secs"] = None
+    except Exception as e: 
+        print(f"Uptime parse error: {e}")
+        result["service_uptime_secs"] = None
     return jsonify(result)
 
 @app.get("/api/usage")
