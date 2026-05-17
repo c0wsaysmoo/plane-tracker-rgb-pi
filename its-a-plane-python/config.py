@@ -77,6 +77,10 @@ def reload():
     # Master / slave
     MASTER_TRACKER          = _ms.get("master_tracker", "")
     OTHER_TRACKER_HOSTNAMES = _ms.get("other_tracker_hostnames", [])
+    
+    # Stats
+    _stats = _cfg.get("stats", {})
+    STATS_LOG_DAYS = _stats.get("stats_log_days") or 0
 
     # API Sources
     _apis = _cfg.get("api_sources", {})
