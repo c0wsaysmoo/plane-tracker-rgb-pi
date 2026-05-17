@@ -251,6 +251,14 @@ else:
                 return {}
 
         def _save_counter_log(data):
+            try:
+                from config import STATS_LOG_DAYS as _max_days
+            except (ImportError, AttributeError):
+                _max_days = 0
+            if _max_days and _max_days > 0:
+                from datetime import date, timedelta
+                cutoff = str(date.today() - timedelta(days=_max_days))
+                data = {k: v for k, v in data.items() if k >= cutoff}
             with open(COUNTER_FILE, "w") as f:
                 json.dump(data, f, indent=2)
 
