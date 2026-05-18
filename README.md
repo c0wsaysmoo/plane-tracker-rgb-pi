@@ -421,11 +421,100 @@ Test the script manually by running
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-# 11. Fill in the Config file.
+# 11. Find your project path
 
-You can only do so IF the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
+Open a terminal on your Pi and run:
+
+```bash
+cd ~/its-a-plane-python
+pwd
+```
+
+Copy the path it shows — you'll need it in the next step. It will look something like `/home/pi/its-a-plane-python` or `/home/flight/its-a-plane-python`.
+
+---
+
+# 12. Create the service file
+
+Run these commands **from inside your project folder** (after the `cd` above):
+
+```bash
+cat > /tmp/its-a-plane.service << EOF
+[Unit]
+Description=Plane Tracker
+After=network.target
+
+[Service]
+User=$(whoami)
+WorkingDirectory=$HOME
+ExecStart=$(pwd)/its-a-plane.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+> ⚠️ **Important:** Run the `cd` command first or the paths will be wrong!
+
+---
+
+# 13. Install and start the service
+
+```bash
+sudo cp /tmp/its-a-plane.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable its-a-plane
+sudo systemctl start its-a-plane
+```
+
+Check it's running:
+
+```bash
+sudo systemctl status its-a-plane
+```
+
+You should see `Active: active (running)` in green. If it shows an error, jump to the Troubleshooting section below.
+
+---
 
 
+# 14. Fill in the Config file.
+
+You can only do so **IF** the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
+
+# 15. Enable the web UI restart button
+
+If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
+
+```bash
+sudo visudo
+```
+
+This opens a text editor. Scroll to the very bottom and add this line (replace `pi` with your actual username — same as what `whoami` showed you):
+
+```
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart its-a-plane
+```
+
+Save and exit (ctrl x, y, enter). Now the web UI restart button will work.
+
+---
+
+## Useful commands
+
+| What you want to do | Command |
+|---|---|
+| Check if it's running | `sudo systemctl status its-a-plane` |
+| Restart it | `sudo systemctl restart its-a-plane` |
+| Stop it | `sudo systemctl stop its-a-plane` |
+| Start it | `sudo systemctl start its-a-plane` |
+| Watch live logs | `sudo journalctl -u its-a-plane -f` |
+| See last 50 log lines | `sudo journalctl -u its-a-plane -n 50` |
+| See logs since last crash | `sudo journalctl -u its-a-plane -b` |
+
+---
 Optional: Add a Power Button
 If you'd like to add a power button, you can solder the button to the **GND/SCL** pins on the bonnet. Then, run the following commands:
 ```
