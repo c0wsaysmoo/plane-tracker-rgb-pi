@@ -278,6 +278,7 @@ function renderForm() {
           <select id="distance_units">
             <option value="imperial" ${(loc.distance_units||'imperial')==='imperial'?'selected':''}>Imperial (mi)</option>
             <option value="metric" ${(loc.distance_units||'')==='metric'?'selected':''}>Metric (km)</option>
+            <option value="nautical" ${(loc.distance_units||'')==='nautical'?'selected':''}>Nautical (nm)</option>
           </select>
         </div>
         <div class="field">
