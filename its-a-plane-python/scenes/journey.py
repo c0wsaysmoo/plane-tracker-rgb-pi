@@ -57,7 +57,7 @@ class JourneyScene(object):
         elif DISTANCE_UNITS == "metric":
             distance_units = "KM"
         else:
-            distance_units = "Units"
+            distance_units = "nm"
 
         distance_origin_text = f'{dist_origin:.0f}{distance_units}'
         distance_destination_text = f'{dist_destination:.0f}{distance_units}'
