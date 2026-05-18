@@ -36,7 +36,11 @@ if MASTER_TRACKER:
         dlat,dlon = lat2-lat1, lon2-lon1
         a = m.sin(dlat/2)**2 + m.cos(lat1)*m.cos(lat2)*m.sin(dlon/2)**2
         miles = _R * 2 * m.atan2(m.sqrt(a), m.sqrt(1-a))
-        return miles * 1.609 if _DISTANCE_UNITS == "metric" else miles
+        if _DISTANCE_UNITS == "metric":
+            return miles * 1.609
+        elif _DISTANCE_UNITS == "nautical":
+            return miles * 0.868976
+        return miles
 
     def _bear(lat, lon):
         import math as m
@@ -199,7 +203,11 @@ else:
             a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
             miles = EARTH_RADIUS_M * c
-            return miles * 1.609 if DISTANCE_UNITS == "metric" else miles
+            if DISTANCE_UNITS == "metric":
+                return miles * 1.609
+            elif DISTANCE_UNITS == "nautical":
+                return miles * 0.868976
+            return miles
 
         def degrees_to_cardinal(deg):
             dirs = ["N","NE","E","SE","S","SW","W","NW"]
@@ -478,6 +486,7 @@ else:
                             "plane_latitude":       plane_lat,
                             "plane_longitude":      plane_lon,
                             "vertical_speed":       state["vertical_speed"],
+                            "altitude":             state.get("altitude", 0),
                             "callsign":             callsign,
                             "icao24":               state.get("icao24", ""),
                             "distance":             dist_home,
@@ -619,7 +628,7 @@ else:
                                     from config import DISTANCE_UNITS as _DU
                                 except Exception:
                                     _DU = "imperial"
-                                dist_display = dist_nm * 1.15078 if _DU == "imperial" else dist_nm * 1.852
+                                dist_display = dist_nm if _DU == "nautical" else (dist_nm * 1.15078 if _DU == "imperial" else dist_nm * 1.852)
                                 tracked_data["distance_destination"] = dist_display
                                 # Fields for tracked scenes
                                 tracked_data["dist_remaining"] = dist_display
@@ -635,7 +644,7 @@ else:
                                     lat1o,lon1o = _math.radians(origin_lat), _math.radians(origin_lon)
                                     ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
                                     total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
-                                    tracked_data["total_distance"] = total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852
+                                    tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
                                 else:
                                     # Look up origin coords from airports database
                                     origin_code = route_info.get("origin", "")
@@ -647,7 +656,7 @@ else:
                                                 lat1o,lon1o = _math.radians(oc["lat"]), _math.radians(oc["lon"])
                                                 ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
                                                 total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
-                                                tracked_data["total_distance"] = total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852
+                                                tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
                                         except Exception:
                                             pass
                             self._tracked_last_eta  = tracked_data.get("time_estimated_arrival")
