@@ -4,11 +4,64 @@ from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 
 # Setup
-PLANE_COLOUR = colours.LIGHT_MID_BLUE
+PLANE_COLOUR          = colours.LIGHT_MID_BLUE
 PLANE_DISTANCE_COLOUR = colours.LIGHT_PINK
+ALTITUDE_COLOUR       = colours.LIGHT_PINK
+CLIMB_COLOUR          = colours.LIGHT_GREEN
+DESCEND_COLOUR        = colours.LIGHT_LIGHT_RED
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
+
+
+def _format_altitude(altitude):
+    """Match trackedstats logic: FL above 18,000ft, ft below, metres if metric."""
+    if not altitude:
+        return None, None
+    altitude = int(altitude)
+    if DISTANCE_UNITS == "metric":
+        metres = int(altitude * 0.3048)
+        return str(metres), "m"
+    if altitude >= 18000:
+        return f"FL{altitude // 100}", ""
+    return f"{altitude:,}", "ft"
+
+
+def _build_char_list(plane_name, distance, direction, altitude, vertical_speed):
+    """Build a list of (char, colour) tuples for the full scrolling line."""
+    parts = []
+
+    if DISTANCE_UNITS == "imperial":
+        dist_unit = "mi"
+    elif DISTANCE_UNITS == "metric":
+        dist_unit = "km"
+    else:
+        dist_unit = "nm"
+
+    # Plane name
+    for ch in f"{plane_name} ":
+        parts.append((ch, PLANE_COLOUR))
+
+    # Distance + direction
+    for ch in f"{distance:.2f}{dist_unit} {direction}":
+        parts.append((ch, PLANE_DISTANCE_COLOUR))
+
+    # Altitude
+    alt_val, alt_unit = _format_altitude(altitude)
+    if alt_val:
+        for ch in f" @{alt_val}":
+            parts.append((ch, ALTITUDE_COLOUR))
+        for ch in alt_unit:
+            parts.append((ch, ALTITUDE_COLOUR))
+        # Vertical speed arrow (same thresholds as trackedstats.py)
+        vs = vertical_speed or 0
+        if vs > 64:
+            parts.append(("\u2191", CLIMB_COLOUR))    # ↑ green
+        elif vs < -64:
+            parts.append(("\u2193", DESCEND_COLOUR))  # ↓ red
+
+    return parts
+
 
 class PlaneDetailsScene(object):
     def __init__(self):
@@ -29,18 +82,13 @@ class PlaneDetailsScene(object):
 
         # Extract data
         plane_data = self._data[self._data_index]
-        plane_name = plane_data["plane"]
-        distance = plane_data["distance"]
-        direction = plane_data["direction"]
-        distance_units = "mi" if DISTANCE_UNITS == "imperial" else "KM"
+        plane_name    = plane_data["plane"]
+        distance      = plane_data["distance"]
+        direction     = plane_data["direction"]
+        altitude      = plane_data.get("altitude", 0)
+        vertical_speed = plane_data.get("vertical_speed", 0)
 
-        # Construct the plane details strings
-        plane_name_text = f'{plane_name} '
-        distance_text = f'{distance:.2f}{distance_units} {direction}'
-
-        # Calculate the widths of each section
-        plane_name_width = len(plane_name_text) * 5
-        distance_direction_text_width = max(len(distance_text) * 5, screen.WIDTH)
+        char_list = _build_char_list(plane_name, distance, direction, altitude, vertical_speed)
 
         # Draw background
         self.draw_square(
@@ -51,27 +99,18 @@ class PlaneDetailsScene(object):
             colours.BLACK,
         )
 
-        # Draw text with different colors for plane name and distance/direction
-        plane_name_width = graphics.DrawText(
-            self.canvas,
-            PLANE_FONT,
-            self.plane_position,
-            PLANE_DISTANCE_FROM_TOP,
-            PLANE_COLOUR,  # Set the color for the plane name
-            plane_name_text,
-        )
-
-        distance_text_width = graphics.DrawText(
-            self.canvas,
-            PLANE_FONT,
-            self.plane_position + plane_name_width,
-            PLANE_DISTANCE_FROM_TOP,
-            PLANE_DISTANCE_COLOUR,  # Set the color for distance/direction
-            distance_text,
-        )
-
-        # Calculate the total width of the text string
-        total_text_width = plane_name_width + distance_text_width
+        # Draw each character at its scrolling position
+        total_text_width = 0
+        for ch, colour in char_list:
+            w = graphics.DrawText(
+                self.canvas,
+                PLANE_FONT,
+                self.plane_position + total_text_width,
+                PLANE_DISTANCE_FROM_TOP,
+                colour,
+                ch,
+            )
+            total_text_width += w
 
         # Handle scrolling
         self.plane_position -= 1

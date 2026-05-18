@@ -63,7 +63,7 @@ def _build_stats(data):
 
     # Distance remaining
     if data.get("dist_remaining") is not None:
-        unit = "km" if DISTANCE_UNITS == "metric" else "mi"
+        unit = "km" if DISTANCE_UNITS == "metric" else ("nm" if DISTANCE_UNITS == "nautical" else "mi")
         dist_str = f"{int(data['dist_remaining'])}{unit}"
         for ch in dist_str:
             parts.append((ch, TIME_DIST_COLOUR))
