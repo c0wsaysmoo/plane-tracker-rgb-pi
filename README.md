@@ -204,7 +204,7 @@ This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/
   - If either the actual arrival time is None (not updated yet) or actual departure time is None (not updated yet) the airport code will be Grey. Happens if you live close to an airport 
 
 - An arrow between the airport codes acts as a progress bar for the flight, starting red (just left) and turning green (almost complete).
-- Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction to your location are displayed.
+- Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction/altitude to your location are displayed.
 - The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
 
 Logs the closest flights to your location and farthest destinations
