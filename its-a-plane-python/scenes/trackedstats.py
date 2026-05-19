@@ -10,6 +10,13 @@ try:
 except (ImportError, ModuleNotFoundError, NameError):
     SPEED_UNITS = "knots"
 
+_HEADING_ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
+
+
+def _heading_to_arrow(heading):
+    return _HEADING_ARROWS[int((heading + 22.5) / 45) % 8]
+
+
 LINE3_Y = 31
 FONT = fonts.small
 
@@ -99,6 +106,10 @@ def _build_stats(data):
             parts.append(("\u2191", colours.LIGHT_GREEN))
         elif vs < -64:
             parts.append(("\u2193", colours.LIGHT_LIGHT_RED))
+        heading = data.get("heading")
+        if heading is not None:
+            parts.append((" ", STATS_COLOUR))
+            parts.append((_heading_to_arrow(heading), STATS_COLOUR))
         parts.append((" ", STATS_COLOUR))
 
     # Speed (no space between value and unit)
