@@ -391,38 +391,6 @@ def debug_route():
     """Debug endpoint — not available without FR24 scraper."""
     return jsonify({"error": "Debug route endpoint deprecated"})
 
-@app.get("/weather/json")
-def weather_json():
-    """Serve current temperature, humidity and forecast to slave trackers."""
-    try:
-        from utilities.temperature import _load_file_cache, _TEMP_CACHE_FILE, _FORECAST_CACHE_FILE
-        temp_data, temp_ts   = _load_file_cache(_TEMP_CACHE_FILE)
-        forecast_data, f_ts  = _load_file_cache(_FORECAST_CACHE_FILE)
-        temp = hum = None
-        if temp_data:
-            d = temp_data if isinstance(temp_data, (list, tuple)) else [None, None]
-            temp, hum = (d[0], d[1]) if len(d) >= 2 else (None, None)
-        return jsonify({
-            "temperature": temp,
-            "humidity":    hum,
-            "forecast":    forecast_data or [],
-        })
-    except Exception:
-        pass
-    return jsonify({"temperature": None, "humidity": None, "forecast": []})
-
-@app.get("/forecast/json")
-def forecast_json():
-    """Serve forecast intervals to slave trackers."""
-    try:
-        from utilities.temperature import _load_file_cache, _FORECAST_CACHE_FILE
-        cached, ts = _load_file_cache(_FORECAST_CACHE_FILE)
-        if cached:
-            return jsonify(cached)
-    except Exception:
-        pass
-    return jsonify([])
-
 @app.get("/overhead/json")
 def overhead_json():
     """Return current overhead flight data for slave trackers."""
@@ -443,6 +411,33 @@ def tracked_json_live():
             return jsonify(json.load(f))
     except Exception:
         return jsonify({"callsign": ""})
+
+@app.get("/weather/json")
+def weather_json():
+    """Serve cached weather data (temp, humidity, forecast) to slave Pis."""
+    _cache_dir = os.path.join(BASE_DIR, ".cache")
+    temp_data, forecast_data = None, None
+    try:
+        with open(os.path.join(_cache_dir, "temperature.json"), "r") as f:
+            obj = json.load(f)
+            vals = obj.get("data", [])
+            if isinstance(vals, list) and len(vals) == 2:
+                temp_data, humidity_data = vals
+            else:
+                temp_data = humidity_data = None
+    except Exception:
+        humidity_data = None
+    try:
+        with open(os.path.join(_cache_dir, "forecast.json"), "r") as f:
+            obj = json.load(f)
+            forecast_data = obj.get("data", [])
+    except Exception:
+        forecast_data = []
+    return jsonify({
+        "temperature": temp_data,
+        "humidity":    humidity_data,
+        "forecast":    forecast_data,
+    })
 
 @app.get("/stats")
 def stats_page():
