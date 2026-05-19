@@ -13,6 +13,12 @@ PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
 
+_HEADING_ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
+
+
+def _heading_to_arrow(heading):
+    return _HEADING_ARROWS[int((heading + 22.5) / 45) % 8]
+
 
 def _format_altitude(altitude):
     """Match trackedstats logic: FL above 18,000ft, ft below, metres if metric."""
@@ -27,7 +33,7 @@ def _format_altitude(altitude):
     return f"{altitude:,}", "ft"
 
 
-def _build_char_list(plane_name, distance, direction, altitude, vertical_speed):
+def _build_char_list(plane_name, distance, direction, altitude, vertical_speed, heading):
     """Build a list of (char, colour) tuples for the full scrolling line."""
     parts = []
 
@@ -49,16 +55,19 @@ def _build_char_list(plane_name, distance, direction, altitude, vertical_speed):
     # Altitude
     alt_val, alt_unit = _format_altitude(altitude)
     if alt_val:
-        for ch in f" @{alt_val}":
+        for ch in f" @ {alt_val}":
             parts.append((ch, ALTITUDE_COLOUR))
         for ch in alt_unit:
             parts.append((ch, ALTITUDE_COLOUR))
         # Vertical speed arrow (same thresholds as trackedstats.py)
         vs = vertical_speed or 0
         if vs > 64:
-            parts.append(("\u2191", CLIMB_COLOUR))    # ↑ green
+            parts.append(("↑", CLIMB_COLOUR))    # ↑ green
         elif vs < -64:
-            parts.append(("\u2193", DESCEND_COLOUR))  # ↓ red
+            parts.append(("↓", DESCEND_COLOUR))  # ↓ red
+        if heading is not None:
+            parts.append((" ", PLANE_DISTANCE_COLOUR))
+            parts.append((_heading_to_arrow(heading), PLANE_DISTANCE_COLOUR))
 
     return parts
 
@@ -82,13 +91,14 @@ class PlaneDetailsScene(object):
 
         # Extract data
         plane_data = self._data[self._data_index]
-        plane_name    = plane_data["plane"]
-        distance      = plane_data["distance"]
-        direction     = plane_data["direction"]
-        altitude      = plane_data.get("altitude", 0)
+        plane_name     = plane_data["plane"]
+        distance       = plane_data["distance"]
+        direction      = plane_data["direction"]
+        altitude       = plane_data.get("altitude", 0)
         vertical_speed = plane_data.get("vertical_speed", 0)
+        heading        = plane_data.get("heading")
 
-        char_list = _build_char_list(plane_name, distance, direction, altitude, vertical_speed)
+        char_list = _build_char_list(plane_name, distance, direction, altitude, vertical_speed, heading)
 
         # Draw background
         self.draw_square(
