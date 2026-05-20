@@ -385,3 +385,92 @@ class TestHeadingArrows:
     def test_wrap_around(self):
         """Heading > 360 wraps correctly."""
         assert self.arrow(450) == "\u2192"  # 450 % 360 = 90 = East
+
+
+# ====================================================================
+# NPS National Parks Landmarks
+# ====================================================================
+
+class TestLandmarks:
+    """Test landmarks.py park name stripping and lookup logic."""
+
+    def test_strip_national_park(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Grand Canyon National Park") == "Grand Canyon"
+        assert _strip_park_name("Yellowstone National Park") == "Yellowstone"
+
+    def test_strip_national_monument(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Statue of Liberty National Monument") == "Statue of Liberty"
+
+    def test_strip_historical_park(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Valley Forge National Historical Park") == "Valley Forge"
+
+    def test_strip_preserve(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Big Thicket National Preserve") == "Big Thicket"
+
+    def test_strip_park_and_preserve(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Denali National Park and Preserve") == "Denali"
+
+    def test_no_suffix_unchanged(self):
+        from utilities.landmarks import _strip_park_name
+        assert _strip_park_name("Alcatraz Island") == "Alcatraz Island"
+
+    def test_haversine(self):
+        from utilities.landmarks import _haversine_km
+        # NYC to London ≈ 5570km
+        dist = _haversine_km(40.7128, -74.0060, 51.5074, -0.1278)
+        assert 5500 < dist < 5700
+
+    def test_get_nearest_landmark_no_parks_falls_back_to_city(self):
+        """When no parks are loaded, should fall back to city lookup."""
+        import utilities.landmarks as lm
+        orig_db = lm._parks_db
+        orig_loaded = lm._parks_loaded
+        lm._parks_db = []
+        lm._parks_loaded = True
+        try:
+            result = lm.get_nearest_landmark(40.7128, -74.0060)
+            # Should get a city (New York area)
+            assert result is not None
+            assert result["type"] == "city"
+        finally:
+            lm._parks_db = orig_db
+            lm._parks_loaded = orig_loaded
+
+    def test_get_nearest_landmark_park_within_radius(self):
+        """Park within 30km radius should be returned."""
+        import utilities.landmarks as lm
+        orig_db = lm._parks_db
+        orig_loaded = lm._parks_loaded
+        lm._parks_db = [["Grand Canyon", 36.1069, -112.1129]]
+        lm._parks_loaded = True
+        try:
+            # Point right at Grand Canyon
+            result = lm.get_nearest_landmark(36.1069, -112.1129)
+            assert result is not None
+            assert result["type"] == "park"
+            assert result["name"] == "Grand Canyon"
+            assert result["distance_km"] < 1
+        finally:
+            lm._parks_db = orig_db
+            lm._parks_loaded = orig_loaded
+
+    def test_get_nearest_landmark_park_outside_radius(self):
+        """Park >30km away should fall back to city."""
+        import utilities.landmarks as lm
+        orig_db = lm._parks_db
+        orig_loaded = lm._parks_loaded
+        lm._parks_db = [["Grand Canyon", 36.1069, -112.1129]]
+        lm._parks_loaded = True
+        try:
+            # NYC is far from Grand Canyon
+            result = lm.get_nearest_landmark(40.7128, -74.0060)
+            assert result is not None
+            assert result["type"] == "city"
+        finally:
+            lm._parks_db = orig_db
+            lm._parks_loaded = orig_loaded

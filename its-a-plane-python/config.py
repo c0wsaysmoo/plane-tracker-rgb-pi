@@ -31,6 +31,7 @@ def _require(name: str) -> str:
 FR24_API_KEY = _require("FR24_API_KEY")
 TOMORROW_API_KEY = _require("TOMORROW_API_KEY")
 AIRLABS_API_KEY = os.environ.get("AIRLABS_API_KEY", "")
+NPS_API_KEY = os.environ.get("NPS_API_KEY", "")
 
 # --- Bounding box for overhead flight detection ---
 ZONE_HOME = {

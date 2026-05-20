@@ -566,14 +566,23 @@ class Overhead:
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
 
-        # Eagerly load cities DB in background (avoids blocking render on first use)
+        # Eagerly load cities + parks DBs in background (avoids blocking render on first use)
         Thread(target=self._preload_cities, daemon=True).start()
+        Thread(target=self._preload_parks, daemon=True).start()
 
     @staticmethod
     def _preload_cities():
         try:
             from utilities.cities import _load
             _load()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _preload_parks():
+        try:
+            from utilities.landmarks import _load_parks
+            _load_parks()
         except Exception:
             pass
 
