@@ -1,5 +1,5 @@
 from utilities.animator import Animator
-from utilities.cities import get_nearest_city
+from utilities.landmarks import get_nearest_landmark
 from setup import colours, fonts, screen
 from config import DISTANCE_UNITS
 from rgbmatrix import graphics
@@ -121,7 +121,7 @@ def _build_stats(data):
                 or abs(lon - _city_cache["lon"]) > _CITY_CACHE_THRESHOLD):
             _city_cache["lat"] = lat
             _city_cache["lon"] = lon
-            _city_cache["result"] = get_nearest_city(lat, lon)
+            _city_cache["result"] = get_nearest_landmark(lat, lon)
         nearest = _city_cache["result"]
         if nearest:
             for ch in f"nr {nearest['name']}":
