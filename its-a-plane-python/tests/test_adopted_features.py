@@ -313,3 +313,75 @@ class TestFlightCounter:
         today = str(__import__("datetime").datetime.now().date())
         assert data[today]["first_seen"]
         assert data[today]["last_seen"]
+
+
+# ====================================================================
+# Heading Arrows (8-point compass on overhead flights)
+# ====================================================================
+
+class TestHeadingArrows:
+    """Test heading-to-arrow conversion for planedetails display.
+    Function duplicated here since scenes/ imports rgbmatrix (Pi-only)."""
+
+    # 8-point compass heading arrows — must match scenes/planedetails.py
+    _HEADING_ARROWS = [
+        (337.5, 360, "\u2191"), (0, 22.5, "\u2191"),
+        (22.5, 67.5, "\u2197"), (67.5, 112.5, "\u2192"),
+        (112.5, 157.5, "\u2198"), (157.5, 202.5, "\u2193"),
+        (202.5, 247.5, "\u2199"), (247.5, 292.5, "\u2190"),
+        (292.5, 337.5, "\u2196"),
+    ]
+
+    @staticmethod
+    def _heading_to_arrow(heading):
+        if heading is None:
+            return ""
+        heading = heading % 360
+        for lo, hi, arrow in TestHeadingArrows._HEADING_ARROWS:
+            if lo <= heading < hi:
+                return arrow
+        return ""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.arrow = self._heading_to_arrow
+
+    def test_north(self):
+        assert self.arrow(0) == "\u2191"
+        assert self.arrow(360) == "\u2191"
+        assert self.arrow(10) == "\u2191"
+        assert self.arrow(350) == "\u2191"
+
+    def test_east(self):
+        assert self.arrow(90) == "\u2192"
+
+    def test_south(self):
+        assert self.arrow(180) == "\u2193"
+
+    def test_west(self):
+        assert self.arrow(270) == "\u2190"
+
+    def test_northeast(self):
+        assert self.arrow(45) == "\u2197"
+
+    def test_southeast(self):
+        assert self.arrow(135) == "\u2198"
+
+    def test_southwest(self):
+        assert self.arrow(225) == "\u2199"
+
+    def test_northwest(self):
+        assert self.arrow(315) == "\u2196"
+
+    def test_zero_heading(self):
+        assert self.arrow(0) == "\u2191"
+
+    def test_none_heading(self):
+        assert self.arrow(None) == ""
+
+    def test_false_heading(self):
+        assert self.arrow(0) == "\u2191"
+
+    def test_wrap_around(self):
+        """Heading > 360 wraps correctly."""
+        assert self.arrow(450) == "\u2192"  # 450 % 360 = 90 = East

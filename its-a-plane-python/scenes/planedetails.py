@@ -6,9 +6,35 @@ from config import DISTANCE_UNITS
 # Setup
 PLANE_COLOUR = colours.LIGHT_MID_BLUE
 PLANE_DISTANCE_COLOUR = colours.LIGHT_PINK
+HEADING_ARROW_COLOUR = colours.LIGHT_GREEN
 PLANE_DISTANCE_FROM_TOP = 31
 PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
+
+# 8-point compass heading arrows (N=0/360, clockwise)
+_HEADING_ARROWS = [
+    (337.5, 360, "\u2191"),  # N  ↑
+    (0, 22.5, "\u2191"),     # N  ↑
+    (22.5, 67.5, "\u2197"),  # NE ↗
+    (67.5, 112.5, "\u2192"), # E  →
+    (112.5, 157.5, "\u2198"),# SE ↘
+    (157.5, 202.5, "\u2193"),# S  ↓
+    (202.5, 247.5, "\u2199"),# SW ↙
+    (247.5, 292.5, "\u2190"),# W  ←
+    (292.5, 337.5, "\u2196"),# NW ↖
+]
+
+
+def _heading_to_arrow(heading):
+    """Convert numeric heading (0-360) to Unicode arrow character."""
+    if heading is None:
+        return ""
+    heading = heading % 360
+    for lo, hi, arrow in _HEADING_ARROWS:
+        if lo <= heading < hi:
+            return arrow
+    return ""
+
 
 class PlaneDetailsScene(object):
     def __init__(self):
@@ -32,6 +58,10 @@ class PlaneDetailsScene(object):
         distance = plane_data["distance"]
         direction = plane_data["direction"]
         distance_units = "mi" if DISTANCE_UNITS == "imperial" else "KM"
+
+        # Heading arrow
+        heading = plane_data.get("heading", 0)
+        arrow = _heading_to_arrow(heading)
 
         # Construct the plane details strings
         plane_name_text = f'{plane_name} '
@@ -65,8 +95,20 @@ class PlaneDetailsScene(object):
             distance_text,
         )
 
+        # Draw heading arrow in distinct color
+        arrow_width = 0
+        if arrow:
+            arrow_width = graphics.DrawText(
+                self.canvas,
+                PLANE_FONT,
+                self.plane_position + plane_name_width + distance_text_width,
+                PLANE_DISTANCE_FROM_TOP,
+                HEADING_ARROW_COLOUR,
+                arrow,
+            )
+
         # Calculate the total width of the text string
-        total_text_width = plane_name_width + distance_text_width
+        total_text_width = plane_name_width + distance_text_width + arrow_width
 
         # Handle scrolling
         self.plane_position -= 1
