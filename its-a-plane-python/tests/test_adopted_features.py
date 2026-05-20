@@ -474,3 +474,73 @@ class TestLandmarks:
         finally:
             lm._parks_db = orig_db
             lm._parks_loaded = orig_loaded
+
+
+# ====================================================================
+# FlightStats Route Fallback
+# ====================================================================
+
+class TestFlightStats:
+    """Test FlightStats callsign parsing and caching."""
+
+    def test_parse_icao_callsign(self):
+        from utilities.flightstats import _parse_callsign
+        carrier, number = _parse_callsign("UAL1234")
+        assert carrier == "UA"
+        assert number == "1234"
+
+    def test_parse_iata_callsign(self):
+        from utilities.flightstats import _parse_callsign
+        carrier, number = _parse_callsign("UA1234")
+        assert carrier == "UA"
+        assert number == "1234"
+
+    def test_parse_british_airways(self):
+        from utilities.flightstats import _parse_callsign
+        carrier, number = _parse_callsign("BAW123")
+        assert carrier == "BA"
+        assert number == "123"
+
+    def test_parse_delta(self):
+        from utilities.flightstats import _parse_callsign
+        carrier, number = _parse_callsign("DAL456")
+        assert carrier == "DL"
+        assert number == "456"
+
+    def test_parse_empty(self):
+        from utilities.flightstats import _parse_callsign
+        assert _parse_callsign("") == (None, None)
+        assert _parse_callsign(None) == (None, None)
+
+    def test_parse_no_numbers(self):
+        from utilities.flightstats import _parse_callsign
+        assert _parse_callsign("ABCDEF") == (None, None)
+
+    def test_parse_unknown_icao(self):
+        """Unknown ICAO code should still return something."""
+        from utilities.flightstats import _parse_callsign
+        carrier, number = _parse_callsign("XYZ789")
+        assert carrier == "XYZ"
+        assert number == "789"
+
+    def test_cache_ttl(self):
+        """Cached None results respect TTL."""
+        from utilities.flightstats import _cache
+        from time import time
+        _cache["TEST999"] = (None, time())
+        # Should hit cache (not make network call)
+        from utilities.flightstats import get_route
+        result = get_route("TEST999")
+        assert result is None
+
+    def test_cache_with_result(self):
+        """Cached results are returned without network call."""
+        from utilities.flightstats import _cache
+        from time import time
+        cached = {"origin": "EWR", "destination": "LAX", "aircraft": "B738"}
+        _cache["CACHED123"] = (cached, time())
+        from utilities.flightstats import get_route
+        result = get_route("CACHED123")
+        assert result is not None
+        assert result["origin"] == "EWR"
+        assert result["destination"] == "LAX"

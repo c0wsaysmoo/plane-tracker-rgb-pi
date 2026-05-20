@@ -773,6 +773,22 @@ class Overhead:
                         origin = f.origin_airport_iata or ""
                         destination = f.destination_airport_iata or ""
                         callsign = f.callsign or ""
+                        route_source = "fr24_grpc"
+
+                        # FlightStats fallback when gRPC has no route
+                        if not origin and not destination and callsign:
+                            try:
+                                from utilities.flightstats import get_route
+                                fs = get_route(callsign)
+                                if fs:
+                                    origin = fs.get("origin", "")
+                                    destination = fs.get("destination", "")
+                                    if origin or destination:
+                                        route_source = "flightstats"
+                                        if fs.get("aircraft") and not plane:
+                                            plane = fs["aircraft"]
+                            except Exception:
+                                pass
 
                         t = self.safe_get(d, "time", default={})
                         time_sched_dep = self.safe_get(t, "scheduled", "departure")
@@ -883,7 +899,7 @@ class Overhead:
                         })
 
                         # Audit log
-                        _log_route_audit(callsign, plane, entry["distance"], "fr24_grpc", origin, destination)
+                        _log_route_audit(callsign, plane, entry["distance"], route_source, origin, destination)
 
                         log_flight_data(entry)
                         log_farthest_flight(entry)
