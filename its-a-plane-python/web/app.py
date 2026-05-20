@@ -347,15 +347,33 @@ def api_config_get():
                 val = "****"
         result[key] = val
 
-    # Populate computed zone/location fields from config objects
-    result["HOME_LAT"] = result.get("HOME_LAT") or str(cfg.LOCATION_HOME[0])
-    result["HOME_LON"] = result.get("HOME_LON") or str(cfg.LOCATION_HOME[1])
-    result["ZONE_TL_LAT"] = result.get("ZONE_TL_LAT") or str(cfg.ZONE_HOME["tl_y"])
-    result["ZONE_TL_LON"] = result.get("ZONE_TL_LON") or str(cfg.ZONE_HOME["tl_x"])
-    result["ZONE_BR_LAT"] = result.get("ZONE_BR_LAT") or str(cfg.ZONE_HOME["br_y"])
-    result["ZONE_BR_LON"] = result.get("ZONE_BR_LON") or str(cfg.ZONE_HOME["br_x"])
+    # Populate computed zone/location fields if not already set
+    for key, fallback in [
+        ("HOME_LAT", str(cfg.LOCATION_HOME[0])),
+        ("HOME_LON", str(cfg.LOCATION_HOME[1])),
+        ("ZONE_TL_LAT", str(cfg.ZONE_HOME["tl_y"])),
+        ("ZONE_TL_LON", str(cfg.ZONE_HOME["tl_x"])),
+        ("ZONE_BR_LAT", str(cfg.ZONE_HOME["br_y"])),
+        ("ZONE_BR_LON", str(cfg.ZONE_HOME["br_x"])),
+    ]:
+        if not result.get(key):
+            result[key] = fallback
 
     return jsonify(result)
+
+
+_VALID_CONFIG_KEYS = {
+    "HOME_LAT", "HOME_LON",
+    "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
+    "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION",
+    "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
+    "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN",
+    "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
+    "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
+    "MAX_CLOSEST", "MAX_FARTHEST",
+    "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY",
+    "EMAIL",
+}
 
 
 @app.post("/api/config")
@@ -366,6 +384,11 @@ def api_config_post():
     data = request.get_json(force=True)
     if not data or not isinstance(data, dict):
         return jsonify({"error": "Invalid JSON payload"}), 400
+
+    # Allowlist: only accept known config keys
+    data = {k: v for k, v in data.items() if k in _VALID_CONFIG_KEYS}
+    if not data:
+        return jsonify({"error": "No valid config keys provided"}), 400
 
     # Ensure config directory exists
     config_dir = os.path.join(BASE_DIR, "config")

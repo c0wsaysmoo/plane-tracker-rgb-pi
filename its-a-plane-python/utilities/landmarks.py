@@ -11,20 +11,18 @@ GeoNames cities via existing utilities/cities.py.
 
 import json
 import logging
-import math
 import os
 import threading
 
 import requests
 
-from utilities.cities import get_nearest_city
+from utilities.cities import get_nearest_city, _haversine_km
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 PARKS_CACHE = os.path.join(BASE_DIR, "nationalparks.json")
 
-NPS_API_KEY = os.environ.get("NPS_API_KEY", "")
 NPS_API_URL = "https://developer.nps.gov/api/v1/parks"
 PARKS_RADIUS_KM = 30  # Only show park name if plane is within this distance
 
@@ -55,16 +53,6 @@ _parks_loaded = False
 _parks_lock = threading.Lock()
 
 
-def _haversine_km(lat1, lon1, lat2, lon2):
-    """Great-circle distance in km between two points."""
-    lat1, lon1 = math.radians(lat1), math.radians(lon1)
-    lat2, lon2 = math.radians(lat2), math.radians(lon2)
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 6371.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
 def _strip_park_name(full_name):
     """Remove common NPS suffixes for shorter display."""
     for suffix in _STRIP_SUFFIXES:
@@ -75,6 +63,11 @@ def _strip_park_name(full_name):
 
 def _download_parks():
     """Download all parks from NPS API (paginated, 50 per page)."""
+    try:
+        from config import NPS_API_KEY
+    except (ImportError, ModuleNotFoundError, NameError):
+        NPS_API_KEY = os.environ.get("NPS_API_KEY", "")
+
     if not NPS_API_KEY:
         logger.warning("[Landmarks] NPS_API_KEY not set — skipping parks download")
         return []
