@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight Tracker Config</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #ffb000;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            font-size: 22px;
+            margin-bottom: 6px;
+            color: #ffb000;
+        }
+        .subtitle {
+            font-size: 13px;
+            color: #806000;
+            margin-bottom: 20px;
+        }
+        .nav {
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .nav a {
+            color: #ffb000;
+            text-decoration: none;
+            margin-right: 16px;
+        }
+        .nav a:hover { text-decoration: underline; }
+
+        .section {
+            border: 1px solid #333;
+            margin-bottom: 16px;
+            background: #111;
+        }
+        .section-header {
+            background: #1a1a1a;
+            padding: 8px 14px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffb000;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            user-select: none;
+        }
+        .section-header:hover { background: #222; }
+        .section-header::before { content: '▼ '; font-size: 10px; }
+        .section.collapsed .section-header::before { content: '▶ '; }
+        .section.collapsed .section-body { display: none; }
+        .section-body { padding: 12px 14px; }
+
+        .field {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 12px;
+        }
+        .field label {
+            flex: 0 0 200px;
+            font-size: 13px;
+            color: #cc8800;
+        }
+        .field input[type="text"],
+        .field input[type="number"],
+        .field input[type="password"] {
+            background: #0a0a0a;
+            border: 1px solid #444;
+            color: #ffb000;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 5px 8px;
+            flex: 1;
+            max-width: 300px;
+        }
+        .field input:focus {
+            outline: none;
+            border-color: #ffb000;
+        }
+        .field select {
+            background: #0a0a0a;
+            border: 1px solid #444;
+            color: #ffb000;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 5px 8px;
+        }
+        .field .hint {
+            font-size: 11px;
+            color: #555;
+        }
+
+        .checkbox-field {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 8px;
+        }
+        .checkbox-field input[type="checkbox"] {
+            accent-color: #ffb000;
+            width: 16px;
+            height: 16px;
+        }
+        .checkbox-field label {
+            font-size: 13px;
+            color: #cc8800;
+        }
+
+        .btn-bar {
+            margin-top: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        button {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 8px 20px;
+            cursor: pointer;
+            border: 1px solid #ffb000;
+            background: #1a1a1a;
+            color: #ffb000;
+        }
+        button:hover { background: #2a2000; }
+        button.primary {
+            background: #ffb000;
+            color: #000;
+            font-weight: bold;
+        }
+        button.primary:hover { background: #ffc030; }
+        button.danger {
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+        button.danger:hover { background: #2a0000; }
+
+        #save-status {
+            font-size: 13px;
+            margin-left: 12px;
+        }
+        .status-ok { color: #4caf50; }
+        .status-err { color: #ff4444; }
+        .status-warn { color: #ffb000; }
+
+        .system-panel {
+            border: 1px solid #333;
+            background: #111;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .system-panel .stat {
+            display: inline-block;
+            margin-right: 24px;
+            color: #806000;
+        }
+        .system-panel .stat span { color: #ffb000; }
+
+        .secret-toggle {
+            font-size: 11px;
+            color: #555;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .secret-toggle:hover { color: #ffb000; }
+    </style>
+</head>
+<body>
+    <h1>FLIGHT TRACKER CONFIG</h1>
+    <div class="subtitle">Configuration editor — changes take effect on save</div>
+    <div class="nav">
+        <a href="/">← Dashboard</a>
+        <a href="/stats">Stats</a>
+    </div>
+
+    <!-- System Status -->
+    <div class="system-panel" id="system-panel">
+        <div class="stat">UPTIME: <span id="sys-uptime">—</span></div>
+        <div class="stat">CPU: <span id="sys-cpu">—</span></div>
+        <div class="stat">CONFIG: <span id="sys-config-source">—</span></div>
+    </div>
+
+    <!-- Location & Zone -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">LOCATION &amp; ZONE</div>
+        <div class="section-body">
+            <div class="field">
+                <label>HOME_LAT</label>
+                <input type="text" id="cfg-HOME_LAT" placeholder="40.7128" />
+            </div>
+            <div class="field">
+                <label>HOME_LON</label>
+                <input type="text" id="cfg-HOME_LON" placeholder="-74.0060" />
+            </div>
+            <div class="field">
+                <label>ZONE_TL_LAT</label>
+                <input type="text" id="cfg-ZONE_TL_LAT" placeholder="Top-left latitude" />
+            </div>
+            <div class="field">
+                <label>ZONE_TL_LON</label>
+                <input type="text" id="cfg-ZONE_TL_LON" placeholder="Top-left longitude" />
+            </div>
+            <div class="field">
+                <label>ZONE_BR_LAT</label>
+                <input type="text" id="cfg-ZONE_BR_LAT" placeholder="Bottom-right latitude" />
+            </div>
+            <div class="field">
+                <label>ZONE_BR_LON</label>
+                <input type="text" id="cfg-ZONE_BR_LON" placeholder="Bottom-right longitude" />
+            </div>
+            <div class="field">
+                <label>JOURNEY_CODE_SELECTED</label>
+                <input type="text" id="cfg-JOURNEY_CODE_SELECTED" placeholder="EWR" />
+                <span class="hint">Nearest airport code</span>
+            </div>
+            <div class="field">
+                <label>TEMPERATURE_LOCATION</label>
+                <input type="text" id="cfg-TEMPERATURE_LOCATION" placeholder="40.7,-74.0" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Display -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">DISPLAY</div>
+        <div class="section-body">
+            <div class="field">
+                <label>DISTANCE_UNITS</label>
+                <select id="cfg-DISTANCE_UNITS">
+                    <option value="metric">metric (KM)</option>
+                    <option value="imperial">imperial (mi)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>SPEED_UNITS</label>
+                <select id="cfg-SPEED_UNITS">
+                    <option value="knots">knots</option>
+                    <option value="imperial">imperial (mph)</option>
+                    <option value="metric">metric (km/h)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>TEMPERATURE_UNITS</label>
+                <select id="cfg-TEMPERATURE_UNITS">
+                    <option value="metric">metric (°C)</option>
+                    <option value="imperial">imperial (°F)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>CLOCK_FORMAT</label>
+                <select id="cfg-CLOCK_FORMAT">
+                    <option value="24hr">24hr</option>
+                    <option value="12hr">12hr</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>BRIGHTNESS</label>
+                <input type="number" id="cfg-BRIGHTNESS" min="1" max="100" placeholder="100" />
+                <span class="hint">1-100</span>
+            </div>
+            <div class="field">
+                <label>GPIO_SLOWDOWN</label>
+                <input type="number" id="cfg-GPIO_SLOWDOWN" min="1" max="5" placeholder="2" />
+            </div>
+            <div class="checkbox-field">
+                <input type="checkbox" id="cfg-NIGHT_BRIGHTNESS" />
+                <label for="cfg-NIGHT_BRIGHTNESS">NIGHT_BRIGHTNESS</label>
+            </div>
+            <div class="field">
+                <label>BRIGHTNESS_NIGHT</label>
+                <input type="number" id="cfg-BRIGHTNESS_NIGHT" min="1" max="100" placeholder="50" />
+            </div>
+            <div class="field">
+                <label>NIGHT_START</label>
+                <input type="text" id="cfg-NIGHT_START" placeholder="22:00" />
+            </div>
+            <div class="field">
+                <label>NIGHT_END</label>
+                <input type="text" id="cfg-NIGHT_END" placeholder="06:00" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Flights -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">FLIGHTS</div>
+        <div class="section-body">
+            <div class="field">
+                <label>MIN_ALTITUDE</label>
+                <input type="number" id="cfg-MIN_ALTITUDE" min="0" placeholder="0" />
+                <span class="hint">Filter below (feet)</span>
+            </div>
+            <div class="field">
+                <label>JOURNEY_BLANK_FILLER</label>
+                <input type="text" id="cfg-JOURNEY_BLANK_FILLER" placeholder="?" />
+                <span class="hint">Shows when route unknown</span>
+            </div>
+            <div class="field">
+                <label>FORECAST_DAYS</label>
+                <input type="number" id="cfg-FORECAST_DAYS" min="1" max="7" placeholder="3" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">STATS</div>
+        <div class="section-body">
+            <div class="field">
+                <label>MAX_CLOSEST</label>
+                <input type="number" id="cfg-MAX_CLOSEST" min="1" max="20" placeholder="3" />
+            </div>
+            <div class="field">
+                <label>MAX_FARTHEST</label>
+                <input type="number" id="cfg-MAX_FARTHEST" min="1" max="20" placeholder="3" />
+            </div>
+        </div>
+    </div>
+
+    <!-- API Keys -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">API KEYS</div>
+        <div class="section-body">
+            <div class="field">
+                <label>FR24_API_KEY</label>
+                <input type="password" id="cfg-FR24_API_KEY" placeholder="sub|jwt" />
+                <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+            </div>
+            <div class="field">
+                <label>TOMORROW_API_KEY</label>
+                <input type="password" id="cfg-TOMORROW_API_KEY" placeholder="Weather API key" />
+                <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+            </div>
+            <div class="field">
+                <label>AIRLABS_API_KEY</label>
+                <input type="password" id="cfg-AIRLABS_API_KEY" placeholder="AirLabs API key" />
+                <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+            </div>
+            <div class="field">
+                <label>NPS_API_KEY</label>
+                <input type="password" id="cfg-NPS_API_KEY" placeholder="NPS developer key" />
+                <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+            </div>
+            <div class="field">
+                <label>EMAIL</label>
+                <input type="text" id="cfg-EMAIL" placeholder="Alert email (optional)" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-bar">
+        <button class="primary" onclick="saveConfig()">SAVE CONFIG</button>
+        <button onclick="loadConfig()">RELOAD</button>
+        <span id="save-status"></span>
+    </div>
+
+    <script>
+        // All config field IDs (match env var names)
+        const CONFIG_FIELDS = [
+            'HOME_LAT', 'HOME_LON',
+            'ZONE_TL_LAT', 'ZONE_TL_LON', 'ZONE_BR_LAT', 'ZONE_BR_LON',
+            'JOURNEY_CODE_SELECTED', 'TEMPERATURE_LOCATION',
+            'DISTANCE_UNITS', 'SPEED_UNITS', 'TEMPERATURE_UNITS', 'CLOCK_FORMAT',
+            'BRIGHTNESS', 'BRIGHTNESS_NIGHT', 'GPIO_SLOWDOWN',
+            'NIGHT_BRIGHTNESS', 'NIGHT_START', 'NIGHT_END',
+            'MIN_ALTITUDE', 'JOURNEY_BLANK_FILLER', 'FORECAST_DAYS',
+            'MAX_CLOSEST', 'MAX_FARTHEST',
+            'FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY',
+            'EMAIL',
+        ];
+
+        const CHECKBOX_FIELDS = ['NIGHT_BRIGHTNESS', 'HAT_PWM_ENABLED'];
+        const SECRET_FIELDS = ['FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY'];
+
+        function toggleSection(header) {
+            header.parentElement.classList.toggle('collapsed');
+        }
+
+        function toggleSecret(el) {
+            const input = el.previousElementSibling;
+            if (input.type === 'password') {
+                input.type = 'text';
+                el.textContent = 'hide';
+            } else {
+                input.type = 'password';
+                el.textContent = 'show';
+            }
+        }
+
+        function setStatus(msg, cls) {
+            const el = document.getElementById('save-status');
+            el.textContent = msg;
+            el.className = cls;
+            if (msg) setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+
+                for (const key of CONFIG_FIELDS) {
+                    const el = document.getElementById('cfg-' + key);
+                    if (!el) continue;
+                    const val = data[key];
+                    if (val === undefined || val === null) continue;
+
+                    if (CHECKBOX_FIELDS.includes(key)) {
+                        el.checked = val === true || val === 'True' || val === 'true';
+                    } else if (el.tagName === 'SELECT') {
+                        el.value = val;
+                    } else if (SECRET_FIELDS.includes(key) && val && val.includes('*')) {
+                        el.placeholder = val;  // Show masked version as placeholder
+                    } else {
+                        el.value = val;
+                    }
+                }
+
+                setStatus('Config loaded', 'status-ok');
+            } catch (e) {
+                setStatus('Failed to load config: ' + e.message, 'status-err');
+            }
+        }
+
+        async function saveConfig() {
+            const payload = {};
+
+            for (const key of CONFIG_FIELDS) {
+                const el = document.getElementById('cfg-' + key);
+                if (!el) continue;
+
+                if (CHECKBOX_FIELDS.includes(key)) {
+                    payload[key] = el.checked;
+                } else if (SECRET_FIELDS.includes(key)) {
+                    // Only send if user actually typed something (not masked placeholder)
+                    if (el.value && !el.value.includes('*')) {
+                        payload[key] = el.value;
+                    }
+                } else {
+                    const val = el.value.trim();
+                    if (val !== '') payload[key] = val;
+                }
+            }
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    setStatus('Config saved — restart service to apply', 'status-ok');
+                } else {
+                    setStatus('Save failed: ' + (data.error || 'unknown'), 'status-err');
+                }
+            } catch (e) {
+                setStatus('Save failed: ' + e.message, 'status-err');
+            }
+        }
+
+        async function loadSystem() {
+            try {
+                const res = await fetch('/api/system');
+                const data = await res.json();
+                document.getElementById('sys-uptime').textContent = data.uptime || '—';
+                document.getElementById('sys-cpu').textContent = data.cpu_temp || '—';
+                document.getElementById('sys-config-source').textContent = data.config_source || 'env';
+            } catch (e) {}
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+            loadSystem();
+        });
+    </script>
+</body>
+</html>
