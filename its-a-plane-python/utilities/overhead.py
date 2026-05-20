@@ -855,6 +855,7 @@ class Overhead:
                             "distance_destination": dist_d,
                             "distance": distance_from_flight_to_home(f),
                             "direction": degrees_to_cardinal(plane_bearing(f)),
+                            "heading": f.heading if hasattr(f, 'heading') else 0,
                             "trail": trail,
                             "livery_note": livery_note,
                         }
