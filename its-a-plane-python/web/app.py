@@ -310,5 +310,140 @@ def maps(filename):
     return send_from_directory(MAPS_DIR, filename)
 
 
+# ---- Config UI ----
+
+@app.get("/config")
+def config_page():
+    return render_template("config.html")
+
+
+@app.get("/api/config")
+def api_config_get():
+    """Return current config as JSON. Masks secret values."""
+    import config as cfg
+
+    SECRET_KEYS = {"FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY"}
+
+    result = {}
+    # Flat env-style keys the UI expects
+    for key in [
+        "HOME_LAT", "HOME_LON",
+        "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
+        "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION",
+        "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
+        "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN",
+        "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
+        "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
+        "MAX_CLOSEST", "MAX_FARTHEST",
+        "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY",
+        "EMAIL",
+    ]:
+        val = cfg._get(key)
+        if key in SECRET_KEYS and val:
+            # Mask: show first 4 and last 4 chars
+            if len(val) > 10:
+                val = val[:4] + "*" * (len(val) - 8) + val[-4:]
+            else:
+                val = "****"
+        result[key] = val
+
+    # Populate computed zone/location fields from config objects
+    result["HOME_LAT"] = result.get("HOME_LAT") or str(cfg.LOCATION_HOME[0])
+    result["HOME_LON"] = result.get("HOME_LON") or str(cfg.LOCATION_HOME[1])
+    result["ZONE_TL_LAT"] = result.get("ZONE_TL_LAT") or str(cfg.ZONE_HOME["tl_y"])
+    result["ZONE_TL_LON"] = result.get("ZONE_TL_LON") or str(cfg.ZONE_HOME["tl_x"])
+    result["ZONE_BR_LAT"] = result.get("ZONE_BR_LAT") or str(cfg.ZONE_HOME["br_y"])
+    result["ZONE_BR_LON"] = result.get("ZONE_BR_LON") or str(cfg.ZONE_HOME["br_x"])
+
+    return jsonify(result)
+
+
+@app.post("/api/config")
+def api_config_post():
+    """Save config to config/config.json and reload."""
+    import config as cfg
+
+    data = request.get_json(force=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    # Ensure config directory exists
+    config_dir = os.path.join(BASE_DIR, "config")
+    os.makedirs(config_dir, exist_ok=True)
+
+    config_path = os.path.join(config_dir, "config.json")
+
+    # Load existing JSON config to merge (preserve keys not sent)
+    existing = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+
+    # Merge new values
+    existing.update(data)
+
+    # Atomic write: write to tmp then rename
+    tmp_path = config_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=2)
+        os.replace(tmp_path, config_path)
+        try:
+            os.chmod(config_path, 0o666)
+        except OSError:
+            pass
+    except Exception as e:
+        return jsonify({"error": f"Write failed: {e}"}), 500
+
+    # Reload config module
+    try:
+        cfg.reload()
+    except Exception as e:
+        return jsonify({"error": f"Saved but reload failed: {e}"}), 500
+
+    return jsonify({"status": "ok", "source": cfg.config_source()})
+
+
+@app.get("/api/system")
+def api_system():
+    """System status: uptime, CPU temp."""
+    info = {"uptime": "", "cpu_temp": "", "config_source": "env"}
+
+    try:
+        import config as cfg
+        info["config_source"] = cfg.config_source()
+    except Exception:
+        pass
+
+    # Uptime (Linux)
+    try:
+        with open("/proc/uptime", "r") as f:
+            secs = float(f.read().split()[0])
+            days = int(secs // 86400)
+            hours = int((secs % 86400) // 3600)
+            mins = int((secs % 3600) // 60)
+            if days > 0:
+                info["uptime"] = f"{days}d {hours}h {mins}m"
+            elif hours > 0:
+                info["uptime"] = f"{hours}h {mins}m"
+            else:
+                info["uptime"] = f"{mins}m"
+    except Exception:
+        info["uptime"] = "N/A"
+
+    # CPU temp (Raspberry Pi)
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp_mc = int(f.read().strip())
+            info["cpu_temp"] = f"{temp_mc / 1000:.1f}°C"
+    except Exception:
+        info["cpu_temp"] = "N/A"
+
+    return jsonify(info)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=False)

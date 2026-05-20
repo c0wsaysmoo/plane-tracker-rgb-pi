@@ -1,76 +1,133 @@
 """
-Configuration — all values sourced exclusively from environment variables.
+Configuration — values sourced from environment variables with optional JSON overlay.
 
-NO user-configurable defaults are stored in this file.
-All configuration must be provided via:
-  - /etc/plane-tracker.env (systemd EnvironmentFile for production)
-  - .env file in the project root (for local development via python-dotenv)
+Priority (highest first):
+  1. config/config.json (written by web config UI)
+  2. /etc/plane-tracker.env (systemd EnvironmentFile)
+  3. .env file in project root (python-dotenv)
 
 See .env.example for documentation of all available variables and their defaults.
 """
+import json
+import logging
 import os
+
+_logger = logging.getLogger(__name__)
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_JSON = os.path.join(_BASE_DIR, "config", "config.json")
 
 # Load .env file if present (for local dev; systemd uses EnvironmentFile instead)
 try:
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
+    load_dotenv(os.path.join(_BASE_DIR, "..", ".env"))
 except ImportError:
     pass
 
-
-def _bool(val: str) -> bool:
-    return val.strip().lower() in ("true", "1", "yes", "on")
-
-
-def _require(name: str) -> str:
-    """Return env var value or empty string (caller decides how to handle missing)."""
-    return os.environ.get(name, "")
+# JSON overlay (loaded once, refreshed on reload())
+_json_config = {}
 
 
-# --- API Keys ---
-FR24_API_KEY = _require("FR24_API_KEY")
-TOMORROW_API_KEY = _require("TOMORROW_API_KEY")
-AIRLABS_API_KEY = os.environ.get("AIRLABS_API_KEY", "")
-NPS_API_KEY = os.environ.get("NPS_API_KEY", "")
+def _load_json_config():
+    """Load config/config.json if it exists. Returns dict or empty."""
+    global _json_config
+    if os.path.exists(_CONFIG_JSON):
+        try:
+            with open(_CONFIG_JSON, "r", encoding="utf-8") as f:
+                _json_config = json.load(f)
+            _logger.info(f"[Config] Loaded JSON overlay from {_CONFIG_JSON}")
+        except Exception as e:
+            _logger.error(f"[Config] Failed to load {_CONFIG_JSON}: {e}")
+            _json_config = {}
+    else:
+        _json_config = {}
+    return _json_config
 
-# --- Bounding box for overhead flight detection ---
-ZONE_HOME = {
-    "tl_y": float(os.environ["ZONE_TL_LAT"]) if "ZONE_TL_LAT" in os.environ else 0.0,
-    "tl_x": float(os.environ["ZONE_TL_LON"]) if "ZONE_TL_LON" in os.environ else 0.0,
-    "br_y": float(os.environ["ZONE_BR_LAT"]) if "ZONE_BR_LAT" in os.environ else 0.0,
-    "br_x": float(os.environ["ZONE_BR_LON"]) if "ZONE_BR_LON" in os.environ else 0.0,
-}
 
-# --- Home location (for distance calculations) ---
-LOCATION_HOME = [
-    float(os.environ["HOME_LAT"]) if "HOME_LAT" in os.environ else 0.0,
-    float(os.environ["HOME_LON"]) if "HOME_LON" in os.environ else 0.0,
-]
+def _get(name: str, default: str = "") -> str:
+    """Get config value: JSON overlay first, then env var, then default."""
+    if name in _json_config:
+        return str(_json_config[name])
+    return os.environ.get(name, default)
 
-# --- Weather ---
-TEMPERATURE_LOCATION = _require("TEMPERATURE_LOCATION")
-TEMPERATURE_UNITS = os.environ.get("TEMPERATURE_UNITS", "metric")
-FORECAST_DAYS = int(os.environ.get("FORECAST_DAYS", "3"))
 
-# --- Display & units ---
-DISTANCE_UNITS = os.environ.get("DISTANCE_UNITS", "metric")
-CLOCK_FORMAT = os.environ.get("CLOCK_FORMAT", "24hr")
-BRIGHTNESS = int(os.environ.get("BRIGHTNESS", "100"))
-BRIGHTNESS_NIGHT = int(os.environ.get("BRIGHTNESS_NIGHT", "50"))
-NIGHT_BRIGHTNESS = _bool(os.environ.get("NIGHT_BRIGHTNESS", "False"))
-NIGHT_START = os.environ.get("NIGHT_START", "22:00")
-NIGHT_END = os.environ.get("NIGHT_END", "06:00")
-GPIO_SLOWDOWN = int(os.environ.get("GPIO_SLOWDOWN", "2"))
-HAT_PWM_ENABLED = _bool(os.environ.get("HAT_PWM_ENABLED", "True"))
+def _bool(val) -> bool:
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ("true", "1", "yes", "on")
 
-# --- Flight filtering ---
-MIN_ALTITUDE = int(os.environ.get("MIN_ALTITUDE", "0"))
-JOURNEY_CODE_SELECTED = _require("JOURNEY_CODE_SELECTED")
-_raw_filler = os.environ.get("JOURNEY_BLANK_FILLER", "").strip()
-JOURNEY_BLANK_FILLER = f" {_raw_filler} " if _raw_filler else " ? "
-SPEED_UNITS = os.environ.get("SPEED_UNITS", "metric")
 
-# --- Logging & notifications ---
-EMAIL = os.environ.get("EMAIL", "")
-MAX_FARTHEST = int(os.environ.get("MAX_FARTHEST", "3"))
-MAX_CLOSEST = int(os.environ.get("MAX_CLOSEST", "3"))
+def config_source():
+    """Return 'json' if JSON overlay is active, else 'env'."""
+    return "json" if _json_config else "env"
+
+
+def _apply():
+    """(Re)apply all config values from current sources."""
+    global FR24_API_KEY, TOMORROW_API_KEY, AIRLABS_API_KEY, NPS_API_KEY
+    global ZONE_HOME, LOCATION_HOME
+    global TEMPERATURE_LOCATION, TEMPERATURE_UNITS, FORECAST_DAYS
+    global DISTANCE_UNITS, CLOCK_FORMAT, BRIGHTNESS, BRIGHTNESS_NIGHT
+    global NIGHT_BRIGHTNESS, NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
+    global MIN_ALTITUDE, JOURNEY_CODE_SELECTED, JOURNEY_BLANK_FILLER, SPEED_UNITS
+    global EMAIL, MAX_FARTHEST, MAX_CLOSEST
+
+    # --- API Keys ---
+    FR24_API_KEY = _get("FR24_API_KEY")
+    TOMORROW_API_KEY = _get("TOMORROW_API_KEY")
+    AIRLABS_API_KEY = _get("AIRLABS_API_KEY")
+    NPS_API_KEY = _get("NPS_API_KEY")
+
+    # --- Bounding box for overhead flight detection ---
+    ZONE_HOME = {
+        "tl_y": float(_get("ZONE_TL_LAT", "0")),
+        "tl_x": float(_get("ZONE_TL_LON", "0")),
+        "br_y": float(_get("ZONE_BR_LAT", "0")),
+        "br_x": float(_get("ZONE_BR_LON", "0")),
+    }
+
+    # --- Home location (for distance calculations) ---
+    LOCATION_HOME = [
+        float(_get("HOME_LAT", "0")),
+        float(_get("HOME_LON", "0")),
+    ]
+
+    # --- Weather ---
+    TEMPERATURE_LOCATION = _get("TEMPERATURE_LOCATION")
+    TEMPERATURE_UNITS = _get("TEMPERATURE_UNITS", "metric")
+    FORECAST_DAYS = int(_get("FORECAST_DAYS", "3"))
+
+    # --- Display & units ---
+    DISTANCE_UNITS = _get("DISTANCE_UNITS", "metric")
+    CLOCK_FORMAT = _get("CLOCK_FORMAT", "24hr")
+    BRIGHTNESS = int(_get("BRIGHTNESS", "100"))
+    BRIGHTNESS_NIGHT = int(_get("BRIGHTNESS_NIGHT", "50"))
+    NIGHT_BRIGHTNESS = _bool(_get("NIGHT_BRIGHTNESS", "False"))
+    NIGHT_START = _get("NIGHT_START", "22:00")
+    NIGHT_END = _get("NIGHT_END", "06:00")
+    GPIO_SLOWDOWN = int(_get("GPIO_SLOWDOWN", "2"))
+    HAT_PWM_ENABLED = _bool(_get("HAT_PWM_ENABLED", "True"))
+
+    # --- Flight filtering ---
+    MIN_ALTITUDE = int(_get("MIN_ALTITUDE", "0"))
+    JOURNEY_CODE_SELECTED = _get("JOURNEY_CODE_SELECTED")
+    _raw_filler = _get("JOURNEY_BLANK_FILLER", "").strip()
+    JOURNEY_BLANK_FILLER = f" {_raw_filler} " if _raw_filler else " ? "
+    SPEED_UNITS = _get("SPEED_UNITS", "metric")
+
+    # --- Logging & notifications ---
+    EMAIL = _get("EMAIL")
+    MAX_FARTHEST = int(_get("MAX_FARTHEST", "3"))
+    MAX_CLOSEST = int(_get("MAX_CLOSEST", "3"))
+
+
+def reload():
+    """Reload config from all sources. Called by web config UI after saving."""
+    _load_json_config()
+    _apply()
+    _logger.info("[Config] Configuration reloaded")
+
+
+# Initial load
+_load_json_config()
+_apply()

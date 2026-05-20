@@ -544,3 +544,72 @@ class TestFlightStats:
         assert result is not None
         assert result["origin"] == "EWR"
         assert result["destination"] == "LAX"
+
+
+# ====================================================================
+# Config JSON Overlay
+# ====================================================================
+
+class TestConfigJsonOverlay:
+    """Test config.py JSON overlay + reload functionality."""
+
+    def test_config_source_default(self):
+        """Without JSON file, config_source returns 'env'."""
+        import config
+        # If no JSON file was loaded, source should be env
+        # (may be json if test runs after save — just verify function exists)
+        assert config.config_source() in ("env", "json")
+
+    def test_get_fallback_to_env(self):
+        """_get falls back to env when key not in JSON overlay."""
+        import config
+        orig = config._json_config
+        config._json_config = {}
+        try:
+            # Should get from env or return default
+            result = config._get("NONEXISTENT_KEY_12345", "fallback")
+            assert result == "fallback"
+        finally:
+            config._json_config = orig
+
+    def test_get_json_override(self):
+        """_get returns JSON value when present."""
+        import config
+        orig = config._json_config
+        config._json_config = {"TEST_KEY_999": "from_json"}
+        try:
+            assert config._get("TEST_KEY_999", "default") == "from_json"
+        finally:
+            config._json_config = orig
+
+    def test_bool_parsing(self):
+        """_bool handles strings and booleans."""
+        import config
+        assert config._bool(True) is True
+        assert config._bool(False) is False
+        assert config._bool("true") is True
+        assert config._bool("True") is True
+        assert config._bool("1") is True
+        assert config._bool("yes") is True
+        assert config._bool("false") is False
+        assert config._bool("0") is False
+
+    def test_reload_exists(self):
+        """reload() function exists and is callable."""
+        import config
+        assert callable(config.reload)
+
+    def test_apply_sets_globals(self):
+        """_apply() sets module-level globals."""
+        import config
+        config._apply()
+        assert hasattr(config, "FR24_API_KEY")
+        assert hasattr(config, "ZONE_HOME")
+        assert hasattr(config, "LOCATION_HOME")
+        assert isinstance(config.ZONE_HOME, dict)
+        assert isinstance(config.LOCATION_HOME, list)
+
+    def test_json_config_path(self):
+        """JSON config path is config/config.json in project root."""
+        import config
+        assert config._CONFIG_JSON.endswith("config/config.json")
