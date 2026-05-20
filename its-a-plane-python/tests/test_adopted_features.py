@@ -419,8 +419,8 @@ class TestLandmarks:
         from utilities.landmarks import _strip_park_name
         assert _strip_park_name("Alcatraz Island") == "Alcatraz Island"
 
-    def test_haversine(self):
-        from utilities.landmarks import _haversine_km
+    def test_haversine_via_cities(self):
+        from utilities.cities import _haversine_km
         # NYC to London ≈ 5570km
         dist = _haversine_km(40.7128, -74.0060, 51.5074, -0.1278)
         assert 5500 < dist < 5700

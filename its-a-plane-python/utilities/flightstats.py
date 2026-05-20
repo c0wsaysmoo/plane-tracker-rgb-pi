@@ -91,9 +91,13 @@ def get_route(callsign):
 
     callsign = callsign.strip().upper()
 
-    # Check cache
+    # Check cache (evict expired entries periodically)
     from time import time
     now = time()
+    if len(_cache) > 500:
+        expired = [k for k, (_, ts) in _cache.items() if now - ts >= _CACHE_TTL]
+        for k in expired:
+            del _cache[k]
     if callsign in _cache:
         result, ts = _cache[callsign]
         if now - ts < _CACHE_TTL:
