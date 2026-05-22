@@ -21,7 +21,7 @@ if MASTER_TRACKER:
     try:
         from config import LOCATION_HOME as _SLAVE_HOME
     except Exception:
-        _SLAVE_HOME = [41.882724, -87.623350]
+        _SLAVE_HOME = [41.882852, -87.623356]
 
     try:
         from config import DISTANCE_UNITS as _DISTANCE_UNITS
@@ -323,11 +323,16 @@ else:
                 _save_counter_log(log)
 
         def load_tracked_callsign():
+            """Return (callsign, scheduled_departure_ts, cached_route) from tracked_flight.json."""
             try:
                 with open(TRACKED_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f).get("callsign", "").strip().upper()
+                    data = json.load(f)
+                cs    = data.get("callsign", "").strip().upper()
+                dep   = data.get("scheduled_departure")   # Unix timestamp or None
+                route = data.get("cached_route")          # dict saved at search time, or None
+                return cs, dep, route
             except (FileNotFoundError, json.JSONDecodeError):
-                return ""
+                return "", None, None
 
         def log_flight_data(entry):
             try:
@@ -439,6 +444,7 @@ else:
                 self._tracked_last_data       = None
                 self._tracked_route_cached    = None  # cached route info from API
                 self._tracked_route_callsign  = ""    # callsign the cache is for
+                self._tracked_just_airborne   = False # True for one cycle after first airborne detection
 
             def grab_data(self):
                 Thread(target=self._grab, daemon=True).start()
@@ -487,6 +493,7 @@ else:
                             "plane_longitude":      plane_lon,
                             "vertical_speed":       state["vertical_speed"],
                             "altitude":             state.get("altitude", 0),
+                            "heading":              state.get("heading"),
                             "callsign":             callsign,
                             "icao24":               state.get("icao24", ""),
                             "distance":             dist_home,
@@ -500,191 +507,200 @@ else:
                         log_farthest_flight(entry, opensky=self._opensky)
                         log_flight_count(callsign, entry)
 
-                    tracked_callsign = load_tracked_callsign()
+                    tracked_callsign, tracked_sched_dep, tracked_cached_route = load_tracked_callsign()
                     if tracked_callsign:
                         # Reset state if callsign changed
                         if tracked_callsign != self._tracked_last_callsign:
-                            self._tracked_last_callsign  = tracked_callsign
-                            self._tracked_was_live       = False
-                            self._tracked_miss_count     = 0
-                            self._tracked_last_eta       = None
-                            self._tracked_last_data      = None
-                            self._tracked_route_cached   = None
-                            self._tracked_route_callsign = ""
+                            self._tracked_last_callsign   = tracked_callsign
+                            self._tracked_was_live        = False
+                            self._tracked_miss_count      = 0
+                            self._tracked_last_eta        = None
+                            self._tracked_last_data       = None
+                            self._tracked_route_cached    = None
+                            self._tracked_route_callsign  = ""
+                            self._tracked_just_airborne   = False
 
-                        # Step 1: Poll OpenSky for live position (free)
-                        os_state = self._opensky.find_callsign(tracked_callsign)
+                        now_ts = time()
 
-                        if os_state:
-                            self._tracked_was_live   = True
-                            self._tracked_miss_count = 0
-
-                            # Step 2: Get route info once via RouteClient cascade, then cache it
-                            if self._tracked_route_callsign != tracked_callsign or not self._tracked_route_cached:
-                                route = self._fr24.get_tracked_flight(tracked_callsign)
-                                if not route:
-                                    # Fall back to full RouteClient cascade
-                                    from utilities.routelookup import RouteClient as _RC
-                                    _rc = _RC()
-                                    details = _rc.get_flight_details(
-                                        tracked_callsign,
-                                        os_state["latitude"],
-                                        os_state["longitude"],
-                                    )
-                                    if details and details.get("origin") not in ("?", "", None):
-                                        route = {
-                                            "airline_name":  details.get("airline", ""),
-                                            "origin":        details.get("origin", ""),
-                                            "destination":   details.get("destination", ""),
-                                            "dest_lat":      details.get("destination_latitude"),
-                                            "dest_lon":      details.get("destination_longitude"),
-                                            "aircraft_type": details.get("plane", ""),
-                                            "time_scheduled_departure": details.get("time_scheduled_departure"),
-                                            "time_scheduled_arrival":   details.get("time_scheduled_arrival"),
-                                            "time_real_departure":      details.get("time_real_departure"),
-                                            "time_estimated_arrival":   details.get("time_estimated_arrival"),
-                                        }
-                                if route:
-                                    # Sanity check: plane position should lie roughly
-                                    # between origin and destination. Rejects codeshare
-                                    # mismatches where the same flight number is used
-                                    # on a completely different route by another airline.
-                                    _r_dest_lat = route.get("dest_lat") or route.get("destination_latitude")
-                                    _r_dest_lon = route.get("dest_lon") or route.get("destination_longitude")
-                                    _r_orig_lat = route.get("origin_latitude") or route.get("orig_lat")
-                                    _r_orig_lon = route.get("origin_longitude") or route.get("orig_lon")
-                                    _plane_lat  = os_state["latitude"]
-                                    _plane_lon  = os_state["longitude"]
-                                    _plausible  = True
-                                    if not (_r_orig_lat and _r_orig_lon):
-                                        print(f"[Tracked] No origin coords for plausibility check on "
-                                              f"{route.get('origin')}-{route.get('destination')} — accepting")
-                                    if _r_orig_lat and _r_orig_lon and _r_dest_lat and _r_dest_lon:
-                                        def _nm(la1, lo1, la2, lo2):
-                                            import math as _m
-                                            la1,lo1,la2,lo2 = map(_m.radians,(la1,lo1,la2,lo2))
-                                            a = _m.sin((la2-la1)/2)**2 + _m.cos(la1)*_m.cos(la2)*_m.sin((lo2-lo1)/2)**2
-                                            return 3440.07 * 2 * _m.atan2(_m.sqrt(a), _m.sqrt(1-a))
-                                        _total = _nm(_r_orig_lat, _r_orig_lon, _r_dest_lat, _r_dest_lon)
-                                        _to_o  = _nm(_plane_lat, _plane_lon, _r_orig_lat, _r_orig_lon)
-                                        _to_d  = _nm(_plane_lat, _plane_lon, _r_dest_lat, _r_dest_lon)
-                                        if (_to_o + _to_d) > _total * 1.25:
-                                            _plausible = False
-                                            print(f"[Tracked] Route {route.get('origin')}-{route.get('destination')} "
-                                                  f"rejected — plane at ({_plane_lat:.2f},{_plane_lon:.2f}) "
-                                                  f"doesn't fit route (triangle={_to_o+_to_d:.0f}nm vs total={_total:.0f}nm)")
-                                    if _plausible:
-                                        self._tracked_route_cached   = route
-                                        self._tracked_route_callsign = tracked_callsign
-
-                            # Step 3: Build tracked_data from OpenSky position + cached route
-                            route_info = self._tracked_route_cached or {}
-                            tracked_data = {
-                                "callsign":      tracked_callsign,
-                                "number":        tracked_callsign,
-                                "airline_name":  route_info.get("airline_name", "") or route_info.get("airline", ""),
-                                "is_live":       True,
-                                "origin":        route_info.get("origin", ""),
-                                "destination":   route_info.get("destination", ""),
-                                "dest_lat":      route_info.get("destination_latitude") or route_info.get("dest_lat"),
-                                "dest_lon":      route_info.get("destination_longitude") or route_info.get("dest_lon"),
-                                "aircraft_type": route_info.get("aircraft_type", "") or route_info.get("plane", ""),
-                                # Live position from OpenSky (free, updates every 30s)
-                                "altitude":      os_state["altitude"],
-                                "ground_speed":  os_state["ground_speed"],
-                                "heading":       os_state["heading"],
-                                "vertical_speed": os_state.get("vertical_speed", 0),
-                                "latitude":      os_state["latitude"],
-                                "longitude":     os_state["longitude"],
-                                "time_scheduled_departure": route_info.get("time_scheduled_departure"),
-                                "time_scheduled_arrival":   route_info.get("time_scheduled_arrival"),
-                                "time_real_departure":      route_info.get("time_real_departure"),
-                                "time_estimated_arrival":   route_info.get("time_estimated_arrival"),
-                            }
-                            # Calculate distance remaining and ETA from live position
-                            dest_lat = route_info.get("destination_latitude") or route_info.get("dest_lat")
-                            dest_lon = route_info.get("destination_longitude") or route_info.get("dest_lon")
-                            origin_lat = route_info.get("origin_latitude") or route_info.get("origin_lat")
-                            origin_lon = route_info.get("origin_longitude") or route_info.get("origin_lon")
-                            speed_kts = os_state.get("ground_speed", 0)
-                            if dest_lat and dest_lon and speed_kts > 50:
-                                import math as _math
-                                lat1,lon1 = _math.radians(os_state["latitude"]), _math.radians(os_state["longitude"])
-                                lat2,lon2 = _math.radians(dest_lat), _math.radians(dest_lon)
-                                dlat,dlon = lat2-lat1, lon2-lon1
-                                a = _math.sin(dlat/2)**2 + _math.cos(lat1)*_math.cos(lat2)*_math.sin(dlon/2)**2
-                                dist_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
-                                hours_remaining = calculate_eta(
-                                    dist_nm,
-                                    speed_kts,
-                                    os_state.get("altitude", 0),
-                                    os_state.get("vertical_speed", 0),
-                                )
-                                from time import time as _time
-                                eta_ts = _time() + hours_remaining * 3600
-                                tracked_data["time_estimated_arrival"]   = eta_ts
-                                tracked_data["time_scheduled_arrival"]   = eta_ts
-                                try:
-                                    from config import DISTANCE_UNITS as _DU
-                                except Exception:
-                                    _DU = "imperial"
-                                dist_display = dist_nm if _DU == "nautical" else (dist_nm * 1.15078 if _DU == "imperial" else dist_nm * 1.852)
-                                tracked_data["distance_destination"] = dist_display
-                                # Fields for tracked scenes
-                                tracked_data["dist_remaining"] = dist_display
-
-                                # Format time remaining as "H:MM"
-                                total_mins = int(hours_remaining * 60)
-                                hrs  = total_mins // 60
-                                mins = total_mins % 60
-                                tracked_data["time_remaining"] = f"{hrs}:{mins:02d}" if hrs else f"{mins}m"
-
-                                # total_distance — origin to dest great circle
-                                if origin_lat and origin_lon:
-                                    lat1o,lon1o = _math.radians(origin_lat), _math.radians(origin_lon)
-                                    ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
-                                    total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
-                                    tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
-                                else:
-                                    # Look up origin coords from airports database
-                                    origin_code = route_info.get("origin", "")
-                                    if origin_code:
-                                        try:
-                                            from utilities.airports import get_airport_coords as _gac
-                                            oc = _gac(origin_code)
-                                            if oc:
-                                                lat1o,lon1o = _math.radians(oc["lat"]), _math.radians(oc["lon"])
-                                                ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
-                                                total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
-                                                tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
-                                        except Exception:
-                                            pass
-                            self._tracked_last_eta  = tracked_data.get("time_estimated_arrival")
-                            self._tracked_last_data = tracked_data
-
+                        # Departure window guard — prevents adsb.lol from matching an
+                        # earlier same-day leg (e.g. X→Y) that shares the callsign.
+                        # If we have a scheduled departure time, don't poll adsb at all
+                        # until 30 min before that time. By then the earlier leg will
+                        # have landed and only the correct leg will be visible.
+                        # If no scheduled_departure was saved (blind "save anyway" track),
+                        # poll immediately — we have no timing info to gate on.
+                        if tracked_sched_dep is not None and not self._tracked_was_live:
+                            mins_to_dep = (tracked_sched_dep - now_ts) / 60
+                            within_dep_window = mins_to_dep <= 30
                         else:
-                            # OpenSky didn't find it
-                            if self._tracked_was_live:
-                                now_ts = time()
-                                eta    = self._tracked_last_eta
-                                if eta is not None:
-                                    mins_since_eta = (now_ts - eta) / 60
-                                    if mins_since_eta > 0:
+                            within_dep_window = True  # already live, or no sched dep known
+
+                        if not within_dep_window:
+                            # Too early to poll — log countdown and skip adsb entirely
+                            mins_to_dep = (tracked_sched_dep - now_ts) / 60
+                            print(f"[Tracked] {tracked_callsign} departs in {mins_to_dep:.0f} min — not polling adsb yet")
+                            # Leave tracked_data as None so the display shows nothing
+                        else:
+                            # Step 1: Poll adsb.lol for live position (free, every grab cycle)
+                            os_state = self._opensky.find_callsign(tracked_callsign)
+
+                            if os_state:
+                                just_became_live = not self._tracked_was_live
+                                self._tracked_was_live   = True
+                                self._tracked_miss_count = 0
+
+                                # Step 2: On first airborne sighting, seed route cache from the
+                                # cached_route saved at search time (zero extra API calls).
+                                # Then do exactly one API refresh (call 2 of 2) to get the
+                                # confirmed actual departure time and updated ETA from the source.
+                                if just_became_live:
+                                    if tracked_cached_route and tracked_callsign:
+                                        self._tracked_route_cached   = tracked_cached_route
+                                        self._tracked_route_callsign = tracked_callsign
+                                        print(f"[Tracked] {tracked_callsign} airborne — seeded route from saved data, fetching API refresh")
+                                    # Always do one API call on first airborne to get confirmed times
+                                    route = self._fr24.get_tracked_flight(tracked_callsign)
+                                    if route:
+                                        _r_dest_lat = route.get("dest_lat") or route.get("destination_latitude")
+                                        _r_dest_lon = route.get("dest_lon") or route.get("destination_longitude")
+                                        _r_orig_lat = route.get("origin_latitude") or route.get("orig_lat")
+                                        _r_orig_lon = route.get("origin_longitude") or route.get("orig_lon")
+                                        _plane_lat  = os_state["latitude"]
+                                        _plane_lon  = os_state["longitude"]
+                                        _plausible  = True
+                                        if _r_orig_lat and _r_orig_lon and _r_dest_lat and _r_dest_lon:
+                                            def _nm(la1, lo1, la2, lo2):
+                                                import math as _m
+                                                la1,lo1,la2,lo2 = map(_m.radians,(la1,lo1,la2,lo2))
+                                                a = _m.sin((la2-la1)/2)**2 + _m.cos(la1)*_m.cos(la2)*_m.sin((lo2-lo1)/2)**2
+                                                return 3440.07 * 2 * _m.atan2(_m.sqrt(a), _m.sqrt(1-a))
+                                            _total = _nm(_r_orig_lat, _r_orig_lon, _r_dest_lat, _r_dest_lon)
+                                            _to_o  = _nm(_plane_lat, _plane_lon, _r_orig_lat, _r_orig_lon)
+                                            _to_d  = _nm(_plane_lat, _plane_lon, _r_dest_lat, _r_dest_lon)
+                                            if (_to_o + _to_d) > _total * 1.25:
+                                                _plausible = False
+                                                print(f"[Tracked] API refresh route {route.get('origin')}-{route.get('destination')} "
+                                                      f"rejected — doesn't fit position, keeping saved route")
+                                        else:
+                                            print(f"[Tracked] No origin coords in API refresh for "
+                                                  f"{route.get('origin')}-{route.get('destination')} — accepting")
+                                        if _plausible:
+                                            self._tracked_route_cached   = route
+                                            self._tracked_route_callsign = tracked_callsign
+                                            print(f"[Tracked] Route confirmed by API: "
+                                                  f"{route.get('origin')}-{route.get('destination')}")
+                                    else:
+                                        print(f"[Tracked] API refresh returned nothing — using saved route data")
+
+                                # After first airborne, route cache is locked until landing/clear
+
+                                # Step 3: Build tracked_data from OpenSky position + cached route
+                                route_info = self._tracked_route_cached or {}
+                                tracked_data = {
+                                    "callsign":      tracked_callsign,
+                                    "number":        tracked_callsign,
+                                    "airline_name":  route_info.get("airline_name", "") or route_info.get("airline", ""),
+                                    "is_live":       True,
+                                    "origin":        route_info.get("origin", ""),
+                                    "destination":   route_info.get("destination", ""),
+                                    "dest_lat":      route_info.get("destination_latitude") or route_info.get("dest_lat"),
+                                    "dest_lon":      route_info.get("destination_longitude") or route_info.get("dest_lon"),
+                                    "aircraft_type": route_info.get("aircraft_type", "") or route_info.get("plane", ""),
+                                    # Live position from OpenSky (free, updates every 30s)
+                                    "altitude":      os_state["altitude"],
+                                    "ground_speed":  os_state["ground_speed"],
+                                    "heading":       os_state["heading"],
+                                    "vertical_speed": os_state.get("vertical_speed", 0),
+                                    "latitude":      os_state["latitude"],
+                                    "longitude":     os_state["longitude"],
+                                    "time_scheduled_departure": route_info.get("time_scheduled_departure"),
+                                    "time_scheduled_arrival":   route_info.get("time_scheduled_arrival"),
+                                    "time_real_departure":      route_info.get("time_real_departure"),
+                                    "time_estimated_arrival":   route_info.get("time_estimated_arrival"),
+                                }
+                                # Calculate distance remaining and ETA from live position
+                                dest_lat   = route_info.get("destination_latitude") or route_info.get("dest_lat")
+                                dest_lon   = route_info.get("destination_longitude") or route_info.get("dest_lon")
+                                origin_lat = route_info.get("origin_latitude") or route_info.get("origin_lat")
+                                origin_lon = route_info.get("origin_longitude") or route_info.get("origin_lon")
+                                speed_kts  = os_state.get("ground_speed", 0)
+                                if dest_lat and dest_lon and speed_kts > 50:
+                                    import math as _math
+                                    lat1,lon1 = _math.radians(os_state["latitude"]), _math.radians(os_state["longitude"])
+                                    lat2,lon2 = _math.radians(dest_lat), _math.radians(dest_lon)
+                                    dlat,dlon = lat2-lat1, lon2-lon1
+                                    a = _math.sin(dlat/2)**2 + _math.cos(lat1)*_math.cos(lat2)*_math.sin(dlon/2)**2
+                                    dist_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
+                                    hours_remaining = calculate_eta(
+                                        dist_nm,
+                                        speed_kts,
+                                        os_state.get("altitude", 0),
+                                        os_state.get("vertical_speed", 0),
+                                    )
+                                    from time import time as _time
+                                    eta_ts = _time() + hours_remaining * 3600
+                                    tracked_data["time_estimated_arrival"]   = eta_ts
+                                    tracked_data["time_scheduled_arrival"]   = eta_ts
+                                    try:
+                                        from config import DISTANCE_UNITS as _DU
+                                    except Exception:
+                                        _DU = "imperial"
+                                    dist_display = dist_nm if _DU == "nautical" else (dist_nm * 1.15078 if _DU == "imperial" else dist_nm * 1.852)
+                                    tracked_data["distance_destination"] = dist_display
+                                    tracked_data["dist_remaining"]       = dist_display
+
+                                    # Format time remaining as "H:MM"
+                                    total_mins = int(hours_remaining * 60)
+                                    hrs  = total_mins // 60
+                                    mins = total_mins % 60
+                                    tracked_data["time_remaining"] = f"{hrs}:{mins:02d}" if hrs else f"{mins}m"
+
+                                    # total_distance — origin to dest great circle
+                                    if origin_lat and origin_lon:
+                                        lat1o,lon1o = _math.radians(origin_lat), _math.radians(origin_lon)
+                                        ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
+                                        total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
+                                        tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
+                                    else:
+                                        origin_code = route_info.get("origin", "")
+                                        if origin_code:
+                                            try:
+                                                from utilities.airports import get_airport_coords as _gac
+                                                oc = _gac(origin_code)
+                                                if oc:
+                                                    lat1o,lon1o = _math.radians(oc["lat"]), _math.radians(oc["lon"])
+                                                    ao = _math.sin((lat2-lat1o)/2)**2 + _math.cos(lat1o)*_math.cos(lat2)*_math.sin((lon2-lon1o)/2)**2
+                                                    total_nm = 3440.07 * 2 * _math.atan2(_math.sqrt(ao), _math.sqrt(1-ao))
+                                                    tracked_data["total_distance"] = total_nm if _DU == "nautical" else (total_nm * 1.15078 if _DU == "imperial" else total_nm * 1.852)
+                                            except Exception:
+                                                pass
+                                self._tracked_last_eta  = tracked_data.get("time_estimated_arrival")
+                                self._tracked_last_data = tracked_data
+
+                            else:
+                                # OpenSky didn't find the flight
+                                if self._tracked_was_live:
+                                    # Was airborne before — apply stale/miss logic
+                                    eta = self._tracked_last_eta
+                                    if eta is not None:
+                                        mins_since_eta = (now_ts - eta) / 60
+                                        if mins_since_eta > 0:
+                                            self._tracked_miss_count += 1
+                                            if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
+                                                self._do_auto_wipe()
+                                            elif self._tracked_last_data:
+                                                tracked_data = estimate_stale_data(self._tracked_last_data)
+                                        else:
+                                            self._tracked_miss_count = 0
+                                            if self._tracked_last_data:
+                                                tracked_data = estimate_stale_data(self._tracked_last_data)
+                                    else:
                                         self._tracked_miss_count += 1
                                         if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
                                             self._do_auto_wipe()
                                         elif self._tracked_last_data:
                                             tracked_data = estimate_stale_data(self._tracked_last_data)
-                                    else:
-                                        self._tracked_miss_count = 0
-                                        if self._tracked_last_data:
-                                            tracked_data = estimate_stale_data(self._tracked_last_data)
-                                else:
-                                    self._tracked_miss_count += 1
-                                    if self._tracked_miss_count >= self._TRACKED_MISS_THRESHOLD:
-                                        self._do_auto_wipe()
-                                    elif self._tracked_last_data:
-                                        tracked_data = estimate_stale_data(self._tracked_last_data)
+                                # else: within window but not yet airborne — keep waiting
 
                     # Write current overhead for slave trackers
                     try:
@@ -725,6 +741,7 @@ else:
                 self._tracked_last_eta      = None
                 self._tracked_last_data     = None
                 self._tracked_last_callsign = ""
+                self._tracked_just_airborne = False
 
             @property
             def new_data(self):

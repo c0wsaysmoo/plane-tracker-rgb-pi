@@ -11,13 +11,6 @@ CACHE_TTL = 3600   # 1 hour
 from utilities.airlabs     import get_flight_details as _airlabs_details, get_tracked_flight as _airlabs_tracked, is_available as _airlabs_ok
 from utilities.flightaware import get_flight_details as _fa_details,      get_tracked_flight as _fa_tracked,      is_available as _fa_ok
 
-# FR24 is optional — only imported if credentials exist
-try:
-    from config import OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET
-    _has_opensky = bool(OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET)
-except Exception:
-    _has_opensky = False
-
 try:
     from utilities.flightradar import FR24Client as _FR24Client
     _fr24_client = _FR24Client()
@@ -38,6 +31,9 @@ def _load_usage():
         # Reset if month changed
         if data.get("month") != datetime.now().strftime("%Y-%m"):
             return {"month": datetime.now().strftime("%Y-%m"), "AirLabs": 0, "FlightAware": 0.0, "FR24": 0}
+        # Strip any legacy keys from old installs
+        for _k in ("FlightStats", "FR24Unofficial"):
+            data.pop(_k, None)
         return data
     except (FileNotFoundError, json.JSONDecodeError):
         return {"month": datetime.now().strftime("%Y-%m"), "AirLabs": 0, "FlightAware": 0.0, "FR24": 0}
@@ -156,7 +152,7 @@ class RouteClient:
         except ImportError:
             _order   = ["AirLabs", "FlightAware", "FR24"]
             _enabled = {}
-            
+
         active = [s for s in _order if _enabled.get(s, True)]
         if active:
             print(f"[RouteClient] Active sources: {' → '.join(active)}")
@@ -207,34 +203,50 @@ class RouteClient:
         _SOURCE_FNS = {
             "AirLabs":     (lambda cs: _airlabs_details(cs), _airlabs_ok),
             "FlightAware": (lambda cs: _fa_details(cs),      _fa_ok),
-            "FR24":        (lambda cs: _fr24_client.get_flight_details(cs, plane_lat, plane_lon, plane_type, registration, distance) 
+            "FR24":        (lambda cs: _fr24_client.get_flight_details(cs, plane_lat, plane_lon, plane_type, registration, distance)
                             if _fr24_client else None, lambda: bool(_has_fr24 and _fr24_client))
         }
 
-        # Dynamically loop through order configuration
+        dubious_route = None
+        dubious_key   = None
+        dubious_count = 0
+
         for source in _order:
             if not _enabled.get(source, True):
                 continue
             if source not in _SOURCE_FNS:
                 continue
-                
+
             fn, check = _SOURCE_FNS[source]
             if not check():
                 continue
 
             result = fn(callsign)
-            _log_usage(source, callsign, result.get("origin_iata") if result else None, result.get("dest_iata") if result else None)
-            
-            if result and result.get("origin_iata") not in ("?", "", None):
-                if not _is_plausible(result, plane_lat, plane_lon):
-                    print(f"[RouteClient] {source} {result.get('origin_iata')}-{result.get('dest_iata')} "
-                          f"rejected for {callsign} — trying next source")
-                else:
-                    normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
-                    if normalised:
-                        return _cache_and_return(normalised)
+            _log_usage(source, callsign,
+                       result.get("origin_iata") if result else None,
+                       result.get("dest_iata")   if result else None)
 
-        # All configuration steps exhausted failed — cache the miss 
+            if not result or result.get("origin_iata") in ("?", "", None):
+                continue
+
+            if _is_plausible(result, plane_lat, plane_lon):
+                normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
+                if normalised:
+                    return _cache_and_return(normalised)
+            else:
+                key = (result.get("origin_iata"), result.get("dest_iata"))
+                if dubious_route is None:
+                    dubious_route = result
+                    dubious_key   = key
+                    dubious_count = 1
+                elif key == dubious_key:
+                    dubious_count += 1
+                    if dubious_count >= 2:
+                        _log_usage(f"CONSENSUS({dubious_count})", callsign, key[0], key[1])
+                        normalised = _normalise(dubious_route, callsign, plane_lat, plane_lon, registration)
+                        if normalised:
+                            return _cache_and_return(normalised)
+
         _route_cache[callsign] = {"data": {}, "ts": time()}
         _log_usage("NONE", callsign, None, None)
         return {
@@ -258,7 +270,7 @@ class RouteClient:
         _TRACK_FNS = {
             "AirLabs":     (_airlabs_tracked, _airlabs_ok),
             "FlightAware": (_fa_tracked,      _fa_ok),
-            "FR24":        (lambda cs: _fr24_client.get_tracked_flight(cs) if _fr24_client else None, 
+            "FR24":        (lambda cs: _fr24_client.get_tracked_flight(cs) if _fr24_client else None,
                             lambda: bool(_has_fr24 and _fr24_client))
         }
 
@@ -274,9 +286,7 @@ class RouteClient:
 
             result = fn(callsign)
             if result:
-                # Check signature compatibility differences between APIs for live validation
-                if source == "FR24" or result.get("is_live"):
-                    _log_usage(f"{source}(tracked)", callsign, result.get("origin"), result.get("destination"))
-                    return result
+                _log_usage(f"{source}(tracked)", callsign, result.get("origin"), result.get("destination"))
+                return result
 
         return None

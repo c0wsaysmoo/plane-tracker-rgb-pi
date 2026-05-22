@@ -179,6 +179,27 @@ class OpenSkyClient:
         Search globally for a specific callsign using adsb.lol (free, no auth).
         Returns a state dict if found airborne, or None.
         """
+        state = self._fetch_callsign(callsign)
+        if state is None:
+            return None
+        if state.get("on_ground"):
+            return None
+        return state
+
+    def find_callsign_any(self, callsign):
+        """
+        Like find_callsign but also returns ground/taxiing aircraft.
+        Used by the pre-departure tracking logic to confirm a flight exists
+        before it becomes airborne.
+        Returns a state dict (with on_ground=True possible), or None if not found.
+        """
+        return self._fetch_callsign(callsign)
+
+    def _fetch_callsign(self, callsign):
+        """
+        Internal: hit adsb.lol and return the raw state dict regardless of
+        ground status, or None if the callsign isn't found / doesn't match.
+        """
         callsign_clean = callsign.strip()
         try:
             resp = requests.get(
@@ -194,14 +215,12 @@ class OpenSkyClient:
 
             ac = ac_list[0]
 
-            # Must match callsign exactly and be airborne
+            # Must match callsign exactly
             returned = (ac.get("flight") or "").strip().upper()
             if returned != callsign_clean.upper():
                 return None
 
             on_ground = ac.get("alt_baro") == "ground" or ac.get("gs", 0) < 50
-            if on_ground:
-                return None
 
             lat = ac.get("lat")
             lon = ac.get("lon")
@@ -214,15 +233,15 @@ class OpenSkyClient:
             vs       = ac.get("baro_rate", 0) or 0
 
             return {
-                "icao24":        ac.get("hex", ""),
-                "callsign":      callsign_clean,
-                "latitude":      lat,
-                "longitude":     lon,
-                "altitude":      int(alt_ft),
-                "ground_speed":  int(gs * 0.868976),  # knots already
-                "heading":       ac.get("track", 0) or 0,
+                "icao24":         ac.get("hex", ""),
+                "callsign":       callsign_clean,
+                "latitude":       lat,
+                "longitude":      lon,
+                "altitude":       int(alt_ft),
+                "ground_speed":   int(gs),  # adsb.lol reports in knots
+                "heading":        ac.get("track", 0) or 0,
                 "vertical_speed": int(vs),
-                "on_ground":     False,
+                "on_ground":      on_ground,
             }
         except Exception as e:
             print(f"[adsb.lol] Callsign search failed for {callsign}: {e}")
@@ -240,14 +259,9 @@ class OpenSkyClient:
         if not icao24:
             return []
         try:
-            # Use basic auth directly — more reliable than bearer token for tracks
-            auth = None
-            if OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET:
-                auth = (OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET)
-
             resp = requests.get(
                 f"{BASE_URL}/api/tracks/all",
-                auth=auth,
+                headers=self._auth_headers(),
                 params={"icao24": icao24.lower(), "time": 0},
                 timeout=15,
             )
