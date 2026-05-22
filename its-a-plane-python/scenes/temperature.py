@@ -1,118 +1,311 @@
+"""
+temperature.py — Auto-selects master or slave mode based on config.
+If MASTER_TRACKER = "" this Pi calls Tomorrow.io directly.
+If MASTER_TRACKER = "hostname" this Pi polls the master's /weather/json endpoint.
+"""
+
 from datetime import datetime, timedelta
 import time
-import colorsys
-from rgbmatrix import graphics
-from utilities.animator import Animator
-from setup import colours, fonts, frames, screen
-from utilities.temperature import grab_temperature_and_humidity, _load_file_cache, _TEMP_CACHE_FILE, _CACHE_TTL
-from config import NIGHT_START, NIGHT_END
+import logging
+import os
+import socket
+import json
 
-# Scene Setup
-TEMPERATURE_REFRESH_SECONDS = 600
-TEMPERATURE_FONT = fonts.small
-TEMPERATURE_FONT_HEIGHT = 6
-NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
-NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
+# ─── Master/slave routing ─────────────────────────────────────────────────────
+try:
+    from config import MASTER_TRACKER
+except (ImportError, ModuleNotFoundError, NameError):
+    MASTER_TRACKER = ""
 
-class TemperatureScene(object):
-    def __init__(self):
-        super().__init__()
-        self._last_temperature = None
-        self._last_temperature_str = None
-        self._redraw_temp = True
+# ─── Shared config (both modes need these) ───────────────────────────────────
+try:
+    from config import TEMPERATURE_UNITS
+except (ModuleNotFoundError, NameError, ImportError):
+    TEMPERATURE_UNITS = "metric"
 
-        # Pre-load from file cache to avoid unnecessary API hit on reboot
-        cached, ts = _load_file_cache(_TEMP_CACHE_FILE)
-        if cached and (time.time() - ts) < _CACHE_TTL:
-            self._cached_temp = tuple(cached) if isinstance(cached, list) else cached
-            self._last_updated = datetime.fromtimestamp(ts)
-        else:
-            self._cached_temp = None
-            self._last_updated = None
+try:
+    from config import FORECAST_DAYS
+except (ModuleNotFoundError, NameError, ImportError):
+    FORECAST_DAYS = 3
 
-    def colour_gradient(self, colour_A, colour_B, ratio):
-        return graphics.Color(
-            int(colour_A.red + ((colour_B.red - colour_A.red) * ratio)),
-            int(colour_A.green + ((colour_B.green - colour_A.green) * ratio)),
-            int(colour_A.blue + ((colour_B.blue - colour_A.blue) * ratio)),
-        )
+if TEMPERATURE_UNITS not in ("metric", "imperial"):
+    TEMPERATURE_UNITS = "metric"
 
-    @Animator.KeyFrame.add(frames.PER_SECOND * 1)
-    def temperature(self, count):
-        # Redraw at night start/end to adjust brightness
-        now = datetime.now().replace(microsecond=0).time()
-        if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
-            self._redraw_temp = True
-            return
+# ─── Persistent File Cache (shared — both master and slave use this) ─────────
+_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
+os.makedirs(_CACHE_DIR, exist_ok=True)
+_TEMP_CACHE_FILE     = os.path.join(_CACHE_DIR, "temperature.json")
+_FORECAST_CACHE_FILE = os.path.join(_CACHE_DIR, "forecast.json")
+_CACHE_TTL           = 7200  # 2 hours — use file cache if API fails within this window
 
-        # Yield when a plane is overhead
-        if len(self._data):
-            self._redraw_temp = True
-            return
+# ─── Invalidate caches if units have changed ──────────────────────────────────
+def _invalidate_on_units_change():
+    for path in (_TEMP_CACHE_FILE, _FORECAST_CACHE_FILE):
+        try:
+            with open(path, "r") as f:
+                obj = json.load(f)
+            if obj.get("units") != TEMPERATURE_UNITS:
+                logging.info(f"[Weather] Units changed, deleting stale cache: {path}")
+                os.remove(path)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
-        # Determine seconds since last update
-        seconds_since_update = (datetime.now() - self._last_updated).total_seconds() if self._last_updated else TEMPERATURE_REFRESH_SECONDS
-        retry_interval_on_error = 60
+_invalidate_on_units_change()
 
-        # Determine if we need to fetch new data
-        need_fetch = (
-            seconds_since_update >= TEMPERATURE_REFRESH_SECONDS or
-            (self._cached_temp is None and (self._last_updated is None or seconds_since_update >= retry_interval_on_error))
-        )
+def _load_file_cache(path, units=None):
+    """Load cached data from file. Returns (data, timestamp) or (None, 0).
+    If `units` is provided and doesn't match what's stored, treats cache as a miss
+    so a units change (metric <-> imperial) always triggers a fresh API call."""
+    try:
+        with open(path, "r") as f:
+            obj = json.load(f)
+        if units is not None and obj.get("units") != units:
+            logging.info(f"Cache units mismatch ({obj.get('units')!r} -> {units!r}), invalidating {path}")
+            return None, 0
+        return obj.get("data"), obj.get("ts", 0)
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        return None, 0
 
-        # Force redraw if switching back to scene and cached temp exists
-        force_draw = self._redraw_temp or (self._cached_temp is not None)
+def _save_file_cache(path, data, units=None):
+    """Save data + timestamp (+ units) to file cache (atomic via rename)."""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"data": data, "ts": time.time(), "units": units}, f)
+        os.replace(tmp, path)  # atomic on POSIX
+    except (PermissionError, OSError) as e:
+        logging.warning(f"Cannot write cache {path}: {e}")
 
-        if need_fetch or force_draw:
-            # Use cached values if present and not fetching
-            if self._cached_temp and not need_fetch:
-                current_temperature, current_humidity = self._cached_temp
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLAVE MODE — poll weather data from the master Pi
+# ─────────────────────────────────────────────────────────────────────────────
+if MASTER_TRACKER:
+    import requests
+    from requests.exceptions import RequestException
+
+    def _url(path):
+        host = MASTER_TRACKER.strip().rstrip("/")
+        if not host.startswith("http"):
+            if ":" not in host:
+                host = f"http://{host}.local:8080"
             else:
-                # Fetch new values
-                current_temperature, current_humidity = grab_temperature_and_humidity()
-                if current_temperature is not None and current_humidity is not None:
-                    self._cached_temp = (current_temperature, current_humidity)
-                    self._last_updated = datetime.now()
-                else:
-                    # Use in-memory cache if available, schedule retry in 1 minute
-                    if self._cached_temp:
-                        current_temperature, current_humidity = self._cached_temp
-                    else:
-                        current_temperature, current_humidity = None, None
-                        if self._last_updated is None:
-                            self._last_updated = datetime.now() - timedelta(seconds=TEMPERATURE_REFRESH_SECONDS - retry_interval_on_error)
+                host = f"http://{host}"
+        return f"{host}{path}"
 
-            # Clear old temperature
-            if self._last_temperature_str is not None:
-                self.draw_square(40, 0, 64, 5, colours.BLACK)
+    def grab_temperature_and_humidity():
+        """Fetch current temperature and humidity from the master's /weather/json endpoint."""
+        try:
+            r = requests.get(_url("/weather/json"), timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            temperature = data.get("temperature")
+            humidity    = data.get("humidity")
+            if temperature is None or humidity is None:
+                logging.warning("[Slave/Weather] Master returned incomplete temp/humidity data")
+                return None, None
+            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
+            return temperature, humidity
+        except RequestException as e:
+            logging.error(f"[Slave/Weather] Cannot reach master for weather: {e}")
+            cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
+            if cached and (time.time() - ts) < _CACHE_TTL:
+                logging.info("[Slave/Weather] Using cached temperature data")
+                return tuple(cached) if isinstance(cached, list) else cached
+            return None, None
 
-            # Determine display string and color
-            if current_temperature is None or current_humidity is None:
-                display_str = ":("
-                temp_colour = colours.RED
-            else:
-                display_str = f"{round(current_temperature)}°"
-                humidity_ratio = current_humidity / 100.0
-                temp_colour = self.colour_gradient(colours.WHITE, colours.DARK_BLUE, humidity_ratio)
+    def grab_forecast(tag="unknown"):
+        """Fetch forecast intervals from the master's /weather/json endpoint."""
+        try:
+            r = requests.get(_url("/weather/json"), timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            forecast = data.get("forecast", [])
+            if not isinstance(forecast, list):
+                logging.warning(f"[Slave/Weather:{tag}] Master returned non-list forecast")
+                return []
+            _save_file_cache(_FORECAST_CACHE_FILE, forecast, units=TEMPERATURE_UNITS)
+            return forecast
+        except RequestException as e:
+            logging.error(f"[Slave/Weather:{tag}] Cannot reach master for forecast: {e}")
+            cached, ts = _load_file_cache(_FORECAST_CACHE_FILE, units=TEMPERATURE_UNITS)
+            if cached and (time.time() - ts) < _CACHE_TTL:
+                logging.info(f"[Slave/Weather:{tag}] Using cached forecast data")
+                return cached
+            return []
 
-            # Update state
-            self._last_temperature_str = display_str
-            self._last_temperature = current_temperature
-            self._redraw_temp = False
+    print(f"[Weather] Slave mode — polling master at {_url('')}")
 
-            # Calculate string position (centered)
-            font_character_width = 5
-            temperature_string_width = len(display_str) * font_character_width
-            middle_x = (40 + 64) // 2
-            start_x = middle_x - temperature_string_width // 2
-            TEMPERATURE_POSITION = (start_x, TEMPERATURE_FONT_HEIGHT)
 
-            # Draw temperature/error
-            graphics.DrawText(
-                self.canvas,
-                TEMPERATURE_FONT,
-                TEMPERATURE_POSITION[0],
-                TEMPERATURE_POSITION[1],
-                temp_colour,
-                display_str,
+# ─────────────────────────────────────────────────────────────────────────────
+# MASTER MODE — full Tomorrow.io stack with persistent file cache
+# ─────────────────────────────────────────────────────────────────────────────
+else:
+    print("[Weather] Master mode — calling Tomorrow.io directly")
+
+    from requests import Session
+    from requests.adapters import HTTPAdapter
+    from requests.exceptions import RequestException
+    from urllib3.util.retry import Retry
+
+    try:
+        from config import TOMORROW_API_KEY
+    except (ModuleNotFoundError, NameError, ImportError):
+        TOMORROW_API_KEY = None
+
+    try:
+        from config import TEMPERATURE_LOCATION
+    except (ImportError, NameError):
+        TEMPERATURE_LOCATION = ""
+
+    def is_dns_error(exc: Exception) -> bool:
+        cause = exc
+        while cause:
+            if isinstance(cause, socket.gaierror):
+                return True
+            cause = cause.__cause__
+        return False
+
+    _session = None
+
+    def get_session() -> Session:
+        global _session
+        if _session is None:
+            _session = Session()
+            retries = Retry(
+                total=3,
+                connect=3,
+                read=3,
+                backoff_factor=2,
+                allowed_methods=["GET", "POST"],
+                status_forcelist=[429, 500, 502, 503, 504],
+                raise_on_status=False,
             )
+            adapter = HTTPAdapter(
+                max_retries=retries,
+                pool_connections=2,
+                pool_maxsize=2,
+            )
+            _session.mount("https://", adapter)
+            _session.mount("http://", adapter)
+        return _session
+
+    # Weather API
+    TOMORROW_API_URL = "https://api.tomorrow.io/v4"
+
+    def grab_temperature_and_humidity():
+        try:
+            s = get_session()
+            request = s.get(
+                f"{TOMORROW_API_URL}/weather/realtime",
+                params={
+                    "location": TEMPERATURE_LOCATION,
+                    "units":    TEMPERATURE_UNITS,
+                    "apikey":   TOMORROW_API_KEY
+                },
+                timeout=(5, 20)
+            )
+
+            if request.status_code == 429:
+                logging.error("Rate limit reached, trying file cache")
+                cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
+                if cached and (time.time() - ts) < _CACHE_TTL:
+                    return tuple(cached) if isinstance(cached, list) else cached
+                return None, None
+
+            request.raise_for_status()
+
+            data        = request.json().get("data", {}).get("values", {})
+            temperature = data.get("temperature")
+            humidity    = data.get("humidity")
+
+            if temperature is None or humidity is None:
+                logging.error("Incomplete data from API")
+                return None, None
+
+            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
+            return temperature, humidity
+
+        except (RequestException, ValueError) as e:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            if is_dns_error(e):
+                logging.error(f"[{timestamp}] DNS failure resolving api.tomorrow.io - will retry")
+            else:
+                logging.error(f"[{timestamp}] Temperature request failed: {e}")
+
+            cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
+            if cached and (time.time() - ts) < _CACHE_TTL:
+                return tuple(cached) if isinstance(cached, list) else cached
+            return None, None
+
+
+    def grab_forecast(tag="unknown"):
+        dt = datetime.now() - timedelta(days=1)
+
+        try:
+            s = get_session()
+            resp = s.post(
+                f"{TOMORROW_API_URL}/timelines",
+                headers={
+                    "Accept-Encoding": "gzip",
+                    "accept":          "application/json",
+                    "content-type":    "application/json"
+                },
+                params={"apikey": TOMORROW_API_KEY},
+                json={
+                    "location":       TEMPERATURE_LOCATION,
+                    "units":          TEMPERATURE_UNITS,
+                    "timezone":       "auto",
+                    "dailyStartHour": 6,
+                    "fields": [
+                        "temperatureMin",
+                        "temperatureMax",
+                        "weatherCodeFullDay",
+                        "sunriseTime",
+                        "sunsetTime",
+                        "moonPhase"
+                    ],
+                    "timesteps": ["1d"],
+                    "endTime":   (dt + timedelta(days=int(FORECAST_DAYS))).isoformat(),
+                },
+                timeout=(5, 20)
+            )
+
+            if resp.status_code == 429:
+                logging.error(f"[Forecast:{tag}] Rate limit reached, trying file cache")
+                cached, ts = _load_file_cache(_FORECAST_CACHE_FILE, units=TEMPERATURE_UNITS)
+                if cached and (time.time() - ts) < _CACHE_TTL:
+                    return cached
+                return []
+
+            resp.raise_for_status()
+
+            data      = resp.json().get("data", {})
+            timelines = data.get("timelines", [])
+            if not timelines:
+                logging.error(f"[Forecast:{tag}] No timelines returned from API")
+                return []
+
+            intervals = timelines[0].get("intervals", [])
+            if not intervals:
+                logging.error(f"[Forecast:{tag}] Timelines returned but no intervals")
+                return []
+
+            _save_file_cache(_FORECAST_CACHE_FILE, intervals, units=TEMPERATURE_UNITS)
+            return intervals
+
+        except RequestException as e:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            if is_dns_error(e):
+                logging.error(f"[{timestamp}] [Forecast:{tag}] DNS failure resolving api.tomorrow.io - will retry")
+            else:
+                logging.error(f"[{timestamp}] [Forecast:{tag}] API request failed: {e}")
+
+            cached, ts = _load_file_cache(_FORECAST_CACHE_FILE, units=TEMPERATURE_UNITS)
+            if cached and (time.time() - ts) < _CACHE_TTL:
+                return cached
+            return []
+
+        except KeyError as e:
+            logging.error(f"[Forecast:{tag}] Unexpected data format: {e}")
+            return []
