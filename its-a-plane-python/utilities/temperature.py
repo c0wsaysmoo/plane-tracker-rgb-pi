@@ -151,23 +151,47 @@ _TEMP_CACHE_FILE = _os.path.join(_CACHE_DIR, "temperature.json")
 _FORECAST_CACHE_FILE = _os.path.join(_CACHE_DIR, "forecast.json")
 
 
-def _load_file_cache(path):
-    """Load cached data from file. Returns (data, timestamp) or (None, 0)."""
+def _load_file_cache(path, units=None):
+    """Load cached data from file. Returns (data, timestamp) or (None, 0).
+    If units is provided, treats mismatched units as a cache miss."""
     try:
         with open(path, "r") as f:
             obj = _json.load(f)
+            if units and obj.get("units") and obj["units"] != units:
+                logger.info(f"Cache units mismatch ({obj['units']} != {units}), ignoring {path}")
+                return None, 0
             return obj.get("data"), obj.get("ts", 0)
     except (FileNotFoundError, _json.JSONDecodeError, KeyError):
         return None, 0
 
 
-def _save_file_cache(path, data):
-    """Save data + timestamp to file cache."""
+def _save_file_cache(path, data, units=None):
+    """Save data + timestamp (+ optional units) to file cache."""
     try:
+        obj = {"data": data, "ts": time.time()}
+        if units:
+            obj["units"] = units
         with open(path, "w") as f:
-            _json.dump({"data": data, "ts": time.time()}, f)
+            _json.dump(obj, f)
     except (PermissionError, OSError) as e:
         logger.warning(f"Cannot write cache {path}: {e}")
+
+
+def _invalidate_on_units_change():
+    """Delete cache files if units changed since last save.
+    Concept from c0wsaysmoo/plane-tracker-rgb-pi."""
+    for path in (_TEMP_CACHE_FILE, _FORECAST_CACHE_FILE):
+        try:
+            with open(path, "r") as f:
+                obj = _json.load(f)
+            if obj.get("units") and obj["units"] != TEMPERATURE_UNITS:
+                _os.remove(path)
+                logger.info(f"Invalidated {path}: units changed to {TEMPERATURE_UNITS}")
+        except (FileNotFoundError, _json.JSONDecodeError, KeyError):
+            pass
+
+
+_invalidate_on_units_change()
 
 
 # ─── Temperature & Humidity ──────────────────────────────────────────────────
@@ -176,7 +200,7 @@ _cached_temp_ts = 0.0
 _TEMP_CACHE_TTL = 3600  # 1 hour
 
 # Load persistent cache on startup
-_startup_temp, _startup_temp_ts = _load_file_cache(_TEMP_CACHE_FILE)
+_startup_temp, _startup_temp_ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
 if _startup_temp and (time.time() - _startup_temp_ts) < _TEMP_CACHE_TTL * 2:
     _cached_temp = tuple(_startup_temp) if isinstance(_startup_temp, list) else _startup_temp
     _cached_temp_ts = _startup_temp_ts
@@ -234,7 +258,7 @@ def grab_temperature_and_humidity():
 
         _cached_temp = (temperature, humidity)
         _cached_temp_ts = time.time()
-        _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity])
+        _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
         return temperature, humidity
 
     except (RequestException, ValueError) as e:
@@ -258,7 +282,7 @@ _cached_forecast_ts = 0.0
 _FORECAST_CACHE_TTL = 3600  # 1 hour
 
 # Load persistent forecast cache on startup
-_startup_fc, _startup_fc_ts = _load_file_cache(_FORECAST_CACHE_FILE)
+_startup_fc, _startup_fc_ts = _load_file_cache(_FORECAST_CACHE_FILE, units=TEMPERATURE_UNITS)
 if _startup_fc and (time.time() - _startup_fc_ts) < _FORECAST_CACHE_TTL * 2:
     _cached_forecast = _startup_fc
     _cached_forecast_ts = _startup_fc_ts
@@ -338,7 +362,7 @@ def grab_forecast(tag="unknown"):
 
         _cached_forecast = intervals
         _cached_forecast_ts = time.time()
-        _save_file_cache(_FORECAST_CACHE_FILE, intervals)
+        _save_file_cache(_FORECAST_CACHE_FILE, intervals, units=TEMPERATURE_UNITS)
         return intervals
 
     except RequestException as e:

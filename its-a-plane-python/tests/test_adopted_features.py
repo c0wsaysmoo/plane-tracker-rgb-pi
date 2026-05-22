@@ -321,26 +321,19 @@ class TestFlightCounter:
 
 class TestHeadingArrows:
     """Test heading-to-arrow conversion for planedetails display.
-    Function duplicated here since scenes/ imports rgbmatrix (Pi-only)."""
+    Function duplicated here since scenes/ imports rgbmatrix (Pi-only).
+    Concept from c0wsaysmoo/plane-tracker-rgb-pi."""
 
-    # 8-point compass heading arrows — must match scenes/planedetails.py
-    _HEADING_ARROWS = [
-        (337.5, 360, "\u2191"), (0, 22.5, "\u2191"),
-        (22.5, 67.5, "\u2197"), (67.5, 112.5, "\u2192"),
-        (112.5, 157.5, "\u2198"), (157.5, 202.5, "\u2193"),
-        (202.5, 247.5, "\u2199"), (247.5, 292.5, "\u2190"),
-        (292.5, 337.5, "\u2196"),
-    ]
+    _HEADING_ARROWS = ["\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196"]
 
     @staticmethod
     def _heading_to_arrow(heading):
         if heading is None:
             return ""
-        heading = heading % 360
-        for lo, hi, arrow in TestHeadingArrows._HEADING_ARROWS:
-            if lo <= heading < hi:
-                return arrow
-        return ""
+        try:
+            return TestHeadingArrows._HEADING_ARROWS[int((float(heading) + 22.5) / 45) % 8]
+        except (TypeError, ValueError):
+            return ""
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -474,6 +467,48 @@ class TestLandmarks:
         finally:
             lm._parks_db = orig_db
             lm._parks_loaded = orig_loaded
+
+
+# ====================================================================
+# Units-Aware Weather Cache (concept from c0wsaysmoo)
+# ====================================================================
+
+class TestUnitsAwareCache:
+    """Test weather cache invalidation on units change."""
+
+    def test_save_and_load_with_units(self, tmp_path):
+        from utilities.temperature import _save_file_cache, _load_file_cache
+        path = str(tmp_path / "test_cache.json")
+        _save_file_cache(path, [22.5, 65.0], units="metric")
+        data, ts = _load_file_cache(path, units="metric")
+        assert data == [22.5, 65.0]
+        assert ts > 0
+
+    def test_load_rejects_wrong_units(self, tmp_path):
+        from utilities.temperature import _save_file_cache, _load_file_cache
+        path = str(tmp_path / "test_cache.json")
+        _save_file_cache(path, [22.5, 65.0], units="metric")
+        data, ts = _load_file_cache(path, units="imperial")
+        assert data is None
+        assert ts == 0
+
+    def test_load_accepts_no_units_in_cache(self, tmp_path):
+        """Old cache files without units field should still load."""
+        import json
+        path = str(tmp_path / "test_cache.json")
+        with open(path, "w") as f:
+            json.dump({"data": [72.0, 50.0], "ts": 1000000}, f)
+        from utilities.temperature import _load_file_cache
+        data, ts = _load_file_cache(path, units="imperial")
+        assert data == [72.0, 50.0]
+
+    def test_load_without_units_param(self, tmp_path):
+        """Loading without units param ignores units field."""
+        from utilities.temperature import _save_file_cache, _load_file_cache
+        path = str(tmp_path / "test_cache.json")
+        _save_file_cache(path, [22.5, 65.0], units="metric")
+        data, ts = _load_file_cache(path)
+        assert data == [22.5, 65.0]
 
 
 # ====================================================================
