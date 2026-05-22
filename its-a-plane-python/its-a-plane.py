@@ -18,13 +18,13 @@ def _ensure_config():
     default_cfg = {
         "location": {
             "zone_home": {
-                "tl_y": 41.953371,
-                "tl_x": -87.746000,
-                "br_y": 41.889507,
-                "br_x": -87.623695
+                "tl_y": 41.921123,
+                "tl_x": -87.695088,
+                "br_y": 41.840319,
+                "br_x": -87.539345
             },
-            "location_home": [41.926550, -87.695440],
-            "temperature_location": "41.926550,-87.695440",
+            "location_home": [41.882772, -87.623225],
+            "temperature_location": "41.882772,-87.623225",
             "temperature_units": "imperial",
             "distance_units": "imperial",
             "speed_units": "imperial",
@@ -39,11 +39,11 @@ def _ensure_config():
             "night_start": "22:00",
             "night_end": "06:00",
             "gpio_slowdown": 2,
-            "hat_pwm_enabled": True,
+            "hat_pwm_enabled": False,
             "forecast_days": 3
         },
         "flights": {
-            "min_altitude": 2600,
+            "min_altitude": 2000,
             "max_farthest": 3,
             "max_closest": 3,
             "email": ""
@@ -57,21 +57,13 @@ def _ensure_config():
             "days": 30
         },
         "api_sources": {
-            "order": ["FlightStats", "AirLabs", "FlightAware", "FR24"],
+            "order": ["AirLabs", "FlightAware", "FR24"],
             "enabled": {
-                "FlightStats": True,
                 "AirLabs": True,
                 "FlightAware": True,
-                "FR24": False
+                "FR24": True
             }
         },
-        "sports": {
-            "enabled": True,
-            "priority": ["mlb", "nfl", "nba", "nhl", "mls",
-                         "college_football", "college_basketball", "epl"],
-            "teams": {},
-            "cycle_seconds": 10
-        }
     }
 
     default_sec = {
@@ -80,7 +72,7 @@ def _ensure_config():
         "opensky_client_secret": "",
         "airlabs_api_keys": [],
         "flightaware_api_keys": [],
-        "flightaware_monthly_limit": 4.00,
+        "flightaware_monthly_limit": 5.00,
         "flightradar24_key": "",
         "moon_key": ""
     }

@@ -28,9 +28,11 @@ def reload():
     global CLOCK_FORMAT, JOURNEY_CODE_SELECTED, JOURNEY_BLANK_FILLER
     global BRIGHTNESS, BRIGHTNESS_NIGHT, NIGHT_BRIGHTNESS
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
-    global FORECAST_DAYS, MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL
+    global LED_RGB_SEQUENCE, FORECAST_DAYS
+    global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL
     global MASTER_TRACKER, OTHER_TRACKER_HOSTNAMES
     global API_SOURCE_ORDER, API_SOURCE_ENABLED
+    global STATS_LOG_DAYS
     global TOMORROW_API_KEY, OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET
     global AIRLABS_API_KEYS, AIRLABS_API_KEY
     global FLIGHTAWARE_API_KEYS, FLIGHTAWARE_API_KEY, FLIGHTAWARE_MONTHLY_LIMIT
@@ -66,6 +68,7 @@ def reload():
     NIGHT_END         = _disp.get("night_end", "06:00")
     GPIO_SLOWDOWN     = _disp.get("gpio_slowdown", 2)
     HAT_PWM_ENABLED   = _disp.get("hat_pwm_enabled", False)
+    LED_RGB_SEQUENCE  = _disp.get("led_rgb_sequence", "RGB")
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
 
     # Flights
