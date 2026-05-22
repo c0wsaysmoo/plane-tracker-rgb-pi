@@ -70,7 +70,7 @@ class DateScene(object):
         text_length = len(text)
         char_width = 4  # Width of each character
         for i, char in enumerate(text):
-            position = i / (text_length - 1)
+            position = i / max(1, text_length - 1)
             r = int(start_color.red + (end_color.red - start_color.red) * position)
             g = int(start_color.green + (end_color.green - start_color.green) * position)
             b = int(start_color.blue + (end_color.blue - start_color.blue) * position)

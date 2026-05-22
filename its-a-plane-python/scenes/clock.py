@@ -30,8 +30,8 @@ class ClockScene(object):
             suntimes_file = os.path.join(cache_dir, "suntimes.json")
             cached, ts = _load_file_cache(suntimes_file)
             if cached and (_time.time() - ts) < 86400:  # 24-hour TTL
-                sr = datetime.strptime(cached["sunrise"], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                ss = datetime.strptime(cached["sunset"], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                sr = datetime.fromisoformat(cached["sunrise"].replace("Z", "+00:00"))
+                ss = datetime.fromisoformat(cached["sunset"].replace("Z", "+00:00"))
                 self.today_sunrise = sr
                 self.today_sunset = ss
                 self.last_fetch_date = datetime.now().date()
@@ -59,8 +59,8 @@ class ClockScene(object):
                     forecast_date = day['startTime'][:10]
                     if forecast_date == now.strftime('%Y-%m-%d'):
                         # Parse UTC sunrise and sunset times
-                        utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                        utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                        utc_sunrise = datetime.fromisoformat(day['values']['sunriseTime'].replace("Z", "+00:00"))
+                        utc_sunset = datetime.fromisoformat(day['values']['sunsetTime'].replace("Z", "+00:00"))
 
                         # Cache values
                         self.today_sunrise = utc_sunrise

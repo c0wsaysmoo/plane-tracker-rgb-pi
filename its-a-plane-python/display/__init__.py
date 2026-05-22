@@ -22,7 +22,7 @@ from rgbmatrix import graphics
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
 
 
-def flight_updated(flights_a, flights_b):
+def flights_match(flights_a, flights_b):
     get_callsigns = lambda flights: [(f["callsign"], f["direction"]) for f in flights]
     updatable_a = set(get_callsigns(flights_a))
     updatable_b = set(get_callsigns(flights_b))
@@ -141,7 +141,7 @@ class Display(
         if self.overhead.new_data:
             there_is_data = len(self._data) > 0 or not self.overhead.data_is_empty
             new_data = self.overhead.data
-            data_is_different = not flight_updated(self._data, new_data)
+            data_is_different = not flights_match(self._data, new_data)
 
             if data_is_different:
                 self._data_index = 0

@@ -5,7 +5,7 @@ import socket
 import logging
 import requests
 from time import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from threading import Thread, Lock
 
 from utilities.fr24_client import FR24Client
@@ -424,6 +424,13 @@ def log_flight_count(callsign, entry=None):
         })
         log[today]["count"] = len(log[today]["flights"])
         log[today]["last_seen"] = now_str
+
+        # Prune entries older than 90 days
+        cutoff = str((now - timedelta(days=90)).date())
+        old_keys = [k for k in log if k < cutoff and k != today]
+        for k in old_keys:
+            del log[k]
+
         safe_write_json(COUNTER_FILE, log)
 
 

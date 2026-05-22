@@ -69,9 +69,16 @@ def get_flight_schedule(callsign):
     if not callsign:
         return None
 
+    # Evict expired entries periodically
+    now_ts = time()
+    if len(_cache) > 200:
+        expired = [k for k, (_, ts) in _cache.items() if now_ts - ts >= _CACHE_TTL]
+        for k in expired:
+            del _cache[k]
+
     # Check module-level cache first
     cached = _cache.get(callsign)
-    if cached and (time() - cached[1]) < _CACHE_TTL:
+    if cached and (now_ts - cached[1]) < _CACHE_TTL:
         return cached[0]
 
     # Determine if IATA (2-letter + digits) or ICAO (3-letter + digits)

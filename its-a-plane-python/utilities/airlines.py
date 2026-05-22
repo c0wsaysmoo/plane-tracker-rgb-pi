@@ -8,6 +8,7 @@ Source: https://github.com/npow/airline-codes
 
 import json
 import os
+import threading
 import requests
 
 BASE_DIR   = os.path.dirname(os.path.dirname(__file__))
@@ -25,6 +26,7 @@ _OVERRIDES = {
 
 _db     = {}
 _loaded = False
+_load_lock = threading.Lock()
 
 
 def _download_and_build():
@@ -59,16 +61,19 @@ def _load():
     global _db, _loaded
     if _loaded:
         return
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                _db = json.load(f)
-            _loaded = True
+    with _load_lock:
+        if _loaded:
             return
-        except Exception:
-            pass
-    _db = _download_and_build()
-    _loaded = True
+        if os.path.exists(CACHE_FILE):
+            try:
+                with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                    _db = json.load(f)
+                _loaded = True
+                return
+            except Exception:
+                pass
+        _db = _download_and_build()
+        _loaded = True
 
 
 def get_airline_name(icao):
