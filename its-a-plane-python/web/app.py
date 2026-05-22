@@ -3,6 +3,8 @@ from flask import Flask, render_template, jsonify, send_from_directory, request
 import json
 import os
 import sys
+import subprocess
+import time
 from datetime import datetime, timezone
 
 # Suppress Flask request logging
@@ -129,80 +131,6 @@ def search_route(origin, destination):
         print(f"Route search error: {e}")
         return {"found": False, "error": str(e)}
 
-def _fa_lookup_callsign(callsign):
-    """
-    Call FlightAware /flights/{ident} and return all today's flights as picker dicts.
-    This is Call 1 when the flight isn't yet airborne.
-    """
-    from time import time as _time
-    now = _time()
-    results = []
-    try:
-        from utilities.flightaware import _get_active_key, _parse_flight, BASE_URL, _increment_usage, is_available as _fa_ok
-        import requests as _req
-        if not _fa_ok():
-            return []
-        key = _get_active_key()
-        r = _req.get(
-            f"{BASE_URL}/flights/{callsign}",
-            headers={"x-apikey": key},
-            params={"max_pages": 1},
-            timeout=10,
-        )
-        _increment_usage(key)
-        # Log the lookup call
-        try:
-            from utilities.routelookup import _log_usage
-            _log_usage("FlightAware(lookup)", callsign, None, None)
-        except Exception:
-            pass
-        if r.status_code != 200:
-            print(f"[lookup] FlightAware HTTP {r.status_code} for {callsign}")
-            return []
-        flights = r.json().get("flights", [])
-        print(f"[lookup] FlightAware returned {len(flights)} flights for {callsign}")
-        for f in flights:
-            parsed = _parse_flight(f)
-            sched_dep = parsed.get("time_scheduled_departure")
-            # Only within 24h window
-            if sched_dep and abs(sched_dep - now) > 86400:
-                continue
-            origin = parsed.get("origin_iata", "")
-            dest   = parsed.get("dest_iata", "")
-            if not origin and not dest:
-                continue
-            status = f.get("status", "Scheduled")
-            results.append({
-                "flight_id":           f.get("fa_flight_id", ""),
-                "callsign":            callsign,
-                "registration":        f.get("registration", ""),
-                "aircraft":            f.get("aircraft_type", ""),
-                "airline":             parsed.get("airline_name", ""),
-                "origin":              origin,
-                "destination":         dest,
-                "latitude":            0, "longitude": 0, "altitude": 0,
-                "is_live":             status == "En Route",
-                "status":              status,
-                "scheduled_departure": sched_dep,
-                "cached_route": {
-                    "origin":               origin,
-                    "origin_latitude":      parsed.get("origin_lat"),
-                    "origin_longitude":     parsed.get("origin_lon"),
-                    "destination":          dest,
-                    "destination_latitude": parsed.get("dest_lat"),
-                    "destination_longitude":parsed.get("dest_lon"),
-                    "time_scheduled_departure": sched_dep,
-                    "time_scheduled_arrival":   parsed.get("time_scheduled_arrival"),
-                    "time_real_departure":      parsed.get("time_real_departure"),
-                    "time_estimated_arrival":   parsed.get("time_estimated_arrival"),
-                },
-            })
-    except Exception as e:
-        print(f"[lookup] _fa_lookup_callsign error: {e}")
-        import traceback; traceback.print_exc()
-    return results
-
-
 # --- Routes ---
 
 @app.get("/")
@@ -236,10 +164,12 @@ def tracked_json():
 @app.post("/tracked/lookup")
 def tracked_lookup():
     """
-    Call 1: Look up a callsign.
-    - If airborne: FR24 gRPC live feed → returns position + cached route from FR24 details
-    - If not airborne: FlightAware /flights/{ident} → returns scheduled instances to pick from
-    - Fallback: adsb.lol position only
+    Call 1 of 2 for tracked flights.
+    Queries the configured API cascade (AirLabs → FlightAware → FR24) for all
+    flights matching the callsign, returning scheduled legs so the user can
+    pick the right one (e.g. ORD→LAX vs LAX→JFK for the same flight number).
+    No adsb.lol call is made here — position tracking only begins after the
+    user selects a flight and it goes airborne.
     """
     data     = request.get_json(force=True)
     callsign = data.get("callsign", "").strip().upper()
@@ -247,111 +177,80 @@ def tracked_lookup():
         return jsonify({"found": False, "error": "No callsign provided"})
 
     try:
-        # ── Path 1: FR24 live feed (airborne flights) ──
-        try:
-            from utilities.fr24_unofficial import is_available as _fr24u_ok
-            from utilities.fr24_client import FR24Client
-            if _fr24u_ok():
-                client = FR24Client()
-                flights_raw = client._run_with_client(
-                    lambda fr24: client._find_by_callsign_async(fr24, callsign)
-                )
-                print(f"[lookup] FR24 live: {len(flights_raw) if flights_raw else 0} results for {callsign}")
-                if flights_raw:
-                    from utilities.airports import get_airport_coords as _gac
-                    from utilities.airlines import get_airline_name as _aln
-                    results = []
-                    for f in flights_raw:
-                        airline_icao = f.airline_icao or callsign[:3]
-                        origin_iata  = f.origin_airport_iata or ""
-                        dest_iata    = f.destination_airport_iata or ""
-                        oc = _gac(origin_iata) if origin_iata else {}
-                        dc = _gac(dest_iata)   if dest_iata   else {}
-                        sched_dep = sched_arr = actual_dep = eta = None
-                        if f.flight_id:
-                            try:
-                                details  = client.get_flight_details(f)
-                                schedule = details.get("schedule_info", {})
-                                progress = details.get("flight_progress", {})
-                                sched_dep  = schedule.get("scheduled_departure")
-                                sched_arr  = schedule.get("scheduled_arrival")
-                                actual_dep = schedule.get("actual_departure")
-                                eta        = progress.get("eta") or (f.eta if f.eta else None)
-                                f.set_flight_details(details)
-                            except Exception:
-                                pass
-                        results.append({
-                            "flight_id":           f.flight_id,
-                            "callsign":            f.callsign,
-                            "registration":        f.registration,
-                            "aircraft":            f.aircraft_code,
-                            "airline":             _aln(airline_icao) or f.airline_name or airline_icao,
-                            "origin":              origin_iata,
-                            "destination":         dest_iata,
-                            "latitude":            f.latitude,
-                            "longitude":           f.longitude,
-                            "altitude":            f.altitude,
-                            "is_live":             not f.on_ground and f.altitude > 0,
-                            "status":              "Airborne" if (not f.on_ground and f.altitude > 0) else "Ground",
-                            "scheduled_departure": float(sched_dep) if sched_dep else None,
-                            "cached_route": {
-                                "origin":               origin_iata,
-                                "origin_latitude":      oc.get("lat"),
-                                "origin_longitude":     oc.get("lon"),
-                                "destination":          dest_iata,
-                                "destination_latitude": dc.get("lat"),
-                                "destination_longitude":dc.get("lon"),
-                                "time_scheduled_departure": float(sched_dep)  if sched_dep  else None,
-                                "time_scheduled_arrival":   float(sched_arr)  if sched_arr  else None,
-                                "time_real_departure":      float(actual_dep) if actual_dep else None,
-                                "time_estimated_arrival":   float(eta)        if eta        else None,
-                            },
-                        })
-                    if len(results) == 1:
-                        r = results[0]
-                        return jsonify({"found": True, "multiple": False, "callsign": callsign, "flight": r,
-                                        "summary": f"{r['airline'] or callsign} {r['origin']}→{r['destination']} ({r['status']})"})
-                    elif len(results) > 1:
-                        return jsonify({"found": True, "multiple": True, "callsign": callsign, "flights": results,
-                                        "summary": f"{len(results)} flights found — please select one"})
-        except Exception as e:
-            print(f"[lookup] FR24 live error: {e}")
-            import traceback; traceback.print_exc()
+        from utilities.routelookup import RouteClient
+        rc = RouteClient()
+        flights = rc.get_tracked_flight(callsign)
 
-        # ── Path 2: FlightAware scheduled lookup (not yet airborne) ──
-        results = _fa_lookup_callsign(callsign)
-        if results:
-            if len(results) == 1:
-                r = results[0]
-                dep = r.get("scheduled_departure")
-                dep_str = f" DEP {datetime.fromtimestamp(dep, tz=timezone.utc).strftime('%H:%M UTC')}" if dep else ""
-                return jsonify({"found": True, "multiple": False, "callsign": callsign, "flight": r,
-                                "summary": f"{r['airline'] or callsign} {r['origin']}→{r['destination']} ({r['status']}){dep_str}"})
-            else:
-                return jsonify({"found": True, "multiple": True, "callsign": callsign, "flights": results,
-                                "summary": f"{len(results)} scheduled flights found — please select one"})
-
-        # ── Path 3: adsb.lol position-only fallback ──
-        from utilities.opensky import OpenSkyClient
-        state = OpenSkyClient().find_callsign(callsign)
-        if state:
+        if not flights:
             return jsonify({
-                "found": True, "multiple": False, "callsign": callsign,
-                "flight": {
-                    "flight_id": "", "callsign": callsign,
-                    "registration": state.get("icao24", ""),
-                    "aircraft": "", "airline": "", "origin": "", "destination": "",
-                    "latitude": state.get("latitude"), "longitude": state.get("longitude"),
-                    "altitude": state.get("altitude", 0), "is_live": True,
-                    "status": "Airborne", "scheduled_departure": None, "cached_route": None,
-                },
-                "summary": f"{callsign} is airborne (position only — no route data)",
+                "found":   False,
+                "callsign": callsign,
+                "summary": f"{callsign} not found — check the callsign or try again closer to departure.",
             })
 
-        return jsonify({
-            "found": False, "callsign": callsign,
-            "summary": f"{callsign} not found — check the callsign or try again closer to departure.",
-        })
+        # Normalise to list — some sources return a single dict, others a list
+        if isinstance(flights, dict):
+            flights = [flights]
+
+        # Shape each entry for the picker
+        results = []
+        for f in flights:
+            sched_dep = f.get("time_scheduled_departure") or f.get("scheduled_departure")
+            origin    = f.get("origin", "") or f.get("origin_iata", "")
+            dest      = f.get("destination", "") or f.get("dest_iata", "")
+            airline   = f.get("airline_name", "") or f.get("airline", "")
+            aircraft  = f.get("aircraft_type", "") or f.get("plane", "")
+            is_live   = bool(f.get("is_live"))
+            status    = "Airborne" if is_live else ("Scheduled" if sched_dep else "Unknown")
+
+            # cached_route is stored in tracked_flight.json so overhead.py has
+            # coord data from the moment the flight goes airborne
+            cached_route = {
+                "origin":                   origin,
+                "origin_latitude":          f.get("origin_latitude") or f.get("origin_lat"),
+                "origin_longitude":         f.get("origin_longitude") or f.get("origin_lon"),
+                "destination":              dest,
+                "destination_latitude":     f.get("destination_latitude") or f.get("dest_lat"),
+                "destination_longitude":    f.get("destination_longitude") or f.get("dest_lon"),
+                "time_scheduled_departure": sched_dep,
+                "time_scheduled_arrival":   f.get("time_scheduled_arrival"),
+                "time_real_departure":      f.get("time_real_departure"),
+                "time_estimated_arrival":   f.get("time_estimated_arrival"),
+                "airline_name":             airline,
+                "aircraft_type":            aircraft,
+            }
+
+            results.append({
+                "callsign":            callsign,
+                "flight_id":           f.get("flight_id", ""),
+                "airline":             airline,
+                "origin":              origin,
+                "destination":         dest,
+                "aircraft":            aircraft,
+                "registration":        f.get("registration", ""),
+                "is_live":             is_live,
+                "status":              status,
+                "scheduled_departure": sched_dep,
+                "cached_route":        cached_route,
+            })
+
+        if len(results) == 1:
+            r      = results[0]
+            dep    = r["scheduled_departure"]
+            dep_str = (f" DEP {datetime.fromtimestamp(dep, tz=timezone.utc).strftime('%H:%M UTC')}"
+                       if dep else "")
+            route  = f"{r['origin']}→{r['destination']}" if r["origin"] and r["destination"] else ""
+            summary = "  ·  ".join(filter(None, [
+                r["airline"] or callsign, route, r["aircraft"],
+                dep_str.strip(), "AIRBORNE NOW" if r["is_live"] else "",
+            ]))
+            return jsonify({"found": True, "multiple": False, "callsign": callsign,
+                            "flight": r, "summary": summary})
+
+        # Multiple legs — show picker
+        return jsonify({"found": True, "multiple": True, "callsign": callsign,
+                        "flights": results,
+                        "summary": f"{len(results)} flights found for {callsign} — select a leg"})
 
     except Exception as e:
         print(f"[lookup] Error: {e}")
@@ -660,10 +559,130 @@ def api_usage():
     try:
         with open(os.path.join(BASE_DIR, "api_usage.json"), "r") as f:
             data = json.load(f)
-        data.setdefault("FR24Unofficial", 0)
         return jsonify(data)
     except Exception:
-        return jsonify({"FlightStats": 0, "AirLabs": 0, "FlightAware": 0.0, "FR24Unofficial": 0})
+        return jsonify({"AirLabs": 0, "FlightAware": 0.0, "FR24": 0})
+
+@app.get("/api/wifi/status")
+def wifi_status():
+    """Return current WiFi connection info via nmcli."""
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,SECURITY",
+             "device", "wifi", "list"],
+            capture_output=True, text=True, timeout=10
+        )
+        networks = []
+        connected_ssid = None
+        seen = set()
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            active   = parts[0]
+            ssid     = parts[1]
+            signal   = parts[2]
+            security = ":".join(parts[3:])
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            entry = {
+                "ssid":     ssid,
+                "signal":   int(signal) if signal.isdigit() else 0,
+                "security": security.strip(),
+                "active":   active == "yes",
+            }
+            if active == "yes":
+                connected_ssid = ssid
+            networks.append(entry)
+        networks.sort(key=lambda x: x["signal"], reverse=True)
+
+        ip_result = subprocess.run(
+            ["nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", "wlan0"],
+            capture_output=True, text=True, timeout=5
+        )
+        ip_addr = ""
+        for line in ip_result.stdout.splitlines():
+            if "IP4.ADDRESS" in line:
+                ip_addr = line.split(":")[-1].split("/")[0].strip()
+                break
+
+        return jsonify({
+            "connected_ssid": connected_ssid,
+            "ip_address":     ip_addr,
+            "networks":       networks,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/api/wifi/scan")
+def wifi_scan():
+    """Trigger a fresh nmcli scan and return updated network list."""
+    try:
+        subprocess.run(
+            ["sudo", "nmcli", "device", "wifi", "rescan"],
+            capture_output=True, text=True, timeout=15
+        )
+        time.sleep(2)
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,SECURITY",
+             "device", "wifi", "list"],
+            capture_output=True, text=True, timeout=10
+        )
+        networks = []
+        seen = set()
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            active   = parts[0]
+            ssid     = parts[1]
+            signal   = parts[2]
+            security = ":".join(parts[3:])
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            networks.append({
+                "ssid":     ssid,
+                "signal":   int(signal) if signal.isdigit() else 0,
+                "security": security.strip(),
+                "active":   active == "yes",
+            })
+        networks.sort(key=lambda x: x["signal"], reverse=True)
+        return jsonify({"networks": networks})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/api/wifi/connect")
+def wifi_connect():
+    """Connect to a WiFi network. Body: { ssid, password }"""
+    try:
+        data     = request.get_json(force=True) or {}
+        ssid     = (data.get("ssid")     or "").strip()
+        password = (data.get("password") or "").strip()
+        if not ssid:
+            return jsonify({"success": False, "error": "SSID is required"}), 400
+        cmd = ["sudo", "nmcli", "device", "wifi", "connect", ssid]
+        if password:
+            cmd += ["password", password]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return jsonify({"success": True, "message": f"Connected to {ssid}"})
+        else:
+            err = (result.stderr or result.stdout).strip()
+            return jsonify({"success": False, "error": err})
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            "success": True,
+            "switched": True,
+            "message": "Connection in progress. The Pi may have switched networks — "
+                       "reconnect your device and navigate to the Pi's new IP.",
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
