@@ -15,6 +15,7 @@ Usage:
 import csv
 import json
 import os
+import threading
 import requests
 from io import StringIO
 
@@ -29,6 +30,7 @@ CACHE_VERSION = 2
 # In-memory lookup: both IATA and ICAO -> {lat, lon}
 _db = {}
 _loaded = False
+_load_lock = threading.Lock()
 
 
 def _download_and_build():
@@ -75,30 +77,28 @@ def _download_and_build():
 
 
 def _load():
-    """Load from cache file or download if not present."""
+    """Load from cache file or download if not present. Thread-safe."""
     global _db, _loaded
     if _loaded:
         return
-
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-
-            # Versioned cache (v2+): {"_version": N, "airports": {...}}
-            if isinstance(raw, dict) and raw.get("_version") == CACHE_VERSION:
-                _db = raw.get("airports", {})
-                _loaded = True
-                return
-            else:
-                # Stale or unversioned cache — rebuild
-                version_found = raw.get("_version", "none") if isinstance(raw, dict) else "legacy"
-                print(f"[Airports] Cache version mismatch (found: {version_found}, need: {CACHE_VERSION}) — rebuilding")
-        except Exception as e:
-            print(f"[Airports] Cache load failed: {e} — re-downloading")
-
-    _db = _download_and_build()
-    _loaded = True
+    with _load_lock:
+        if _loaded:
+            return
+        if os.path.exists(CACHE_FILE):
+            try:
+                with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict) and raw.get("_version") == CACHE_VERSION:
+                    _db = raw.get("airports", {})
+                    _loaded = True
+                    return
+                else:
+                    version_found = raw.get("_version", "none") if isinstance(raw, dict) else "legacy"
+                    print(f"[Airports] Cache version mismatch (found: {version_found}, need: {CACHE_VERSION}) — rebuilding")
+            except Exception as e:
+                print(f"[Airports] Cache load failed: {e} — re-downloading")
+        _db = _download_and_build()
+        _loaded = True
 
 
 def get_airport_coords(code):

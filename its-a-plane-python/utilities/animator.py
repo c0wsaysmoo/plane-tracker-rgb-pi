@@ -79,8 +79,8 @@ if __name__ == "__main__":
         def method2(self, frame):
             print(f"method2 {frame}")
 
-    myclass = Test(1)
-    myclass.run()
+    myclass = Test()
+    myclass.play()
 
     while 1:
         sleep(5)
