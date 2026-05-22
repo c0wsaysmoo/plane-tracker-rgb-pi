@@ -29,6 +29,17 @@ class DaysForecastScene(object):
         self._last_hour = None
         self._cached_forecast = None
 
+        # Pre-load forecast from disk cache (survives reboots).
+        # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+        try:
+            import time as _time
+            from utilities.temperature import _load_file_cache, _FORECAST_CACHE_FILE
+            cached, ts = _load_file_cache(_FORECAST_CACHE_FILE)
+            if cached and (_time.time() - ts) < 7200:  # 2-hour TTL
+                self._cached_forecast = cached
+        except Exception:
+            pass
+
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
         # Ensure redraw when there's new scene selection or midnight brightness events

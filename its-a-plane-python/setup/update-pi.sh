@@ -10,7 +10,13 @@
 #
 set -e
 
-REPO_DIR="$HOME/plane-tracker-rgb-pi"
+# When run with sudo, $HOME is /root — resolve the real user's home
+if [ -n "${SUDO_USER:-}" ]; then
+    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    USER_HOME="$HOME"
+fi
+REPO_DIR="$USER_HOME/plane-tracker-rgb-pi"
 FORK_URL="https://github.com/a10kiloham/plane-tracker-rgb-pi.git"
 ENV_DEST="/etc/plane-tracker.env"
 
@@ -61,7 +67,7 @@ echo "==> Installing Python dependencies into venv..."
 "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" 2>&1 | tail -5
 
 # Install rgbmatrix from source if the rpi-rgb-led-matrix repo exists
-RGB_MATRIX_DIR="$HOME/rpi-rgb-led-matrix"
+RGB_MATRIX_DIR="$USER_HOME/rpi-rgb-led-matrix"
 if [ -d "$RGB_MATRIX_DIR/bindings/python" ]; then
     echo "==> Installing rgbmatrix Python bindings into venv..."
     cd "$RGB_MATRIX_DIR/bindings/python"

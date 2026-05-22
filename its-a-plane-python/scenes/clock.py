@@ -21,6 +21,24 @@ class ClockScene(object):
         self.last_fetch_date = None  # Store the date of the last forecast fetch
         self._forecast_retry_after = 0  # Epoch time: don't retry before this
 
+        # Pre-load sunrise/sunset from disk cache (survives reboots).
+        # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+        try:
+            from utilities.temperature import _load_file_cache
+            import os, time as _time
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
+            suntimes_file = os.path.join(cache_dir, "suntimes.json")
+            cached, ts = _load_file_cache(suntimes_file)
+            if cached and (_time.time() - ts) < 86400:  # 24-hour TTL
+                sr = datetime.strptime(cached["sunrise"], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                ss = datetime.strptime(cached["sunset"], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                self.today_sunrise = sr
+                self.today_sunset = ss
+                self.last_fetch_date = datetime.now().date()
+                logging.info(f"Clock: loaded cached sunrise/sunset from disk")
+        except Exception:
+            pass  # First boot or corrupt cache — will fetch from API
+
     def calculate_sunrise_sunset(self):
         now = datetime.now()
 
@@ -48,6 +66,19 @@ class ClockScene(object):
                         self.today_sunrise = utc_sunrise
                         self.today_sunset = utc_sunset
                         self.last_fetch_date = now.date()
+
+                        # Persist to disk for reboot survival
+                        try:
+                            from utilities.temperature import _save_file_cache
+                            import os
+                            cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
+                            suntimes_file = os.path.join(cache_dir, "suntimes.json")
+                            _save_file_cache(suntimes_file, {
+                                "sunrise": day['values']['sunriseTime'],
+                                "sunset": day['values']['sunsetTime'],
+                            })
+                        except Exception:
+                            pass
 
         except Exception as e:
             logging.error(f"Error fetching forecast: {e}")
