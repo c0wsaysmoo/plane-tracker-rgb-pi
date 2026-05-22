@@ -297,6 +297,31 @@ This is what I used to make mine. Other than the Pi and the Bonnet you can use w
 
 ---
 
+## Getting Your API Keys
+
+Before starting the setup, sign up for the following APIs. The free tiers are sufficient to get started.
+
+| Service | Purpose | Sign Up |
+|---|---|---|
+| **Tomorrow.io** | Weather data | [app.tomorrow.io/signup](https://app.tomorrow.io/signup) |
+| **OpenSky Network** | Primary flight detection (required) | [opensky-network.org](https://opensky-network.org/) |
+| **AirLabs** | Route & status data (1,000 free credits/mo) | [airlabs.co/signup](https://airlabs.co/signup) |
+| **FlightAware AeroAPI** | Route lookup fallback ($5 free credit/mo which is about 1,000 calls) | [flightaware.com/aeroapi/signup/personal](https://www.flightaware.com/aeroapi/signup/personal) |
+| **Flight Radar 24** | Route lookup fallback ($9 subscription a month but 30,000 calls.) | [fr24api.flightradar24.com/docs/getting-started](https://fr24api.flightradar24.com/docs/getting-started). |
+
+Have these keys handy — you'll enter them in the config file during Step 13.
+
+Each provider offers free credits that the system will automatically rotate through before moving to the next tier. You can stack multiple keys from the same provider to extend your capacity.
+
+- **Single key for both AirLabs + FlightAware** → ~66 flights/day
+- **Two keys for both AirLabs + FlightAware** → ~130 flights/day, and so on
+
+FlightRadar24 is a paid tier at $9/mo for 30,000 calls — more than enough for several users sharing a single key, especially when combined with AirLabs and FlightAware free credits.
+
+The config page (`hostname.local:8080/config`) keeps a running tally of your API usage for each service, and the stats page shows your daily flight average so you can estimate how many credits you'll need per month. If you run out of credits the tracker will still work, but route information won't be displayed.
+
+---
+
 # Plane Tracker RGB Pi Setup Guide
 
 Once you get your Raspberry Pi up and running, you can follow [this guide](https://linuxconfig.org/enabling-ssh-on-raspberry-pi-a-comprehensive-guide) to set up the project. 
