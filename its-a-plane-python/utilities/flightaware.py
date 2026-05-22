@@ -261,22 +261,48 @@ def get_tracked_flight(callsign):
         if not flights:
             return None
 
-        f = next(
-            (fl for fl in flights if fl.get("status") == "En Route"),
-            flights[0]
+        from datetime import datetime, timezone, timedelta
+        now_utc = datetime.now(timezone.utc)
+
+        def _departed_recently(fl):
+            actual = fl.get("actual_out") or fl.get("estimated_out")
+            if not actual:
+                return False
+            try:
+                dep = datetime.fromisoformat(actual.replace("Z", "+00:00"))
+                return timedelta(0) <= (now_utc - dep) <= timedelta(hours=12)
+            except Exception:
+                return False
+
+        f = (
+            next((fl for fl in flights
+                  if fl.get("status") == "En Route"
+                  and _departed_recently(fl)
+                  and fl.get("origin") and fl.get("destination")), None)
+            or next((fl for fl in flights
+                  if fl.get("status") == "En Route"
+                  and fl.get("origin") and fl.get("destination")), None)
+            or next((fl for fl in sorted(flights,
+                     key=lambda x: x.get("actual_out") or x.get("scheduled_out") or "",
+                     reverse=True)
+                  if _departed_recently(fl)
+                  and fl.get("origin") and fl.get("destination")), None)
+            or next((fl for fl in flights if fl.get("origin") and fl.get("destination")), None)
+            or flights[0]
         )
 
         parsed = _parse_flight(f)
         lat = f.get("last_position", {}).get("latitude")
         lon = f.get("last_position", {}).get("longitude")
         has_position = lat is not None and lon is not None
+        is_live = has_position or (bool(f.get("actual_off")) and not f.get("actual_on"))
 
 
         return {
             "callsign":      callsign,
             "number":        f.get("ident", callsign),
             "airline_name":  parsed["airline_name"],
-            "is_live":       has_position,
+            "is_live":       is_live,
             "origin":        parsed["origin_iata"],
             "destination":   parsed["dest_iata"],
             "dest_lat":      parsed["dest_lat"],

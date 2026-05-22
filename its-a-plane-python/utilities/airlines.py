@@ -34,6 +34,7 @@ _OVERRIDES = {
 }
 
 _db               = {}
+_icao_to_iata_map = {}   # 3-letter ICAO → 2-letter IATA, built lazily
 _loaded           = False
 _last_refresh     = 0.0      # epoch seconds of last successful download
 _REFRESH_COOLDOWN = 86400    # only re-download once per 24 hours on a miss
@@ -70,6 +71,16 @@ def _download_and_build():
         return dict(_OVERRIDES)
 
 
+def _build_icao_iata_map():
+    global _icao_to_iata_map
+    name_to_iata = {name: code for code, name in _db.items() if len(code) == 2}
+    _icao_to_iata_map = {
+        code: name_to_iata[name]
+        for code, name in _db.items()
+        if len(code) == 3 and name in name_to_iata
+    }
+
+
 def _load():
     global _db, _loaded
     if _loaded:
@@ -79,11 +90,20 @@ def _load():
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 _db = json.load(f)
             _loaded = True
+            _build_icao_iata_map()
             return
         except Exception:
             pass
     _db = _download_and_build()
     _loaded = True
+    _build_icao_iata_map()
+
+
+def airline_icao_to_iata(icao3):
+    """Convert 3-letter airline ICAO code to 2-letter IATA code (e.g. DAL → DL)."""
+    if not _icao_to_iata_map:
+        _load()
+    return _icao_to_iata_map.get(icao3.upper(), "")
 
 
 def get_airline_name(icao):
