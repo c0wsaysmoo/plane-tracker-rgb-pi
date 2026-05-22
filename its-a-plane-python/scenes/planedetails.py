@@ -12,28 +12,18 @@ PLANE_TEXT_HEIGHT = 6
 PLANE_FONT = fonts.small
 
 # 8-point compass heading arrows (N=0/360, clockwise)
-_HEADING_ARROWS = [
-    (337.5, 360, "\u2191"),  # N  ↑
-    (0, 22.5, "\u2191"),     # N  ↑
-    (22.5, 67.5, "\u2197"),  # NE ↗
-    (67.5, 112.5, "\u2192"), # E  →
-    (112.5, 157.5, "\u2198"),# SE ↘
-    (157.5, 202.5, "\u2193"),# S  ↓
-    (202.5, 247.5, "\u2199"),# SW ↙
-    (247.5, 292.5, "\u2190"),# W  ←
-    (292.5, 337.5, "\u2196"),# NW ↖
-]
+# Concept from c0wsaysmoo/plane-tracker-rgb-pi
+_HEADING_ARROWS = ["\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196"]
 
 
 def _heading_to_arrow(heading):
     """Convert numeric heading (0-360) to Unicode arrow character."""
     if heading is None:
         return ""
-    heading = heading % 360
-    for lo, hi, arrow in _HEADING_ARROWS:
-        if lo <= heading < hi:
-            return arrow
-    return ""
+    try:
+        return _HEADING_ARROWS[int((float(heading) + 22.5) / 45) % 8]
+    except (TypeError, ValueError):
+        return ""
 
 
 class PlaneDetailsScene(object):
