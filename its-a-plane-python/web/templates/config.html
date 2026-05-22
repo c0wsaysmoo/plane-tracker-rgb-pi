@@ -123,6 +123,57 @@
   .loading { text-align: center; padding: 40px; color: var(--amber-dim);
     font-family: 'VT323', monospace; font-size: 24px; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  /* ── WiFi ─────────────────────────────────────────────────────────────── */
+  .wifi-status-bar {
+    display: flex; flex-wrap: wrap; gap: 0.25rem 2rem;
+    background: rgba(255,179,0,0.04); border: 1px solid rgba(255,179,0,0.12);
+    border-radius: 2px; padding: 10px 14px; margin-bottom: 12px;
+  }
+  .wifi-stat { display: flex; flex-direction: column; gap: 3px; }
+  .wifi-stat-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--amber-dim); }
+  .wifi-stat-value { font-family: 'VT323', monospace; font-size: 22px; color: var(--amber); letter-spacing: 1px; }
+  .wifi-stat-value.connected    { color: var(--green); }
+  .wifi-stat-value.disconnected { color: var(--red); }
+  .wifi-scan-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .wifi-hint { font-size: 11px; letter-spacing: 1px; color: var(--amber-dim); }
+  .wifi-network-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-bottom: 1px solid var(--row-border);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .wifi-network-row:hover { background: rgba(255,179,0,0.05); }
+  .wifi-network-row.wifi-active-row { border-left: 3px solid var(--green); padding-left: 7px; }
+  .wifi-ssid { flex: 1; font-size: 13px; letter-spacing: 1px; color: var(--amber); }
+  .wifi-ssid.wifi-active-ssid { color: var(--green); }
+  .wifi-meta { font-size: 11px; color: var(--amber-dim); white-space: nowrap; }
+  .wifi-manual-toggle {
+    margin-top: 12px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--amber-dim); cursor: pointer; user-select: none;
+  }
+  .wifi-manual-toggle:hover { color: var(--amber); }
+  .wifi-result {
+    margin-top: 10px; padding: 8px 12px; font-size: 12px; letter-spacing: 1px;
+    border-radius: 2px;
+  }
+  .wifi-result.ok   { background: rgba(105,240,174,0.07); border: 1px solid rgba(105,240,174,0.25); color: var(--green); }
+  .wifi-result.err  { background: rgba(255,61,0,0.07);   border: 1px solid rgba(255,61,0,0.25);   color: var(--red); }
+  .wifi-result.info { background: rgba(255,179,0,0.05);  border: 1px solid rgba(255,179,0,0.18);  color: var(--amber); }
+  .wifi-switch-warn {
+    margin-top: 10px; padding: 10px 14px; font-size: 12px; letter-spacing: 1px; line-height: 1.6;
+    background: rgba(255,152,0,0.06); border: 1px solid rgba(255,152,0,0.3); color: #ff9800;
+  }
+  .btn-wifi-connect {
+    background: rgba(255,179,0,0.12); border: 1px solid var(--amber);
+    color: var(--amber-bright); font-family: 'VT323', monospace; font-size: 18px;
+    letter-spacing: 2px; padding: 5px 16px; cursor: pointer; text-transform: uppercase;
+  }
+  .btn-wifi-connect:hover { background: rgba(255,179,0,0.22); }
+  .btn-eye {
+    background: transparent; border: 1px solid var(--amber-dim); color: var(--amber-dim);
+    font-size: 14px; padding: 4px 8px; cursor: pointer;
+  }
+  .btn-eye:hover { border-color: var(--amber); color: var(--amber); }
 </style>
 </head>
 <body>
@@ -166,10 +217,8 @@ let _cfg = {};
 let _sec = {};
 
 const _ALL_SOURCES = [
-  {id:"FlightStats", label:"FlightStats",  hint:"Free scraper — no key needed, best for scheduled airlines"},
   {id:"AirLabs",     label:"AirLabs",      hint:"Free tier 1,000 calls/month — requires API key"},
   {id:"FlightAware", label:"FlightAware",  hint:"Free $5 credit ~1,000 calls/month — requires API key"},
-  {id:"FR24Unofficial", label:"FR24 Unofficial", hint:"Free gRPC scraper — requires: pip install fr24 h2 hpack"},
   {id:"FR24",        label:"FR24",         hint:"Paid — 1 credit per flight, most reliable fallback"},
 ];
 
@@ -234,6 +283,7 @@ async function loadConfig() {
     _cfg = d.config || {};
     _sec = d.secrets || {};
     renderForm();
+    if (window._wifiLoadStatus) window._wifiLoadStatus();
     document.getElementById('ticker').textContent =
       `Config loaded — ${new Date().toLocaleTimeString()}  |  Edit any field and click Save & Apply`;
     document.getElementById('btn-save').disabled = false;
@@ -348,6 +398,18 @@ function renderForm() {
           <label for="hat_pwm_enabled">HAT PWM Enabled (soldered bridge)</label>
         </div>
         <div class="field">
+          <label>LED RGB Order</label>
+          <select id="led_rgb_sequence">
+            <option value="RGB" ${(disp.led_rgb_sequence||'RGB')==='RGB'?'selected':''}>RGB (most panels)</option>
+            <option value="RBG" ${(disp.led_rgb_sequence||'')==='RBG'?'selected':''}>RBG (some panels)</option>
+            <option value="GRB" ${(disp.led_rgb_sequence||'')==='GRB'?'selected':''}>GRB</option>
+            <option value="GBR" ${(disp.led_rgb_sequence||'')==='GBR'?'selected':''}>GBR</option>
+            <option value="BRG" ${(disp.led_rgb_sequence||'')==='BRG'?'selected':''}>BRG</option>
+            <option value="BGR" ${(disp.led_rgb_sequence||'')==='BGR'?'selected':''}>BGR</option>
+          </select>
+          <div class="hint">Change if colours look wrong — requires app restart</div>
+        </div>
+        <div class="field">
           <label>Forecast Days</label>
           <input id="forecast_days" type="number" min="1" max="5" value="${disp.forecast_days??3}">
         </div>
@@ -426,11 +488,6 @@ function renderForm() {
             <input id="flightradar24_key" value="${_sec.flightradar24_key||''}">
           </div>
           <div class="field">
-            <label>FR24 Unofficial Key (optional)</label>
-            <input id="fr24_unofficial_key" value="${_sec.fr24_unofficial_key||''}">
-            <div class="hint">Format: subscription_key|jwt_token — leave blank for anonymous</div>
-          </div>
-          <div class="field">
             <label>OpenSky Client ID</label>
             <input id="opensky_client_id" value="${_sec.opensky_client_id||''}">
           </div>
@@ -457,11 +514,84 @@ function renderForm() {
         </div>
       </div>
     </div>
+    <!-- WiFi -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">▸ Wi-Fi</div>
+      <div class="section-body single" style="padding:16px">
+
+        <div class="wifi-status-bar">
+          <div class="wifi-stat">
+            <div class="wifi-stat-label">Network</div>
+            <div class="wifi-stat-value" id="wifi-ssid">—</div>
+          </div>
+          <div class="wifi-stat">
+            <div class="wifi-stat-label">IP Address</div>
+            <div class="wifi-stat-value" id="wifi-ip">—</div>
+          </div>
+          <div class="wifi-stat">
+            <div class="wifi-stat-label">Signal</div>
+            <div class="wifi-stat-value" id="wifi-signal">—</div>
+          </div>
+          <div class="wifi-stat">
+            <div class="wifi-stat-label">Status</div>
+            <div class="wifi-stat-value" id="wifi-conn-status">LOADING…</div>
+          </div>
+        </div>
+
+        <div class="wifi-scan-row">
+          <button class="btn btn-reset" id="wifi-scan-btn" onclick="wifiScan()" style="font-size:16px;padding:5px 16px">
+            ⟳ &nbsp;Scan for Networks
+          </button>
+          <span class="wifi-hint" id="wifi-scan-hint"></span>
+        </div>
+
+        <div id="wifi-network-list" style="display:none;border:1px solid var(--amber-dim);margin-top:4px"></div>
+
+        <div class="wifi-manual-toggle" onclick="wifiToggleManual()">
+          <span id="wifi-manual-arrow">▸</span> Manual entry
+        </div>
+        <div id="wifi-manual-section" style="display:none;margin-top:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field">
+              <label>SSID</label>
+              <input id="wifi-manual-ssid" type="text" placeholder="Network name"
+                     autocomplete="off" spellcheck="false">
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <div style="display:flex;gap:6px">
+                <input id="wifi-manual-password" type="password"
+                       placeholder="Leave blank for open network"
+                       autocomplete="new-password" style="flex:1">
+                <button class="btn-eye" onclick="wifiTogglePw('wifi-manual-password')">👁</button>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <button class="btn-wifi-connect" onclick="wifiConnectManual()">Connect</button>
+          </div>
+        </div>
+
+        <div id="wifi-result" class="wifi-result" style="display:none"></div>
+
+        <div class="wifi-switch-warn" id="wifi-switch-warn" style="display:none">
+          ⚠  &nbsp;You are connecting to a <strong>different network</strong>.
+          This page will go offline — reconnect your device to the new network
+          and navigate to the Pi's new IP address.<br><br>
+          <button class="btn-wifi-connect" id="wifi-confirm-btn" onclick="wifiConfirmSwitch()">
+            Connect Anyway
+          </button>
+          &nbsp;
+          <button class="btn btn-reset" onclick="wifiCancelSwitch()" style="font-size:16px;padding:5px 14px">Cancel</button>
+        </div>
+
+      </div>
+    </div>
   `;
 
   // Render API sources
   const apis = _cfg.api_sources || {};
-  renderApiSources(apis.order || ["FlightStats","AirLabs","FlightAware","FR24Unofficial","FR24"], apis.enabled || {});
+  renderApiSources(apis.order || ["AirLabs","FlightAware","FR24"], apis.enabled || {});
 }
 
 function renderKeysList(name, keys) {
@@ -534,14 +664,15 @@ function collectConfig() {
         },
       },
       display: {
-        brightness:       gi('brightness'),
-        brightness_night: gi('brightness_night'),
-        night_brightness: gc('night_brightness'),
-        night_start:      gv('night_start'),
-        night_end:        gv('night_end'),
-        gpio_slowdown:    gi('gpio_slowdown'),
-        hat_pwm_enabled:  gc('hat_pwm_enabled'),
-        forecast_days:    gi('forecast_days'),
+        brightness:        gi('brightness'),
+        brightness_night:  gi('brightness_night'),
+        night_brightness:  gc('night_brightness'),
+        night_start:       gv('night_start'),
+        night_end:         gv('night_end'),
+        gpio_slowdown:     gi('gpio_slowdown'),
+        hat_pwm_enabled:   gc('hat_pwm_enabled'),
+        led_rgb_sequence:  gv('led_rgb_sequence'),
+        forecast_days:     gi('forecast_days'),
       },
       flights: {
         min_altitude: gi('min_altitude'),
@@ -569,7 +700,6 @@ function collectConfig() {
       flightaware_api_keys:      getKeys('flightaware'),
       flightaware_monthly_limit: gf('flightaware_monthly_limit'),
       flightradar24_key:         gv('flightradar24_key'),
-      fr24_unofficial_key:       gv('fr24_unofficial_key'),
     }
   };
 }
@@ -623,6 +753,193 @@ function setStatus(msg, cls) {
   el.className = cls;
 }
 
+// ── WiFi ──────────────────────────────────────────────────────────────────
+(function () {
+  'use strict';
+  let _currentSsid  = null;
+  let _pendingSsid  = null;
+  let _pendingPw    = null;
+  let _manualOpen   = false;
+
+  function signalBars(pct) {
+    if (pct >= 80) return '▂▄▆█';
+    if (pct >= 55) return '▂▄▆·';
+    if (pct >= 30) return '▂▄··';
+    if (pct >= 10) return '▂···';
+    return '····';
+  }
+
+  function showWifiResult(msg, type) {
+    const el = document.getElementById('wifi-result');
+    el.textContent = msg;
+    el.className   = 'wifi-result ' + type;
+    el.style.display = 'block';
+  }
+
+  async function wifiLoadStatus() {
+    try {
+      const d = await fetch('/api/wifi/status').then(r => r.json());
+      if (d.error) throw new Error(d.error);
+      _currentSsid = d.connected_ssid || null;
+
+      const ssidEl = document.getElementById('wifi-ssid');
+      const ipEl   = document.getElementById('wifi-ip');
+      const sigEl  = document.getElementById('wifi-signal');
+      const stEl   = document.getElementById('wifi-conn-status');
+
+      if (_currentSsid) {
+        ssidEl.textContent = _currentSsid;
+        ssidEl.className   = 'wifi-stat-value connected';
+        stEl.textContent   = 'CONNECTED';
+        stEl.className     = 'wifi-stat-value connected';
+        const cur = (d.networks || []).find(n => n.active);
+        sigEl.textContent  = cur ? signalBars(cur.signal) + ' ' + cur.signal + '%' : '—';
+      } else {
+        ssidEl.textContent = 'NOT CONNECTED';
+        ssidEl.className   = 'wifi-stat-value disconnected';
+        stEl.textContent   = 'DISCONNECTED';
+        stEl.className     = 'wifi-stat-value disconnected';
+        sigEl.textContent  = '—';
+      }
+      ipEl.textContent = d.ip_address || '—';
+    } catch(e) {
+      const el = document.getElementById('wifi-conn-status');
+      if (el) el.textContent = 'ERROR';
+    }
+  }
+
+  window.wifiScan = async function () {
+    const btn  = document.getElementById('wifi-scan-btn');
+    const hint = document.getElementById('wifi-scan-hint');
+    btn.disabled    = true;
+    btn.textContent = '⟳  Scanning…';
+    hint.textContent = '';
+    document.getElementById('wifi-network-list').style.display = 'none';
+    try {
+      const d = await fetch('/api/wifi/scan').then(r => r.json());
+      if (d.error) throw new Error(d.error);
+      renderNetworkList(d.networks || []);
+      hint.textContent = (d.networks || []).length + ' networks found';
+    } catch(e) {
+      hint.textContent = 'Scan failed: ' + e.message;
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = '⟳  Scan for Networks';
+    }
+  };
+
+  function renderNetworkList(networks) {
+    const container = document.getElementById('wifi-network-list');
+    container.innerHTML = '';
+    if (!networks.length) {
+      container.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--amber-dim)">No networks found</div>';
+      container.style.display = 'block';
+      return;
+    }
+    networks.forEach(net => {
+      const row  = document.createElement('div');
+      row.className = 'wifi-network-row' + (net.active ? ' wifi-active-row' : '');
+      const lock = (net.security && net.security !== '--') ? '🔒' : '🔓';
+      row.innerHTML = `
+        <span style="font-family:'VT323',monospace;font-size:18px;letter-spacing:-2px">${signalBars(net.signal)}</span>
+        <span class="wifi-ssid${net.active ? ' wifi-active-ssid' : ''}">${net.ssid}${net.active ? ' ✓' : ''}</span>
+        <span class="wifi-meta">${lock} ${net.signal}%</span>
+      `;
+      if (!net.active) row.addEventListener('click', () => wifiSelectNetwork(net));
+      container.appendChild(row);
+    });
+    container.style.display = 'block';
+  }
+
+  function wifiSelectNetwork(net) {
+    _pendingSsid = net.ssid;
+    _pendingPw   = null;
+    document.getElementById('wifi-result').style.display      = 'none';
+    document.getElementById('wifi-switch-warn').style.display = 'none';
+    const needsPw = net.security && net.security !== '--';
+    if (needsPw) {
+      document.getElementById('wifi-manual-ssid').value     = net.ssid;
+      document.getElementById('wifi-manual-password').value = '';
+      if (!_manualOpen) wifiToggleManual();
+      document.getElementById('wifi-manual-password').focus();
+      showWifiResult('Selected: ' + net.ssid + ' — enter password below and click Connect', 'info');
+      return;
+    }
+    if (net.ssid !== _currentSsid) {
+      document.getElementById('wifi-switch-warn').style.display = 'block';
+      return;
+    }
+    wifiDoConnect(net.ssid, '');
+  }
+
+  window.wifiConnectManual = function () {
+    const ssid = document.getElementById('wifi-manual-ssid').value.trim();
+    const pw   = document.getElementById('wifi-manual-password').value;
+    if (!ssid) { showWifiResult('Please enter an SSID.', 'err'); return; }
+    _pendingSsid = ssid;
+    _pendingPw   = pw;
+    if (ssid !== _currentSsid) {
+      document.getElementById('wifi-switch-warn').style.display = 'block';
+      return;
+    }
+    wifiDoConnect(ssid, pw);
+  };
+
+  window.wifiConfirmSwitch = function () {
+    document.getElementById('wifi-switch-warn').style.display = 'none';
+    const pw = _pendingPw !== null
+      ? _pendingPw
+      : document.getElementById('wifi-manual-password').value;
+    wifiDoConnect(_pendingSsid, pw);
+  };
+
+  window.wifiCancelSwitch = function () {
+    document.getElementById('wifi-switch-warn').style.display = 'none';
+    _pendingSsid = _pendingPw = null;
+  };
+
+  async function wifiDoConnect(ssid, password) {
+    showWifiResult('Connecting to ' + ssid + '…', 'info');
+    const confirmBtn = document.getElementById('wifi-confirm-btn');
+    if (confirmBtn) confirmBtn.disabled = true;
+    try {
+      const d = await fetch('/api/wifi/connect', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ssid, password}),
+      }).then(r => r.json());
+      if (d.switched) {
+        showWifiResult('✓ Connecting — Pi may have switched networks. Reconnect and find the Pi at its new IP.', 'info');
+        return;
+      }
+      if (d.success) {
+        showWifiResult('✓ Connected to ' + ssid, 'ok');
+        wifiLoadStatus();
+      } else {
+        showWifiResult('✗ ' + (d.error || 'Connection failed'), 'err');
+      }
+    } catch(e) {
+      showWifiResult('✓ Connection in progress — page may be offline because the Pi switched networks.', 'info');
+    } finally {
+      if (confirmBtn) confirmBtn.disabled = false;
+      _pendingSsid = _pendingPw = null;
+    }
+  }
+
+  window.wifiToggleManual = function () {
+    _manualOpen = !_manualOpen;
+    document.getElementById('wifi-manual-section').style.display = _manualOpen ? 'block' : 'none';
+    document.getElementById('wifi-manual-arrow').textContent     = _manualOpen ? '▾' : '▸';
+  };
+
+  window.wifiTogglePw = function (id) {
+    const el = document.getElementById(id);
+    el.type  = el.type === 'password' ? 'text' : 'password';
+  };
+
+  window._wifiLoadStatus = wifiLoadStatus;
+})();
+
 loadConfig();
 loadSystemStatus();
 
@@ -646,10 +963,9 @@ async function loadSystemStatus() {
     const tempStr = tempC != null ? `${tempC}°C / ${tempF}°F` : '—';
     const tempWarn = tempC != null && tempC >= 70;
 
-    const fr  = usage.FR24Unofficial ?? 0;
-    const fs  = usage.FlightStats    ?? 0;
     const al  = usage.AirLabs        ?? 0;
     const fa  = usage.FlightAware     ?? 0;
+    const fr  = usage.FR24            ?? 0;
     const mon = usage.month           ?? '';
 
     document.getElementById('system-status').innerHTML = `
@@ -670,16 +986,6 @@ async function loadSystemStatus() {
           <div style="font-family:'VT323',monospace;font-size:24px;color:${tempWarn?'var(--red)':'var(--amber-bright)'}">${tempStr}${tempWarn?' ⚠':''}</div>
         </div>
 
-        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 UNOFFICIAL ${mon}</div>
-          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fr} <span style="font-size:13px;color:var(--amber-dim)">calls</span></div>
-        </div>
-
-        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FLIGHTSTATS ${mon}</div>
-          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fs} <span style="font-size:13px;color:var(--amber-dim)">calls</span></div>
-        </div>
-
         <div style="border:1px solid var(--amber-dim);border-top:2px solid ${al>=900?'var(--red)':'var(--amber)'};padding:10px 12px">
           <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">AIRLABS ${mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:${al>=900?'var(--red)':'var(--amber-bright)'}">${al}<span style="font-size:13px;color:var(--amber-dim)">/1,000${al>=900?' ⚠':''}</span></div>
@@ -688,6 +994,11 @@ async function loadSystemStatus() {
         <div style="border:1px solid var(--amber-dim);border-top:2px solid ${fa>=4.5?'var(--red)':'var(--amber)'};padding:10px 12px">
           <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FLIGHTAWARE ${mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:${fa>=4.5?'var(--red)':'var(--amber-bright)'}">$${fa.toFixed(2)}<span style="font-size:13px;color:var(--amber-dim)">/$5.00${fa>=4.5?' ⚠':''}</span></div>
+        </div>
+
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 ${mon}</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fr}<span style="font-size:13px;color:var(--amber-dim)"> credits</span></div>
         </div>
 
       </div>

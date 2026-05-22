@@ -436,14 +436,19 @@
   setInterval(updateClock, 1000);
 
   let pendingCallsign = "";
-  let pendingCachedRoute = null;
 
   async function loadCurrent() {
     try {
       const res  = await fetch("/tracked/json");
       const data = await res.json();
       const el   = document.getElementById("current-tracked");
-      el.innerHTML = data.callsign ? `TRACKING: <span>${data.callsign}</span>` : `NOT CURRENTLY TRACKING ANY FLIGHT`;
+      if (data.callsign) {
+        const route = data.cached_route;
+        const leg   = route && route.origin && route.destination ? ` ${route.origin}→${route.destination}` : "";
+        el.innerHTML = `TRACKING: <span>${data.callsign}${leg}</span>`;
+      } else {
+        el.innerHTML = "NOT CURRENTLY TRACKING ANY FLIGHT";
+      }
     } catch { document.getElementById("current-tracked").textContent = "ERROR"; }
   }
 
@@ -456,21 +461,40 @@
     document.getElementById("confirm-row").style.display = show ? "flex" : "none";
   }
 
-  function showPicker(flights) {
+  function fmtDep(ts) {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    return d.toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+  }
+
+  function showPicker(callsign, flights) {
     const picker = document.getElementById("flight-picker");
     picker.innerHTML = "";
     picker.style.display = "flex";
+
+    // Header
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "font-size:11px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px";
+    hdr.textContent = `SELECT A LEG FOR ${callsign}:`;
+    picker.appendChild(hdr);
+
     flights.forEach(f => {
-      const dep = f.scheduled_departure
-        ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
-        : "";
-      const parts = [f.airline || f.callsign, f.origin && f.destination ? `${f.origin}→${f.destination}` : "",
-        f.aircraft || "", f.registration || "", dep ? `DEP ${dep}` : "",
-        `<span style="color:${f.is_live?'var(--green)':'var(--amber-dim)'}">${f.status}</span>`].filter(Boolean);
+      const dep    = fmtDep(f.scheduled_departure);
+      const route  = f.origin && f.destination ? `${f.origin}→${f.destination}` : "???→???";
+      const live   = f.is_live;
+      const status = live
+        ? `<span style="color:var(--green)">● AIRBORNE</span>`
+        : (dep ? `<span style="color:var(--amber-dim)">DEP ${dep}</span>` : `<span style="color:var(--amber-dim)">SCHEDULED</span>`);
+      const parts = [
+        `<span style="color:var(--amber-bright);font-size:20px">${route}</span>`,
+        f.airline ? `<span style="font-size:14px;color:var(--amber-dim)">${f.airline}</span>` : "",
+        f.aircraft ? `<span style="font-size:13px;color:var(--amber-dim)">${f.aircraft}</span>` : "",
+        status,
+      ].filter(Boolean).join("  &nbsp;");
+
       const btn = document.createElement("button");
-      btn.className = "save-anyway";
-      btn.style.cssText = "text-align:left;font-size:12px;letter-spacing:1px;padding:6px 10px";
-      btn.innerHTML = parts.join("  ·  ");
+      btn.style.cssText = "text-align:left;padding:8px 10px;border-color:var(--amber-dim)";
+      btn.innerHTML = parts;
       btn.onclick = () => selectFlight(f);
       picker.appendChild(btn);
     });
@@ -484,13 +508,11 @@
   async function selectFlight(f) {
     hidePicker();
     await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
-    const dep = f.scheduled_departure
-      ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
-      : null;
+    const dep   = fmtDep(f.scheduled_departure);
     const route = f.origin && f.destination ? `${f.origin}→${f.destination}` : "";
-    const parts = [`✓ SAVED: ${f.callsign}`, f.airline || "", route, f.aircraft || "",
-      dep ? `DEP ${dep}` : "", f.status === "Airborne" ? "AIRBORNE NOW" : (dep ? "WILL TRACK FROM DEPARTURE" : "")].filter(Boolean);
-    setStatus("track-status", parts.join("  ·  "), "found");
+    const mode  = f.is_live ? "AIRBORNE NOW" : (dep ? `DEPARTS ${dep} — WILL TRACK FROM WHEELS-UP` : "WILL TRACK FROM DEPARTURE");
+    const parts = [f.callsign, f.airline || "", route, f.aircraft || "", mode].filter(Boolean);
+    setStatus("track-status", parts.join("  ·  "), f.is_live ? "found" : "saved");
     document.getElementById("callsign-input").value = "";
   }
 
@@ -502,56 +524,59 @@
     showConfirm(false); hidePicker();
     setStatus("track-status", `SEARCHING ${val}...`, "searching");
     try {
-      const res  = await fetch("/tracked/lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({callsign:val})});
+      const res  = await fetch("/tracked/lookup", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({callsign:val})});
       const data = await res.json();
+
       if (data.found && data.multiple) {
-        setStatus("track-status", data.summary, "not-found");
-        showPicker(data.flights);
+        // Multiple legs — show picker, don't auto-save
+        setStatus("track-status", data.summary, "searching");
+        showPicker(val, data.flights);
+
       } else if (data.found) {
-        const f = data.flight;
-        await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
-        const dep = f.scheduled_departure
-          ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
-          : null;
-        const route = f.origin && f.destination ? `${f.origin}→${f.destination}` : "";
-        const parts = [`✓ SAVED: ${f.callsign}`, f.airline || "", route, f.aircraft || "",
-          dep ? `DEP ${dep}` : "", f.status === "Airborne" ? "AIRBORNE NOW" : (dep ? "WILL TRACK FROM DEPARTURE" : "")].filter(Boolean);
-        setStatus("track-status", parts.join("  ·  "), "found");
-        document.getElementById("callsign-input").value = "";
-        showConfirm(false);
+        // Single result — auto-select
+        await selectFlight(data.flight);
+
       } else {
-        pendingCallsign = val; pendingCachedRoute = null;
-        setStatus("track-status", `${val} NOT FOUND — NOT AIRBORNE? SAVE ANYWAY TO TRACK WHEN LIVE.`, "not-found");
+        // Not found in any API — offer callsign-only save so it tracks when airborne
+        pendingCallsign = val;
+        setStatus("track-status", `${val} NOT FOUND — CALLSIGN WRONG, OR TRY AGAIN CLOSER TO DEPARTURE.`, "not-found");
         showConfirm(true);
       }
-    } catch(e) { setStatus("track-status", "LOOKUP FAILED: " + e.message, "error"); showConfirm(false); }
+    } catch(e) {
+      setStatus("track-status", "LOOKUP FAILED: " + e.message, "error");
+      showConfirm(false);
+    }
     btn.disabled = false; btn.textContent = "Track";
   }
 
   async function saveAnyway() {
     if (!pendingCallsign) return;
     await saveCallsign(pendingCallsign, null, "", null);
-    setStatus("track-status", `SAVED: ${pendingCallsign} — WILL TRACK WHEN LIVE`, "saved");
+    setStatus("track-status", `SAVED: ${pendingCallsign} — WILL TRACK WHEN AIRBORNE (NO ROUTE DATA)`, "saved");
     document.getElementById("callsign-input").value = "";
-    showConfirm(false); hidePicker(); pendingCallsign = ""; pendingCachedRoute = null;
+    showConfirm(false); hidePicker(); pendingCallsign = "";
   }
 
-  function cancelSave() { showConfirm(false); hidePicker(); setStatus("track-status","",""); pendingCallsign=""; pendingCachedRoute=null; }
+  function cancelSave() {
+    showConfirm(false); hidePicker();
+    setStatus("track-status", "", "");
+    pendingCallsign = "";
+  }
 
   async function saveCallsign(callsign, cached_route=null, flight_id="", scheduled_departure=null) {
     const body = {callsign};
     if (cached_route)        body.cached_route        = cached_route;
     if (flight_id)           body.flight_id           = flight_id;
     if (scheduled_departure) body.scheduled_departure = scheduled_departure;
-    await fetch("/tracked/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    await fetch("/tracked/set", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     loadCurrent();
   }
 
   async function clearTracked() {
     await saveCallsign("", null, "", null);
     document.getElementById("callsign-input").value = "";
-    setStatus("track-status","TRACKING CLEARED","saved");
-    showConfirm(false); hidePicker(); pendingCallsign = ""; pendingCachedRoute = null;
+    setStatus("track-status", "TRACKING CLEARED", "saved");
+    showConfirm(false); hidePicker(); pendingCallsign = "";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
