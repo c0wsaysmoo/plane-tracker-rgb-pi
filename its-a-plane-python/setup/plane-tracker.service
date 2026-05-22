@@ -10,8 +10,8 @@ EnvironmentFile=/etc/plane-tracker.env
 WorkingDirectory=__REPO_DIR__/its-a-plane-python
 Environment=PLANE_TRACKER_DATA_DIR=/var/lib/plane-tracker
 
-# Ensure writable data directory exists (owned by root since drop_privileges=False)
-ExecStartPre=/bin/bash -c "mkdir -p /var/lib/plane-tracker/maps && chown -R root:root /var/lib/plane-tracker"
+# Ensure writable data directory exists
+ExecStartPre=/bin/bash -c "mkdir -p /var/lib/plane-tracker/maps"
 
 ExecStart=__REPO_DIR__/.venv/bin/python3 __REPO_DIR__/its-a-plane-python/its-a-plane.py
 Restart=on-failure
