@@ -19,9 +19,9 @@ CSV_URL    = "https://raw.githubusercontent.com/npow/airline-codes/master/airlin
 _OVERRIDES = {
     "ENY": "American Eagle",   "JIA": "American Eagle",
     "RPA": "United Express",   "GJS": "United Express",
+    "UCA": "United Express",   "CPZ": "United Express",
     "SKW": "SkyWest Airlines", "EDV": "Delta Connection",
-    "CPZ": "United Express",   "ASQ": "Delta Connection",
-    "TIV": "Thrive Aviation",
+    "ASQ": "Delta Connection", "TIV": "Thrive Aviation",
 }
 
 _db     = {}
