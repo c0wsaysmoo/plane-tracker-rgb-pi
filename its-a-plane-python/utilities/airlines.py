@@ -22,6 +22,7 @@ _OVERRIDES = {
     "UCA": "United Express",   "CPZ": "United Express",
     "SKW": "SkyWest Airlines", "EDV": "Delta Connection",
     "ASQ": "Delta Connection", "TIV": "Thrive Aviation",
+    "VJA": "Vista America",
 }
 
 _db     = {}

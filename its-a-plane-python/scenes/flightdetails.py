@@ -10,14 +10,10 @@ FLIGHT_NO_FONT = fonts.small
 
 FLIGHT_NUMBER_ALPHA_COLOUR = colours.LIGHT_PURPLE
 FLIGHT_NUMBER_NUMERIC_COLOUR = colours.LIGHT_ORANGE
-LIVERY_COLOUR = colours.GREY
 
 DATA_INDEX_POSITION = (52, 24)
 DATA_INDEX_FONT = fonts.extrasmall
 DATA_INDEX_COLOUR = colours.GREY
-
-# Maximum character length for livery note to be shown
-MAX_LIVERY_LENGTH = 16
 
 
 class FlightDetailsScene(object):
@@ -77,21 +73,6 @@ class FlightDetailsScene(object):
                     ch,
                 )
                 flight_no_text_length += ch_length
-
-            # Append livery note if present and short enough (in grey)
-            livery_note = self._data[self._data_index].get("livery_note", "")
-            if livery_note and len(livery_note) <= MAX_LIVERY_LENGTH:
-                livery_display = f" ({livery_note})"
-                for ch in livery_display:
-                    ch_length = graphics.DrawText(
-                        self.canvas,
-                        FLIGHT_NO_FONT,
-                        self._scroll_pos + flight_no_text_length,
-                        FLIGHT_NO_DISTANCE_FROM_TOP,
-                        LIVERY_COLOUR,
-                        ch,
-                    )
-                    flight_no_text_length += ch_length
 
         # Draw page indicator (N/M) for multiple flights
         if len(self._data) > 1:

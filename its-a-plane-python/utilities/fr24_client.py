@@ -541,10 +541,6 @@ class FR24Client:
         # Extract airline name from aircraft_info.registered_owners
         flight_number = (getattr(schedule_info, 'flight_number', '') or '') if schedule_info else ''
         airline_name = (getattr(aircraft_info, 'registered_owners', '') or '') if aircraft_info else ''
-        # painted_as_id indicates livery (e.g. special livery when != operated_by_id)
-        painted_as_id = (getattr(schedule_info, 'painted_as_id', 0) or 0) if schedule_info else 0
-        operated_by_id = (getattr(schedule_info, 'operated_by_id', 0) or 0) if schedule_info else 0
-
         # flight_plan.departure/destination are ICAO strings (e.g. "EGLL"), not objects
         fp_departure = (getattr(flight_plan, 'departure', '') or '') if flight_plan else ''
         fp_destination = (getattr(flight_plan, 'destination', '') or '') if flight_plan else ''
@@ -609,8 +605,6 @@ class FR24Client:
             # New fields for _grab_tracked compatibility
             "schedule_info": {
                 "flight_number": flight_number,
-                "operated_by_id": operated_by_id,
-                "painted_as_id": painted_as_id,
                 "origin_id": origin_id,
                 "destination_id": destination_id,
                 "scheduled_departure": sched_departure or None,

@@ -367,7 +367,7 @@ def test_data_pipeline_format():
         "vertical_speed": 0, "callsign": "UAL1234",
         "distance_origin": 2000, "distance_destination": 1500,
         "distance": 3.2, "direction": "NE",
-        "trail": [[45.1, -40.2]], "livery_note": "",
+        "trail": [[45.1, -40.2]],
     }
 
     tracked_entry = {
