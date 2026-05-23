@@ -28,7 +28,7 @@ def reload():
     global CLOCK_FORMAT, JOURNEY_CODE_SELECTED, JOURNEY_BLANK_FILLER
     global BRIGHTNESS, BRIGHTNESS_NIGHT, NIGHT_BRIGHTNESS
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
-    global LED_RGB_SEQUENCE, FORECAST_DAYS
+    global LED_RGB_SEQUENCE, FORECAST_DAYS, TIDE_STATION
     global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL
     global MASTER_TRACKER, OTHER_TRACKER_HOSTNAMES
     global API_SOURCE_ORDER, API_SOURCE_ENABLED
@@ -70,6 +70,7 @@ def reload():
     HAT_PWM_ENABLED   = _disp.get("hat_pwm_enabled", False)
     LED_RGB_SEQUENCE  = _disp.get("led_rgb_sequence", "RGB")
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
+    TIDE_STATION      = _loc.get("tide_station", "")
 
     # Flights
     MIN_ALTITUDE = _flt.get("min_altitude", 2000)

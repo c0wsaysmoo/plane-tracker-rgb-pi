@@ -1,44 +1,31 @@
+import logging
 from datetime import datetime
-from utilities.temperature import grab_forecast, _load_file_cache, _save_file_cache
+from utilities.temperature import grab_forecast
 from utilities.animator import Animator
 from setup import colours, fonts, frames
 from rgbmatrix import graphics
-import logging
-import time
-import os
-from config import NIGHT_START, NIGHT_END
-
-# Configure logging
-#logging.basicConfig(filename='myapp.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Setup
 DATE_FONT = fonts.extrasmall
 DATE_POSITION = (40, 11)
 
-_MOON_CACHE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "moonphase.json"
-)
-_MOON_CACHE_TTL = 86400  # 24 hours
+# Tide colors
+TIDE_HIGH_COLOUR = graphics.Color(0, 255, 255)     # Cyan
+TIDE_LOW_COLOUR = graphics.Color(66, 164, 244)      # Light blue
 
-# Convert NIGHT_START and NIGHT_END to datetime objects
-NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
-NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
+# Cycle timing: 5 seconds per item (called once per second)
+_CYCLE_SECONDS = 5
 
 class DateScene(object):
     def __init__(self):
         super().__init__()
         self._last_date = None
+        self._last_display_text = None  # track what's currently drawn for clearing
+        self.today_moonphase = None
         self.last_fetched_moonphase = None
-
-        # Pre-load from disk cache so moon phase shows immediately on reboot
-        cached, ts = _load_file_cache(_MOON_CACHE_FILE)
-        if cached is not None and (time.time() - ts) < _MOON_CACHE_TTL:
-            self.today_moonphase = cached
-            # Restore the day so we don't re-fetch until midnight
-            from datetime import datetime as _dt
-            self.last_fetched_moonphase = _dt.fromtimestamp(ts).day
-        else:
-            self.today_moonphase = None
+        self._cycle_counter = 0  # increments each second
+        self._cached_tides = None
+        self._tide_fetch_date = None
 
 
     def moonphase(self):
@@ -48,9 +35,8 @@ class DateScene(object):
         if self.last_fetched_moonphase != now.day:
             try:
                 forecast = grab_forecast(tag="DateScene")
-                if not forecast:  # None or empty list
+                if not forecast:
                     logging.error("Forecast data missing or API error (moon phase).")
-                    # Return cached moon phase if available, otherwise None
                     return self.today_moonphase
 
                 for day in forecast:
@@ -59,43 +45,33 @@ class DateScene(object):
                         utc_moonphase = int(day["values"]["moonPhase"])
                         self.today_moonphase = utc_moonphase
                         self.last_fetched_moonphase = now.day
-                        _save_file_cache(_MOON_CACHE_FILE, utc_moonphase)
                         break
 
             except Exception as e:
                 logging.error(f"Error fetching forecast for moon phase: {e}")
-                return self.today_moonphase  # Return cached if available
+                return self.today_moonphase
 
-        # Return cached value if fetch is not needed or on error
         return self.today_moonphase
 
     def map_moon_phase_to_color(self, moonphase):
-        # Define the two colors for the specific moon phases
         colors = [
-            [colours.DARK_PURPLE, colours.DARK_PURPLE],  # Moon phase 0
-            [colours.DARK_PURPLE, colours.DARK_MID_PURPLE],  # Moon phase 1
-            [colours.DARK_PURPLE, colours.WHITE],  # Moon phase 2
-            [colours.DARK_MID_PURPLE, colours.WHITE],  # Moon phase 3
-            [colours.GREY, colours.GREY],  # Moon phase 4 (no gradient, same color)
-            [colours.WHITE, colours.DARK_MID_PURPLE],  # Moon phase 5
-            [colours.WHITE, colours.DARK_PURPLE],  # Moon phase 6
-            [colours.DARK_MID_PURPLE, colours.DARK_PURPLE]  # Moon phase 7 (middle_purple to PINK_DARK gradient)
-            # Define colors for the remaining phases as needed
+            [colours.DARK_PURPLE, colours.DARK_PURPLE],
+            [colours.DARK_PURPLE, colours.DARK_MID_PURPLE],
+            [colours.DARK_PURPLE, colours.WHITE],
+            [colours.DARK_MID_PURPLE, colours.WHITE],
+            [colours.GREY, colours.GREY],
+            [colours.WHITE, colours.DARK_MID_PURPLE],
+            [colours.WHITE, colours.DARK_PURPLE],
+            [colours.DARK_MID_PURPLE, colours.DARK_PURPLE],
         ]
-
-        # Ensure moonphase is within the valid range
         moonphase = min(max(moonphase, 0), 7)
-
-        # Get the corresponding colors for the moon phase
-        gradient_start_color, gradient_end_color = colors[moonphase]
-
-        return gradient_start_color, gradient_end_color  # Return both colors
+        return colors[moonphase]
 
     def draw_gradient_text(self, text, x, y, start_color, end_color):
         text_length = len(text)
-        char_width = 4  # Width of each character
+        char_width = 4
         for i, char in enumerate(text):
-            position = i / (text_length - 1)
+            position = i / max(1, text_length - 1)
             r = int(start_color.red + (end_color.red - start_color.red) * position)
             g = int(start_color.green + (end_color.green - start_color.green) * position)
             b = int(start_color.blue + (end_color.blue - start_color.blue) * position)
@@ -110,6 +86,19 @@ class DateScene(object):
                 char,
             )
 
+    def _get_tides(self):
+        """Fetch tide data once per day, cached."""
+        today = str(datetime.now().date())
+        if self._tide_fetch_date == today and self._cached_tides is not None:
+            return self._cached_tides
+        try:
+            from utilities.tides import get_next_tides
+            self._cached_tides = get_next_tides()
+            self._tide_fetch_date = today
+        except Exception:
+            self._cached_tides = None
+        return self._cached_tides
+
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def date(self, count):
         now = datetime.now()
@@ -118,30 +107,63 @@ class DateScene(object):
         # Flag for forced redraw if new data arrived
         if len(self._data):
             self._redraw_date = True
-            return 
+            return
 
-        # Get moon phase
+        # Increment cycle counter
+        self._cycle_counter += 1
+
+        # Build display items: date always, tides if available
+        tides = self._get_tides()
+        items = [("date", current_date)]
+        if tides:
+            if tides.get("high"):
+                items.append(("high", f"H{tides['high']}"))
+            if tides.get("low"):
+                items.append(("low", f"L{tides['low']}"))
+
+        # Pick current item based on cycle
+        cycle_len = len(items) * _CYCLE_SECONDS
+        slot = (self._cycle_counter // _CYCLE_SECONDS) % len(items)
+        item_type, display_text = items[slot]
+
+        # Get moon phase colors (used for date, neutral for tides)
         moon_phase_value = self.moonphase()
         if moon_phase_value is None:
             start_color = end_color = colours.RED
         else:
             start_color, end_color = self.map_moon_phase_to_color(moon_phase_value)
 
-        # Clear previous date if needed
-        if self._last_date and (self._last_date != current_date or getattr(self, "_redraw_date", False)):
+        # Clear previous text if it changed
+        if self._last_display_text and self._last_display_text != display_text:
             graphics.DrawText(
                 self.canvas,
                 DATE_FONT,
                 DATE_POSITION[0],
                 DATE_POSITION[1],
                 colours.BLACK,
-                self._last_date,
+                self._last_display_text,
             )
 
+        # Also clear on scene re-entry
+        if getattr(self, "_redraw_date", False) and self._last_display_text:
+            graphics.DrawText(
+                self.canvas,
+                DATE_FONT,
+                DATE_POSITION[0],
+                DATE_POSITION[1],
+                colours.BLACK,
+                self._last_display_text,
+            )
+
+        self._last_display_text = display_text
         self._last_date = current_date
 
-        # Draw date unconditionally
-        self.draw_gradient_text(current_date, DATE_POSITION[0], DATE_POSITION[1], start_color, end_color)
+        # Draw with appropriate color
+        if item_type == "date":
+            self.draw_gradient_text(display_text, DATE_POSITION[0], DATE_POSITION[1], start_color, end_color)
+        elif item_type == "high":
+            graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], TIDE_HIGH_COLOUR, display_text)
+        elif item_type == "low":
+            graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], TIDE_LOW_COLOUR, display_text)
 
-        # Reset redraw flag
         self._redraw_date = False
