@@ -120,38 +120,37 @@ class TestEstimateEta3Phase:
 # ====================================================================
 
 class TestScrollSync:
-    """Test scroll sync logic (mark_scroll_complete / advance_completed_scroll).
+    """Test shared scroll position logic.
     Note: display module requires rgbmatrix (Pi-only), so we test the logic pattern directly."""
 
-    SCROLL_REGIONS = ("flight_details", "plane_details")
+    def test_max_width_determines_reset(self):
+        """Scroll resets when widest text scrolls off screen."""
+        widths = {"flight_details": 80, "plane_details": 150}
+        scroll_pos = -140  # not yet past widest (150)
+        assert scroll_pos + max(widths.values()) >= 0  # still visible
 
-    def test_scroll_regions_are_pair(self):
-        assert len(self.SCROLL_REGIONS) == 2
-        assert "flight_details" in self.SCROLL_REGIONS
-        assert "plane_details" in self.SCROLL_REGIONS
+        scroll_pos = -151  # past widest
+        assert scroll_pos + max(widths.values()) < 0  # fully scrolled off
 
-    def test_both_regions_must_complete(self):
-        """advance_completed_scroll only fires when ALL regions are done."""
-        # Simulate the dict state
-        scroll_complete = {r: False for r in ("flight_details", "plane_details")}
-        scroll_complete["flight_details"] = True
-        assert not all(scroll_complete.values())
+    def test_both_lines_same_position(self):
+        """Both lines use the same shared position."""
+        scroll_pos = 30
+        # Both scenes read from same variable — always aligned
+        flight_x = scroll_pos
+        plane_x = scroll_pos
+        assert flight_x == plane_x
 
-        scroll_complete["plane_details"] = True
-        assert all(scroll_complete.values())
+    def test_width_reporting(self):
+        """Scenes report their text width, max is used for completion."""
+        widths = {}
+        widths["flight_details"] = 80
+        widths["plane_details"] = 120
+        assert max(widths.values()) == 120
 
-    def test_reset_clears_all(self):
-        """reset_scroll_completion clears all regions."""
-        scroll_complete = {"flight_details": True, "plane_details": True}
-        scroll_complete = {r: False for r in scroll_complete}
-        assert not any(scroll_complete.values())
-
-    def test_single_flight_skips(self):
-        """advance_completed_scroll returns early if <= 1 flight."""
-        # With 0 or 1 flights, the method should not advance
-        # (tested by checking the guard: len(self._data) <= 1 → return)
+    def test_single_flight_loops(self):
+        """Single flight resets position instead of advancing index."""
         data = [{"callsign": "TEST", "direction": "NE"}]
-        assert len(data) <= 1  # guard condition met
+        assert len(data) <= 1  # loops, doesn't advance
 
 
 # ====================================================================

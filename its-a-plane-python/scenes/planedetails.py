@@ -29,17 +29,11 @@ def _heading_to_arrow(heading):
 class PlaneDetailsScene(object):
     def __init__(self):
         super().__init__()
-        self.plane_position = screen.WIDTH
-        self.plane_details_complete = False
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
         # Guard against no data
         if len(self._data) == 0:
-            return
-
-        # Skip rendering after scroll complete (waiting for other regions)
-        if self.plane_details_complete:
             return
 
         # Extract data
@@ -70,18 +64,18 @@ class PlaneDetailsScene(object):
         plane_name_width = graphics.DrawText(
             self.canvas,
             PLANE_FONT,
-            self.plane_position,
+            self._scroll_pos,
             PLANE_DISTANCE_FROM_TOP,
-            PLANE_COLOUR,  # Set the color for the plane name
+            PLANE_COLOUR,
             plane_name_text,
         )
 
         distance_text_width = graphics.DrawText(
             self.canvas,
             PLANE_FONT,
-            self.plane_position + plane_name_width,
+            self._scroll_pos + plane_name_width,
             PLANE_DISTANCE_FROM_TOP,
-            PLANE_DISTANCE_COLOUR,  # Set the color for distance/direction
+            PLANE_DISTANCE_COLOUR,
             distance_text,
         )
 
@@ -91,27 +85,16 @@ class PlaneDetailsScene(object):
             arrow_width = graphics.DrawText(
                 self.canvas,
                 PLANE_FONT,
-                self.plane_position + plane_name_width + distance_text_width,
+                self._scroll_pos + plane_name_width + distance_text_width,
                 PLANE_DISTANCE_FROM_TOP,
                 HEADING_ARROW_COLOUR,
                 arrow,
             )
 
-        # Calculate the total width of the text string
+        # Report width to shared scroll driver
         total_text_width = plane_name_width + distance_text_width + arrow_width
-
-        # Handle scrolling
-        self.plane_position -= 1
-
-        # Mark scroll complete when text scrolls off (wait for other regions)
-        if self.plane_position + total_text_width < 0:
-            if len(self._data) > 1:
-                self.plane_details_complete = True
-                self.mark_scroll_complete("plane_details")
-            else:
-                self.plane_position = screen.WIDTH
+        self.report_scroll_width("plane_details", total_text_width)
 
     @Animator.KeyFrame.add(0)
     def reset_plane_details_scroll(self):
-        self.plane_position = screen.WIDTH
-        self.plane_details_complete = False
+        pass  # Called by reset_scene(); scroll position owned by Display._scroll_pos

@@ -1,7 +1,7 @@
 import sys
 import os
 from datetime import datetime
-from setup import frames
+from setup import frames, screen
 from utilities.animator import Animator
 from utilities.overhead import Overhead
 
@@ -29,9 +29,8 @@ def flights_match(flights_a, flights_b):
     return updatable_a == updatable_b
 
 
-# Scroll sync: both regions must finish scrolling before advancing to next flight.
-# Adopted from c0wsaysmoo/plane-tracker-rgb-pi PR #28.
-SCROLL_REGIONS = ("flight_details", "plane_details")
+# Scroll sync: single shared position for both text lines.
+# Both lines scroll together; the wider one determines when to reset/advance.
 
 
 try:
@@ -118,7 +117,9 @@ class Display(
 
         self._data_index = 0
         self._data = []
-        self._scroll_complete = {r: False for r in SCROLL_REGIONS}
+        self._data_all_looped = False
+        self._scroll_pos = screen.WIDTH
+        self._scroll_widths = {}  # region -> text width in pixels
 
         # Single Overhead instance handles both zone and tracked flight
         self.overhead = Overhead()
@@ -146,7 +147,8 @@ class Display(
             if data_is_different:
                 self._data_index = 0
                 self._data_all_looped = False
-                self.reset_scroll_completion()
+                self._scroll_pos = screen.WIDTH
+                self._scroll_widths = {}
                 self._data = new_data
 
             reset_required = there_is_data and data_is_different
@@ -154,22 +156,30 @@ class Display(
             if reset_required:
                 self.reset_scene()
 
-    def mark_scroll_complete(self, region):
-        if region in self._scroll_complete:
-            self._scroll_complete[region] = True
-
-    def reset_scroll_completion(self):
-        self._scroll_complete = {r: False for r in SCROLL_REGIONS}
+    def report_scroll_width(self, region, width):
+        """Called by each scroll scene to report its text width."""
+        self._scroll_widths[region] = width
 
     @Animator.KeyFrame.add(1)
-    def advance_completed_scroll(self, count):
-        if len(self._data) <= 1:
+    def advance_scroll(self, count):
+        """Single scroll driver for all text lines. Both lines share one position."""
+        if len(self._data) == 0:
             return
-        if all(self._scroll_complete.values()):
-            self._data_index = (self._data_index + 1) % len(self._data)
-            self._data_all_looped = self._data_index == 0 or self._data_all_looped
-            self.reset_scroll_completion()
-            self.reset_scene()
+
+        # Decrement shared position
+        self._scroll_pos -= 1
+
+        # Check if widest text has fully scrolled off screen
+        if not self._scroll_widths:
+            return
+        max_width = max(self._scroll_widths.values())
+        if self._scroll_pos + max_width < 0:
+            if len(self._data) > 1:
+                self._data_index = (self._data_index + 1) % len(self._data)
+                self._data_all_looped = self._data_index == 0 or self._data_all_looped
+                self._scroll_widths = {}
+                self.reset_scene()
+            self._scroll_pos = screen.WIDTH
 
     @Animator.KeyFrame.add(1)
     def sync(self, count):
