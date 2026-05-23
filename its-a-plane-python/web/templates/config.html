@@ -222,6 +222,11 @@
                 <label>TEMPERATURE_LOCATION</label>
                 <input type="text" id="cfg-TEMPERATURE_LOCATION" placeholder="40.7,-74.0" />
             </div>
+            <div class="field">
+                <label>TIDE_STATION</label>
+                <input type="text" id="cfg-TIDE_STATION" placeholder="8511171" />
+                <span class="hint">NOAA station ID (empty = no tides)</span>
+            </div>
         </div>
     </div>
 
@@ -417,7 +422,7 @@
         const CONFIG_FIELDS = [
             'HOME_LAT', 'HOME_LON',
             'ZONE_TL_LAT', 'ZONE_TL_LON', 'ZONE_BR_LAT', 'ZONE_BR_LON',
-            'JOURNEY_CODE_SELECTED', 'TEMPERATURE_LOCATION',
+            'JOURNEY_CODE_SELECTED', 'TEMPERATURE_LOCATION', 'TIDE_STATION',
             'DISTANCE_UNITS', 'SPEED_UNITS', 'TEMPERATURE_UNITS', 'CLOCK_FORMAT',
             'BRIGHTNESS', 'BRIGHTNESS_NIGHT', 'GPIO_SLOWDOWN', 'LED_RGB_SEQUENCE',
             'NIGHT_BRIGHTNESS', 'NIGHT_START', 'NIGHT_END',
