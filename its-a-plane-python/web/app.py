@@ -574,7 +574,7 @@ def wifi_status():
         )
         networks = []
         connected_ssid = None
-        seen = set()
+        seen = {}  # ssid -> index in networks list
         for line in result.stdout.strip().splitlines():
             parts = line.split(":")
             if len(parts) < 4:
@@ -583,18 +583,23 @@ def wifi_status():
             ssid     = parts[1]
             signal   = parts[2]
             security = ":".join(parts[3:])
-            if not ssid or ssid in seen:
+            if not ssid:
                 continue
-            seen.add(ssid)
-            entry = {
+            if active == "yes":
+                connected_ssid = ssid
+            # If already seen, upgrade to active if this BSSID is the connected one
+            if ssid in seen:
+                if active == "yes":
+                    networks[seen[ssid]]["active"] = True
+                    networks[seen[ssid]]["signal"] = int(signal) if signal.isdigit() else 0
+                continue
+            seen[ssid] = len(networks)
+            networks.append({
                 "ssid":     ssid,
                 "signal":   int(signal) if signal.isdigit() else 0,
                 "security": security.strip(),
                 "active":   active == "yes",
-            }
-            if active == "yes":
-                connected_ssid = ssid
-            networks.append(entry)
+            })
         networks.sort(key=lambda x: x["signal"], reverse=True)
 
         ip_result = subprocess.run(
@@ -631,7 +636,7 @@ def wifi_scan():
             capture_output=True, text=True, timeout=10
         )
         networks = []
-        seen = set()
+        seen = {}
         for line in result.stdout.strip().splitlines():
             parts = line.split(":")
             if len(parts) < 4:
@@ -640,9 +645,14 @@ def wifi_scan():
             ssid     = parts[1]
             signal   = parts[2]
             security = ":".join(parts[3:])
-            if not ssid or ssid in seen:
+            if not ssid:
                 continue
-            seen.add(ssid)
+            if ssid in seen:
+                if active == "yes":
+                    networks[seen[ssid]]["active"] = True
+                    networks[seen[ssid]]["signal"] = int(signal) if signal.isdigit() else 0
+                continue
+            seen[ssid] = len(networks)
             networks.append({
                 "ssid":     ssid,
                 "signal":   int(signal) if signal.isdigit() else 0,
