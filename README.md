@@ -65,7 +65,7 @@ Check it's running:
 sudo systemctl status its-a-plane
 ```
 
-You should see `Active: active (running)` in green. If it shows an error, jump to the Troubleshooting section below.
+You should see `Active: active (running)` in green.
 
 ---
 
