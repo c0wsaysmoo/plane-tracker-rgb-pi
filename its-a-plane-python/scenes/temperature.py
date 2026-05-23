@@ -92,12 +92,8 @@ class TemperatureScene(object):
             self._last_temperature = current_temperature
             self._redraw_temp = False
 
-            # Calculate string position (centered)
-            font_character_width = 5
-            temperature_string_width = len(display_str) * font_character_width
-            middle_x = (40 + 64) // 2
-            start_x = middle_x - temperature_string_width // 2
-            TEMPERATURE_POSITION = (start_x, TEMPERATURE_FONT_HEIGHT)
+            # Left-justify at x=40 (aligned with date/tide below)
+            TEMPERATURE_POSITION = (40, TEMPERATURE_FONT_HEIGHT)
 
             # Draw temperature/error
             graphics.DrawText(

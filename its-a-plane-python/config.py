@@ -64,7 +64,7 @@ def config_source():
 
 def _apply():
     """(Re)apply all config values from current sources."""
-    global FR24_API_KEY, TOMORROW_API_KEY, AIRLABS_API_KEY, NPS_API_KEY
+    global FR24_API_KEY, TOMORROW_API_KEY, AIRLABS_API_KEY, NPS_API_KEY, OWM_API_KEY
     global ZONE_HOME, LOCATION_HOME
     global TEMPERATURE_LOCATION, TEMPERATURE_UNITS, FORECAST_DAYS
     global DISTANCE_UNITS, CLOCK_FORMAT, BRIGHTNESS, BRIGHTNESS_NIGHT
@@ -78,6 +78,7 @@ def _apply():
     TOMORROW_API_KEY = _get("TOMORROW_API_KEY")
     AIRLABS_API_KEY = _get("AIRLABS_API_KEY")
     NPS_API_KEY = _get("NPS_API_KEY")
+    OWM_API_KEY = _get("OWM_API_KEY")
 
     # --- Bounding box for overhead flight detection ---
     ZONE_HOME = {

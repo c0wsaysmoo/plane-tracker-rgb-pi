@@ -324,7 +324,7 @@ def api_config_get():
     """Return current config as JSON. Masks secret values."""
     import config as cfg
 
-    SECRET_KEYS = {"FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY"}
+    SECRET_KEYS = {"FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY", "OWM_API_KEY"}
 
     result = {}
     # Flat env-style keys the UI expects
@@ -337,7 +337,7 @@ def api_config_get():
         "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
         "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
         "MAX_CLOSEST", "MAX_FARTHEST",
-        "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY",
+        "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY", "OWM_API_KEY",
         "EMAIL",
     ]:
         val = cfg._get(key)
@@ -373,7 +373,7 @@ _VALID_CONFIG_KEYS = {
     "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
     "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
     "MAX_CLOSEST", "MAX_FARTHEST",
-    "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY",
+    "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY", "OWM_API_KEY",
     "EMAIL",
 }
 

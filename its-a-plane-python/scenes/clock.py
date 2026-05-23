@@ -6,11 +6,25 @@ from rgbmatrix import graphics
 import logging
 from config import CLOCK_FORMAT
 
-# Setup
-CLOCK_FONT = fonts.large_bold
+try:
+    from utilities.rain import get_rain_alert
+except ImportError:
+    get_rain_alert = lambda: None
+
+# Setup — normal clock (no rain)
+CLOCK_FONT = fonts.large_bold          # 8x13B
 CLOCK_POSITION = (0, 11)
 DAY_COLOUR = colours.LIGHT_ORANGE
 NIGHT_COLOUR = colours.LIGHT_BLUE
+
+# Rain mode — small clock + alert text below
+CLOCK_SMALL_FONT = fonts.small         # 5x8
+CLOCK_SMALL_POSITION = (0, 6)
+RAIN_FONT = fonts.extrasmall           # 4x6
+RAIN_POSITION = (0, 11)
+RAIN_COLOUR = colours.LIGHT_BLUE
+SNOW_COLOUR = colours.WHITE
+
 
 class ClockScene(object):
     def __init__(self):
@@ -20,6 +34,8 @@ class ClockScene(object):
         self.today_sunset = None
         self.last_fetch_date = None  # Store the date of the last forecast fetch
         self._forecast_retry_after = 0  # Epoch time: don't retry before this
+        self._rain_active = False
+        self._last_rain_text = None
 
         # Pre-load sunrise/sunset from disk cache (survives reboots).
         # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
@@ -86,6 +102,22 @@ class ClockScene(object):
 
         return self.today_sunrise, self.today_sunset
 
+    def _format_rain_text(self, alert):
+        """Format rain alert dict into short display text."""
+        if not alert:
+            return None
+        type_labels = {"snow": "Snow", "sleet": "Sleet", "rain": "Rain"}
+        label = type_labels.get(alert["type"], "Rain")
+        action = alert.get("action", "")
+        minutes = alert.get("minutes")
+        if action == "starting" and minutes:
+            return f"{label} {minutes}m"
+        elif action == "stopping" and minutes:
+            return f"Stop {minutes}m"
+        elif action == "now":
+            return label
+        return None
+
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def clock(self, count):
         if len(self._data):
@@ -94,7 +126,7 @@ class ClockScene(object):
 
         now = datetime.now()
         clock_format = "%l:%M" if CLOCK_FORMAT == "12hr" else "%H:%M"
-        current_time = now.strftime(clock_format)
+        current_time = now.strftime(clock_format).lstrip()
 
         utc_sunrise, utc_sunset = self.calculate_sunrise_sunset()
         now_utc = datetime.now(timezone.utc)
@@ -106,25 +138,56 @@ class ClockScene(object):
         else:
             clock_color = NIGHT_COLOUR
 
-        if self._last_time and (self._last_time != current_time or getattr(self, "_redraw_time", False)):
-            graphics.DrawText(
-                self.canvas,
-                CLOCK_FONT,
-                CLOCK_POSITION[0],
-                CLOCK_POSITION[1],
-                colours.BLACK,
-                self._last_time,
-            )
+        # Check for rain alert
+        try:
+            alert = get_rain_alert()
+        except Exception:
+            alert = None
+
+        rain_text = self._format_rain_text(alert)
+        rain_now_active = rain_text is not None
+
+        # Detect transition between rain/no-rain modes
+        mode_changed = rain_now_active != self._rain_active
+        time_changed = self._last_time != current_time
+        rain_text_changed = rain_text != self._last_rain_text
+        needs_redraw = getattr(self, "_redraw_time", False)
+
+        if mode_changed or needs_redraw:
+            # Clear entire left region on mode switch or scene re-entry
+            self.draw_square(0, 0, 40, 12, colours.BLACK)
+        elif time_changed:
+            # Just clear old clock text
+            if self._last_time:
+                old_font = CLOCK_SMALL_FONT if self._rain_active else CLOCK_FONT
+                old_pos = CLOCK_SMALL_POSITION if self._rain_active else CLOCK_POSITION
+                graphics.DrawText(self.canvas, old_font, old_pos[0], old_pos[1],
+                                  colours.BLACK, self._last_time)
+
+        if rain_text_changed and not mode_changed:
+            # Clear old rain text only
+            if self._last_rain_text:
+                graphics.DrawText(self.canvas, RAIN_FONT, RAIN_POSITION[0],
+                                  RAIN_POSITION[1], colours.BLACK, self._last_rain_text)
+
+        # Draw clock
+        if rain_now_active:
+            graphics.DrawText(self.canvas, CLOCK_SMALL_FONT,
+                              CLOCK_SMALL_POSITION[0], CLOCK_SMALL_POSITION[1],
+                              clock_color, current_time)
+        else:
+            graphics.DrawText(self.canvas, CLOCK_FONT,
+                              CLOCK_POSITION[0], CLOCK_POSITION[1],
+                              clock_color, current_time)
+
+        # Draw rain text
+        if rain_text:
+            rain_color = SNOW_COLOUR if alert and alert["type"] in ("snow", "sleet") else RAIN_COLOUR
+            graphics.DrawText(self.canvas, RAIN_FONT,
+                              RAIN_POSITION[0], RAIN_POSITION[1],
+                              rain_color, rain_text)
 
         self._last_time = current_time
-
-        graphics.DrawText(
-            self.canvas,
-            CLOCK_FONT,
-            CLOCK_POSITION[0],
-            CLOCK_POSITION[1],
-            clock_color,
-            current_time,
-        )
-
+        self._rain_active = rain_now_active
+        self._last_rain_text = rain_text
         self._redraw_time = False
