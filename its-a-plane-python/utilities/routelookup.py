@@ -147,6 +147,7 @@ class RouteClient:
     """
 
     def __init__(self):
+        self._last_source = None
         try:
             from config import API_SOURCE_ORDER as _order, API_SOURCE_ENABLED as _enabled
         except ImportError:
@@ -162,6 +163,10 @@ class RouteClient:
     @property
     def ok(self):
         return True
+
+    @property
+    def last_source(self):
+        return self._last_source
 
     def get_flight_details(self, callsign, plane_lat, plane_lon,
                            plane_type="", registration="", distance=0.0):
@@ -232,6 +237,7 @@ class RouteClient:
             if _is_plausible(result, plane_lat, plane_lon):
                 normalised = _normalise(result, callsign, plane_lat, plane_lon, registration)
                 if normalised:
+                    self._last_source = source
                     return _cache_and_return(normalised)
             else:
                 key = (result.get("origin_iata"), result.get("dest_iata"))
@@ -245,6 +251,7 @@ class RouteClient:
                         _log_usage(f"CONSENSUS({dubious_count})", callsign, key[0], key[1])
                         normalised = _normalise(dubious_route, callsign, plane_lat, plane_lon, registration)
                         if normalised:
+                            self._last_source = source
                             return _cache_and_return(normalised)
 
         _route_cache[callsign] = {"data": {}, "ts": time()}

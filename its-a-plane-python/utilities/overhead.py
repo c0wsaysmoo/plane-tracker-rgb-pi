@@ -74,7 +74,8 @@ if MASTER_TRACKER:
             self._lock = Lock()
             self._data, self._tracked_data = [], None
             self._new_data = self._processing = False
-            self._fr24_ok = True
+            self._fetch_ok = True
+            self._master_connected = None
             print(f"[Overhead] Slave mode — polling master at {_url('')}")
 
         def grab_data(self):
@@ -102,14 +103,17 @@ if MASTER_TRACKER:
                     self._data, self._tracked_data = data, tracked
                     self._new_data = True
                     self._processing = False
+                    self._master_connected = True
             except (ConnectionError, NewConnectionError, MaxRetryError) as e:
                 print(f"[Slave] Cannot reach master: {e}")
                 with self._lock:
                     self._new_data = self._processing = False
+                    self._master_connected = False
             except Exception as e:
                 print(f"[Slave] Error: {e}")
                 with self._lock:
                     self._new_data = self._processing = False
+                    self._master_connected = False
 
         @property
         def new_data(self):
@@ -128,7 +132,12 @@ if MASTER_TRACKER:
         @property
         def data_is_empty(self): return len(self._data) == 0
         @property
-        def fr24_ok(self): return self._fr24_ok
+        def fetch_ok(self): return self._fetch_ok
+        @property
+        def last_source(self):
+            if self._master_connected is True:  return "MasterOK"
+            if self._master_connected is False: return "MasterError"
+            return None
 
 else:
         # ---------------------------------------------------------------
@@ -435,6 +444,7 @@ else:
                 self._tracked_data = None
                 self._new_data     = False
                 self._processing   = False
+                self._fetch_ok     = True
                 self._flight_cache = {}
                 self._tracked_was_live        = False
                 self._tracked_miss_count      = 0
@@ -454,6 +464,7 @@ else:
                     self._new_data   = False
                     self._processing = True
 
+                self._fr24._last_source = None
                 overhead_data = []
                 tracked_data  = None
 
@@ -722,10 +733,11 @@ else:
                         self._tracked_data = tracked_data
                         self._new_data     = True
                         self._processing   = False
+                        self._fetch_ok     = True
 
                 except (ConnectionError, NewConnectionError, MaxRetryError):
                     with self._lock:
-                        self._fr24_ok    = False
+                        self._fetch_ok   = False
                         self._new_data   = False
                         self._processing = False
 
@@ -766,5 +778,9 @@ else:
                 return len(self._data) == 0
 
             @property
-            def fr24_ok(self):
-                return self._fr24.ok
+            def fetch_ok(self):
+                return self._fetch_ok
+
+            @property
+            def last_source(self):
+                return self._fr24._last_source
