@@ -21,19 +21,12 @@ DATA_INDEX_COLOUR = colours.GREY
 class FlightDetailsScene(object):
     def __init__(self):
         super().__init__()
-        self.flight_position = screen.WIDTH
-        self.flight_details_complete = False
-        self._data_all_looped = False
 
     @Animator.KeyFrame.add(1)
     def flight_details(self, count):
 
         # Guard against no data
         if len(self._data) == 0:
-            return
-
-        # Skip rendering after scroll complete (waiting for other regions)
-        if self.flight_details_complete:
             return
 
         # Clear the whole area
@@ -66,7 +59,7 @@ class FlightDetailsScene(object):
                 ch_length = graphics.DrawText(
                     self.canvas,
                     FLIGHT_NO_FONT,
-                    self.flight_position + flight_no_text_length,
+                    self._scroll_pos + flight_no_text_length,
                     FLIGHT_NO_DISTANCE_FROM_TOP,
                     FLIGHT_NUMBER_NUMERIC_COLOUR
                     if ch.isnumeric()
@@ -96,21 +89,12 @@ class FlightDetailsScene(object):
                 f"{self._data_index + 1}/{len(self._data)}",
             )
 
-            # Count the whole line length
-            flight_no_text_length += text_length
+            # Fixed position indicator — don't add to scroll width
 
-        # Handle scrolling
-        self.flight_position -= 1
-        if self.flight_position + flight_no_text_length < 0:
-            if len(self._data) > 1:
-                # Mark complete and wait for other regions
-                self.flight_details_complete = True
-                self.mark_scroll_complete("flight_details")
-            else:
-                self.flight_position = screen.WIDTH
+        # Report width to shared scroll driver
+        self.report_scroll_width("flight_details", flight_no_text_length)
 
     @Animator.KeyFrame.add(0)
     def reset_flight_details_scroll(self):
-        self.flight_position = screen.WIDTH
-        self.flight_details_complete = False
+        pass  # Called by reset_scene(); scroll position owned by Display._scroll_pos
 

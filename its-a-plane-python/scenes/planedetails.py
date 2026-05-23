@@ -75,9 +75,6 @@ def _build_char_list(plane_name, distance, direction, altitude, vertical_speed, 
 class PlaneDetailsScene(object):
     def __init__(self):
         super().__init__()
-        self.plane_position = screen.WIDTH
-        self.plane_details_complete = False
-        self._data_all_looped = False
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
@@ -115,25 +112,16 @@ class PlaneDetailsScene(object):
             w = graphics.DrawText(
                 self.canvas,
                 PLANE_FONT,
-                self.plane_position + total_text_width,
+                self._scroll_pos + total_text_width,
                 PLANE_DISTANCE_FROM_TOP,
                 colour,
                 ch,
             )
             total_text_width += w
 
-        # Handle scrolling
-        self.plane_position -= 1
-
-        # Mark scroll complete when text scrolls off (wait for other regions)
-        if self.plane_position + total_text_width < 0:
-            if len(self._data) > 1:
-                self.plane_details_complete = True
-                self.mark_scroll_complete("plane_details")
-            else:
-                self.plane_position = screen.WIDTH
+        # Report width to shared scroll driver
+        self.report_scroll_width("plane_details", total_text_width)
 
     @Animator.KeyFrame.add(0)
     def reset_plane_details_scroll(self):
-        self.plane_position = screen.WIDTH
-        self.plane_details_complete = False
+        pass  # Called by reset_scene(); scroll position owned by Display._scroll_pos
