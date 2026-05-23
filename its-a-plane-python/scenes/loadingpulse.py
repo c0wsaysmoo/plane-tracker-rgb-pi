@@ -1,11 +1,17 @@
 from utilities.animator import Animator
 from setup import colours
 
-# Setup
 BLINKER_POSITION = (63, 0)
 BLINKER_STEPS    = 30
-COLOUR_OK        = colours.GREEN  # FR24 working
-COLOUR_ERROR     = colours.RED        # FR24 blocked/failed
+
+SOURCE_COLOURS = {
+    "AirLabs":     colours.YELLOW,
+    "FlightAware": colours.CYAN,
+    "FR24":        colours.GREEN,
+    "MasterOK":    colours.GREEN,
+    "MasterError": colours.RED,
+}
+COLOUR_OPENSKY = colours.WHITE
 
 
 class LoadingPulseScene(object):
@@ -17,10 +23,9 @@ class LoadingPulseScene(object):
         reset_count = True
 
         if self.overhead.processing:
-            # Pick colour based on FR24 status
-            blinker_colour = COLOUR_OK if self.overhead.fr24_ok else COLOUR_ERROR
+            source = getattr(self.overhead, "last_source", None)
+            blinker_colour = SOURCE_COLOURS.get(source, COLOUR_OPENSKY)
 
-            # Calculate pulsing brightness
             brightness = (1 - (count / BLINKER_STEPS)) / 2
             brightness = 0 if (brightness < 0 or brightness > 1) else brightness
 
@@ -33,7 +38,6 @@ class LoadingPulseScene(object):
             )
             reset_count = count == (BLINKER_STEPS - 1)
         else:
-            # Not processing — blank the pixel
             self.canvas.SetPixel(BLINKER_POSITION[0], BLINKER_POSITION[1], 0, 0, 0)
 
         return reset_count
