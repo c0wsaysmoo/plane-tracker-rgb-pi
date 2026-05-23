@@ -1,6 +1,5 @@
 from utilities.animator import Animator
 from setup import colours, fonts, screen
-from setup import frames
 
 from rgbmatrix import graphics
 
@@ -14,13 +13,8 @@ FLIGHT_NUMBER_NUMERIC_COLOUR = colours.LIGHT_ORANGE
 LIVERY_COLOUR = colours.GREY
 
 DATA_INDEX_POSITION = (52, 24)
-DATA_INDEX_TEXT_HEIGHT = 7
 DATA_INDEX_FONT = fonts.extrasmall
-
 DATA_INDEX_COLOUR = colours.GREY
-
-# Minimum frames to display before allowing page advance (10 seconds)
-MIN_PAGE_FRAMES = int(10 / frames.PERIOD)
 
 # Maximum character length for livery note to be shown
 MAX_LIVERY_LENGTH = 16
@@ -29,10 +23,6 @@ MAX_LIVERY_LENGTH = 16
 class FlightDetailsScene(object):
     def __init__(self):
         super().__init__()
-        self.flight_position = screen.WIDTH
-        self.flight_details_complete = False
-        self._data_all_looped = False
-        self._page_frame_count = 0
 
     @Animator.KeyFrame.add(1)
     def flight_details(self, count):
@@ -40,13 +30,6 @@ class FlightDetailsScene(object):
         # Guard against no data
         if len(self._data) == 0:
             return
-
-        # Skip rendering after scroll complete (waiting for other regions)
-        if self.flight_details_complete:
-            return
-
-        # Increment page frame counter
-        self._page_frame_count += 1
 
         # Clear the whole area
         self.draw_square(
@@ -86,7 +69,7 @@ class FlightDetailsScene(object):
                 ch_length = graphics.DrawText(
                     self.canvas,
                     FLIGHT_NO_FONT,
-                    self.flight_position + flight_no_text_length,
+                    self._scroll_pos + flight_no_text_length,
                     FLIGHT_NO_DISTANCE_FROM_TOP,
                     FLIGHT_NUMBER_NUMERIC_COLOUR
                     if ch.isnumeric()
@@ -103,7 +86,7 @@ class FlightDetailsScene(object):
                     ch_length = graphics.DrawText(
                         self.canvas,
                         FLIGHT_NO_FONT,
-                        self.flight_position + flight_no_text_length,
+                        self._scroll_pos + flight_no_text_length,
                         FLIGHT_NO_DISTANCE_FROM_TOP,
                         LIVERY_COLOUR,
                         ch,
@@ -121,35 +104,19 @@ class FlightDetailsScene(object):
                 colours.BLACK,
             )
 
-            # Draw text
-            text_length = graphics.DrawText(
+            # Draw text (fixed position, not part of scroll width)
+            graphics.DrawText(
                 self.canvas,
-                fonts.extrasmall,
+                DATA_INDEX_FONT,
                 DATA_INDEX_POSITION[0],
                 DATA_INDEX_POSITION[1],
                 DATA_INDEX_COLOUR,
                 f"{self._data_index + 1}/{len(self._data)}",
             )
 
-            # Count the whole line length
-            flight_no_text_length += text_length
-
-        # Handle scrolling
-        self.flight_position -= 1
-        if self.flight_position + flight_no_text_length < 0:
-            if len(self._data) > 1:
-                if self._page_frame_count >= MIN_PAGE_FRAMES:
-                    # Minimum display time met — mark complete and wait for other regions
-                    self.flight_details_complete = True
-                    self.mark_scroll_complete("flight_details")
-                else:
-                    # Under minimum display time — loop scroll again
-                    self.flight_position = screen.WIDTH
-            else:
-                self.flight_position = screen.WIDTH
+        # Report width to shared scroll driver
+        self.report_scroll_width("flight_details", flight_no_text_length)
 
     @Animator.KeyFrame.add(0)
     def reset_flight_details_scroll(self):
-        self.flight_position = screen.WIDTH
-        self.flight_details_complete = False
-        self._page_frame_count = 0
+        pass  # Called by reset_scene(); scroll position owned by Display._scroll_pos
