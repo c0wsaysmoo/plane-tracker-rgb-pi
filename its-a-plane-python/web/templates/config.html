@@ -364,6 +364,11 @@
                 <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
             </div>
             <div class="field">
+                <label>OWM_API_KEY</label>
+                <input type="password" id="cfg-OWM_API_KEY" placeholder="OpenWeatherMap One Call 3.0 key" />
+                <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+            </div>
+            <div class="field">
                 <label>EMAIL</label>
                 <input type="text" id="cfg-EMAIL" placeholder="Alert email (optional)" />
             </div>
@@ -428,12 +433,12 @@
             'NIGHT_BRIGHTNESS', 'NIGHT_START', 'NIGHT_END',
             'MIN_ALTITUDE', 'JOURNEY_BLANK_FILLER', 'FORECAST_DAYS',
             'MAX_CLOSEST', 'MAX_FARTHEST',
-            'FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY',
+            'FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY', 'OWM_API_KEY',
             'EMAIL',
         ];
 
         const CHECKBOX_FIELDS = ['NIGHT_BRIGHTNESS'];
-        const SECRET_FIELDS = ['FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY'];
+        const SECRET_FIELDS = ['FR24_API_KEY', 'TOMORROW_API_KEY', 'AIRLABS_API_KEY', 'NPS_API_KEY', 'OWM_API_KEY'];
 
         function toggleSection(header) {
             header.parentElement.classList.toggle('collapsed');
