@@ -2,7 +2,9 @@
 from flask import Flask, render_template, jsonify, send_from_directory, request
 import json
 import os
+import subprocess
 import sys
+import time as _time
 
 # Ensure the parent directory is on sys.path so `config` and `utilities` resolve
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -331,7 +333,7 @@ def api_config_get():
         "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
         "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION",
         "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
-        "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN",
+        "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN", "LED_RGB_SEQUENCE",
         "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
         "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
         "MAX_CLOSEST", "MAX_FARTHEST",
@@ -367,7 +369,7 @@ _VALID_CONFIG_KEYS = {
     "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
     "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION",
     "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
-    "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN",
+    "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN", "LED_RGB_SEQUENCE",
     "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
     "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
     "MAX_CLOSEST", "MAX_FARTHEST",
@@ -466,6 +468,130 @@ def api_system():
         info["cpu_temp"] = "N/A"
 
     return jsonify(info)
+
+
+# ---- WiFi Management (concept from c0wsaysmoo/plane-tracker-rgb-pi) ----
+
+@app.get("/api/wifi/status")
+def wifi_status():
+    """Return current WiFi connection info via nmcli."""
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,SECURITY",
+             "device", "wifi", "list"],
+            capture_output=True, text=True, timeout=10
+        )
+        networks = []
+        connected_ssid = None
+        seen = set()
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            active = parts[0]
+            ssid = parts[1]
+            signal = parts[2]
+            security = ":".join(parts[3:])
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            entry = {
+                "ssid": ssid,
+                "signal": int(signal) if signal.isdigit() else 0,
+                "security": security.strip(),
+                "active": active == "yes",
+            }
+            if active == "yes":
+                connected_ssid = ssid
+            networks.append(entry)
+        networks.sort(key=lambda x: x["signal"], reverse=True)
+
+        ip_result = subprocess.run(
+            ["nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", "wlan0"],
+            capture_output=True, text=True, timeout=5
+        )
+        ip_addr = ""
+        for line in ip_result.stdout.splitlines():
+            if "IP4.ADDRESS" in line:
+                ip_addr = line.split(":")[-1].split("/")[0].strip()
+                break
+
+        return jsonify({
+            "connected_ssid": connected_ssid,
+            "ip_address": ip_addr,
+            "networks": networks,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/api/wifi/scan")
+def wifi_scan():
+    """Trigger a fresh nmcli scan and return updated network list."""
+    try:
+        subprocess.run(
+            ["sudo", "nmcli", "device", "wifi", "rescan"],
+            capture_output=True, text=True, timeout=15
+        )
+        _time.sleep(2)
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,SECURITY",
+             "device", "wifi", "list"],
+            capture_output=True, text=True, timeout=10
+        )
+        networks = []
+        seen = set()
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            active = parts[0]
+            ssid = parts[1]
+            signal = parts[2]
+            security = ":".join(parts[3:])
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            networks.append({
+                "ssid": ssid,
+                "signal": int(signal) if signal.isdigit() else 0,
+                "security": security.strip(),
+                "active": active == "yes",
+            })
+        networks.sort(key=lambda x: x["signal"], reverse=True)
+        return jsonify({"networks": networks})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/api/wifi/connect")
+def wifi_connect():
+    """Connect to a WiFi network. Body: { ssid, password }"""
+    try:
+        data = request.get_json(force=True) or {}
+        ssid = (data.get("ssid") or "").strip()
+        password = (data.get("password") or "").strip()
+        if not ssid:
+            return jsonify({"success": False, "error": "SSID is required"}), 400
+        cmd = ["sudo", "nmcli", "device", "wifi", "connect", ssid]
+        if password:
+            cmd += ["password", password]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return jsonify({"success": True, "message": f"Connected to {ssid}"})
+        else:
+            err = (result.stderr or result.stdout).strip()
+            return jsonify({"success": False, "error": err})
+    except subprocess.TimeoutExpired:
+        # Timeout usually means Pi switched networks — connection dropped, not failed
+        return jsonify({
+            "success": True,
+            "switched": True,
+            "message": "Connection in progress — the Pi may have switched networks. "
+                       "Reconnect your device and navigate to the Pi's new IP.",
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

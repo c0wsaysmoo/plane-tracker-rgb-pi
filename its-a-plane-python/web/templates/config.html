@@ -267,6 +267,18 @@
                 <label>GPIO_SLOWDOWN</label>
                 <input type="number" id="cfg-GPIO_SLOWDOWN" min="1" max="5" placeholder="2" />
             </div>
+            <div class="field">
+                <label>LED_RGB_SEQUENCE</label>
+                <select id="cfg-LED_RGB_SEQUENCE">
+                    <option value="RGB">RGB (most panels)</option>
+                    <option value="RBG">RBG (some panels)</option>
+                    <option value="GRB">GRB</option>
+                    <option value="GBR">GBR</option>
+                    <option value="BRG">BRG</option>
+                    <option value="BGR">BGR</option>
+                </select>
+                <span class="hint">Change if colors look wrong — requires restart</span>
+            </div>
             <div class="checkbox-field">
                 <input type="checkbox" id="cfg-NIGHT_BRIGHTNESS" />
                 <label for="cfg-NIGHT_BRIGHTNESS">NIGHT_BRIGHTNESS</label>
@@ -353,6 +365,46 @@
         </div>
     </div>
 
+    <!-- WiFi (concept from c0wsaysmoo/plane-tracker-rgb-pi) -->
+    <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">WI-FI</div>
+        <div class="section-body">
+            <div style="display:flex;flex-wrap:wrap;gap:4px 24px;margin-bottom:12px;padding:8px 12px;border:1px solid #333;background:#0d0d0d">
+                <div><span style="font-size:11px;color:#806000">NETWORK</span><br><span id="wifi-ssid" style="color:#ffb000">--</span></div>
+                <div><span style="font-size:11px;color:#806000">IP</span><br><span id="wifi-ip" style="color:#ffb000">--</span></div>
+                <div><span style="font-size:11px;color:#806000">SIGNAL</span><br><span id="wifi-signal" style="color:#ffb000">--</span></div>
+                <div><span style="font-size:11px;color:#806000">STATUS</span><br><span id="wifi-status" style="color:#ffb000">--</span></div>
+            </div>
+            <div style="margin-bottom:8px">
+                <button onclick="wifiScan()" id="wifi-scan-btn" style="font-size:13px;padding:5px 14px">Scan Networks</button>
+                <span id="wifi-scan-hint" style="font-size:11px;color:#555;margin-left:8px"></span>
+            </div>
+            <div id="wifi-network-list" style="display:none;border:1px solid #333;margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
+            <div style="font-size:11px;color:#555;cursor:pointer;margin-top:8px" onclick="document.getElementById('wifi-manual').style.display=document.getElementById('wifi-manual').style.display==='none'?'block':'none'">
+                ▸ Manual entry
+            </div>
+            <div id="wifi-manual" style="display:none;margin-top:8px">
+                <div class="field">
+                    <label>SSID</label>
+                    <input type="text" id="wifi-manual-ssid" placeholder="Network name" />
+                </div>
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" id="wifi-manual-pw" placeholder="Leave blank for open" />
+                    <span class="secret-toggle" onclick="toggleSecret(this)">show</span>
+                </div>
+                <button onclick="wifiConnectManual()" style="margin-top:6px;font-size:13px;padding:5px 14px">Connect</button>
+            </div>
+            <div id="wifi-result" style="display:none;margin-top:10px;padding:8px 12px;font-size:12px;border:1px solid #333"></div>
+            <div id="wifi-switch-warn" style="display:none;margin-top:10px;padding:10px 14px;background:#1a1200;border:1px solid #664400;color:#ffb000;font-size:12px">
+                Warning: connecting to a different network will make this page go offline.
+                Reconnect your device to the new network and find the Pi's new IP.<br><br>
+                <button onclick="wifiConfirmSwitch()" style="font-size:13px;padding:5px 14px">Connect Anyway</button>
+                <button onclick="document.getElementById('wifi-switch-warn').style.display='none'" style="font-size:13px;padding:5px 14px;margin-left:8px">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Buttons -->
     <div class="btn-bar">
         <button class="primary" onclick="saveConfig()">SAVE CONFIG</button>
@@ -367,7 +419,7 @@
             'ZONE_TL_LAT', 'ZONE_TL_LON', 'ZONE_BR_LAT', 'ZONE_BR_LON',
             'JOURNEY_CODE_SELECTED', 'TEMPERATURE_LOCATION',
             'DISTANCE_UNITS', 'SPEED_UNITS', 'TEMPERATURE_UNITS', 'CLOCK_FORMAT',
-            'BRIGHTNESS', 'BRIGHTNESS_NIGHT', 'GPIO_SLOWDOWN',
+            'BRIGHTNESS', 'BRIGHTNESS_NIGHT', 'GPIO_SLOWDOWN', 'LED_RGB_SEQUENCE',
             'NIGHT_BRIGHTNESS', 'NIGHT_START', 'NIGHT_END',
             'MIN_ALTITUDE', 'JOURNEY_BLANK_FILLER', 'FORECAST_DAYS',
             'MAX_CLOSEST', 'MAX_FARTHEST',
@@ -475,9 +527,141 @@
             } catch (e) {}
         }
 
+        // ── WiFi Management (concept from c0wsaysmoo/plane-tracker-rgb-pi) ──
+        let _wifiCurrentSsid = null;
+        let _wifiPendingSsid = null;
+        let _wifiPendingPw = null;
+
+        function signalBars(pct) {
+            if (pct >= 80) return '\u2582\u2584\u2586\u2588';
+            if (pct >= 55) return '\u2582\u2584\u2586\u00b7';
+            if (pct >= 30) return '\u2582\u2584\u00b7\u00b7';
+            if (pct >= 10) return '\u2582\u00b7\u00b7\u00b7';
+            return '\u00b7\u00b7\u00b7\u00b7';
+        }
+
+        function wifiResult(msg, color) {
+            const el = document.getElementById('wifi-result');
+            el.textContent = msg;
+            el.style.display = 'block';
+            el.style.color = color || '#ffb000';
+            el.style.borderColor = color || '#333';
+        }
+
+        async function wifiLoadStatus() {
+            try {
+                const d = await (await fetch('/api/wifi/status')).json();
+                if (d.error) throw new Error(d.error);
+                _wifiCurrentSsid = d.connected_ssid || null;
+                document.getElementById('wifi-ssid').textContent = d.connected_ssid || 'NOT CONNECTED';
+                document.getElementById('wifi-ssid').style.color = d.connected_ssid ? '#4caf50' : '#ff4444';
+                document.getElementById('wifi-ip').textContent = d.ip_address || '--';
+                document.getElementById('wifi-status').textContent = d.connected_ssid ? 'CONNECTED' : 'DISCONNECTED';
+                document.getElementById('wifi-status').style.color = d.connected_ssid ? '#4caf50' : '#ff4444';
+                const cur = (d.networks || []).find(n => n.active);
+                document.getElementById('wifi-signal').textContent = cur ? signalBars(cur.signal) + ' ' + cur.signal + '%' : '--';
+            } catch (e) {
+                document.getElementById('wifi-status').textContent = 'N/A';
+            }
+        }
+
+        async function wifiScan() {
+            const btn = document.getElementById('wifi-scan-btn');
+            const hint = document.getElementById('wifi-scan-hint');
+            btn.disabled = true;
+            btn.textContent = 'Scanning...';
+            hint.textContent = '';
+            document.getElementById('wifi-network-list').style.display = 'none';
+            try {
+                const d = await (await fetch('/api/wifi/scan')).json();
+                if (d.error) throw new Error(d.error);
+                const list = document.getElementById('wifi-network-list');
+                list.innerHTML = '';
+                (d.networks || []).forEach(net => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid #222;cursor:pointer;font-size:13px';
+                    if (net.active) row.style.borderLeft = '3px solid #4caf50';
+                    row.innerHTML = '<span style="font-size:14px;letter-spacing:-1px">' + signalBars(net.signal) + '</span>' +
+                        '<span style="flex:1;color:' + (net.active ? '#4caf50' : '#ffb000') + '">' + net.ssid + (net.active ? ' \u2713' : '') + '</span>' +
+                        '<span style="font-size:11px;color:#555">' + (net.security && net.security !== '--' ? '\ud83d\udd12' : '') + ' ' + net.signal + '%</span>';
+                    if (!net.active) row.addEventListener('click', () => wifiSelectNetwork(net));
+                    row.addEventListener('mouseover', () => { if (!net.active) row.style.background = 'rgba(255,176,0,0.05)'; });
+                    row.addEventListener('mouseout', () => row.style.background = '');
+                    list.appendChild(row);
+                });
+                list.style.display = 'block';
+                hint.textContent = (d.networks || []).length + ' networks found';
+            } catch (e) {
+                hint.textContent = 'Scan failed: ' + e.message;
+            }
+            btn.disabled = false;
+            btn.textContent = 'Scan Networks';
+        }
+
+        function wifiSelectNetwork(net) {
+            _wifiPendingSsid = net.ssid;
+            _wifiPendingPw = null;
+            document.getElementById('wifi-result').style.display = 'none';
+            document.getElementById('wifi-switch-warn').style.display = 'none';
+            if (net.security && net.security !== '--') {
+                document.getElementById('wifi-manual-ssid').value = net.ssid;
+                document.getElementById('wifi-manual-pw').value = '';
+                document.getElementById('wifi-manual').style.display = 'block';
+                document.getElementById('wifi-manual-pw').focus();
+                wifiResult('Selected: ' + net.ssid + ' — enter password and click Connect', '#ffb000');
+                return;
+            }
+            if (net.ssid !== _wifiCurrentSsid) {
+                document.getElementById('wifi-switch-warn').style.display = 'block';
+                return;
+            }
+            wifiDoConnect(net.ssid, '');
+        }
+
+        function wifiConnectManual() {
+            const ssid = document.getElementById('wifi-manual-ssid').value.trim();
+            const pw = document.getElementById('wifi-manual-pw').value;
+            if (!ssid) { wifiResult('Enter an SSID', '#ff4444'); return; }
+            _wifiPendingSsid = ssid;
+            _wifiPendingPw = pw;
+            if (ssid !== _wifiCurrentSsid) {
+                document.getElementById('wifi-switch-warn').style.display = 'block';
+                return;
+            }
+            wifiDoConnect(ssid, pw);
+        }
+
+        function wifiConfirmSwitch() {
+            document.getElementById('wifi-switch-warn').style.display = 'none';
+            wifiDoConnect(_wifiPendingSsid, _wifiPendingPw || document.getElementById('wifi-manual-pw').value);
+        }
+
+        async function wifiDoConnect(ssid, password) {
+            wifiResult('Connecting to ' + ssid + '...', '#ffb000');
+            try {
+                const d = await (await fetch('/api/wifi/connect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ssid, password}),
+                })).json();
+                if (d.switched) {
+                    wifiResult('Connecting — Pi may have switched networks. Reconnect and find its new IP.', '#ffb000');
+                } else if (d.success) {
+                    wifiResult('Connected to ' + ssid, '#4caf50');
+                    wifiLoadStatus();
+                } else {
+                    wifiResult('Failed: ' + (d.error || 'unknown'), '#ff4444');
+                }
+            } catch (e) {
+                wifiResult('Connection in progress — page may be offline (Pi switched networks).', '#ffb000');
+            }
+            _wifiPendingSsid = _wifiPendingPw = null;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             loadConfig();
             loadSystem();
+            wifiLoadStatus();
         });
     </script>
 </body>
