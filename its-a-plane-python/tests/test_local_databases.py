@@ -302,7 +302,6 @@ class TestDataPipelineIntegration:
             "distance": 3.2,
             "direction": "NE",
             "trail": [[45.1, -40.2], [45.0, -40.0]],
-            "livery_note": "",
         }
 
         for field in required_fields:

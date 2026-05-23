@@ -825,11 +825,6 @@ class Overhead:
                                 if airline_name == airline_name.upper():
                                     airline_name = airline_name.title()
 
-                        # Livery note: when painted_as_id differs from operated_by_id
-                        painted_as_id = self.safe_get(d, "schedule_info", "painted_as_id", default=0) or 0
-                        operated_by_id = self.safe_get(d, "schedule_info", "operated_by_id", default=0) or 0
-                        has_special_livery = (painted_as_id != 0 and operated_by_id != 0 and painted_as_id != operated_by_id)
-
                         origin = f.origin_airport_iata or ""
                         destination = f.destination_airport_iata or ""
                         callsign = f.callsign or ""
@@ -911,11 +906,6 @@ class Overhead:
                             if isinstance(pt, dict) and pt.get("alt", 0) > 0
                         ]
 
-                        # Determine livery note text (only if special and short)
-                        livery_note = ""
-                        if has_special_livery and airline_name:
-                            livery_note = "special livery"
-
                         entry = {
                             "airline": airline_name,
                             "plane": plane,
@@ -943,7 +933,6 @@ class Overhead:
                             "direction": degrees_to_cardinal(plane_bearing(f)),
                             "heading": f.heading if hasattr(f, 'heading') else 0,
                             "trail": trail,
-                            "livery_note": livery_note,
                         }
 
                         overhead_data.append(entry)
