@@ -107,6 +107,7 @@ def _apply():
     NIGHT_END = _get("NIGHT_END", "06:00")
     GPIO_SLOWDOWN = int(_get("GPIO_SLOWDOWN", "2"))
     LED_RGB_SEQUENCE = _get("LED_RGB_SEQUENCE", "RGB")
+    TIDE_STATION = _get("TIDE_STATION", "")
     HAT_PWM_ENABLED = _bool(_get("HAT_PWM_ENABLED", "True"))
 
     # --- Flight filtering ---
