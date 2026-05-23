@@ -21,6 +21,7 @@ class DateScene(object):
         super().__init__()
         self._last_date = None
         self._last_display_text = None  # track what's currently drawn for clearing
+        self._redraw_date = False
         self.today_moonphase = None
         self.last_fetched_moonphase = None
         self._cycle_counter = 0  # increments each second
