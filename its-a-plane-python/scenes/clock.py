@@ -7,14 +7,25 @@ import logging
 from config import CLOCK_FORMAT
 
 try:
-    from utilities.rain import get_rain_alert
+    from utilities.rain import get_rain_alert, get_wind_info
 except ImportError:
     get_rain_alert = lambda: None
+    get_wind_info = lambda: None
 
 try:
     from utilities.nws_alerts import get_active_alerts
 except ImportError:
     get_active_alerts = lambda: []
+
+try:
+    from utilities.airport_status import get_airport_alerts
+except ImportError:
+    get_airport_alerts = lambda: []
+
+try:
+    from utilities.iss import get_iss_alert
+except ImportError:
+    get_iss_alert = lambda: None
 
 # Setup — normal clock (no alerts)
 CLOCK_FONT = fonts.large_bold          # 8x13B
@@ -116,7 +127,7 @@ class ClockScene(object):
         return self.today_sunrise, self.today_sunset
 
     def _build_alert_items(self):
-        """Build unified list of alert items from rain + NWS sources.
+        """Build unified list of alert items from rain, NWS, sun, and wind.
 
         Returns list of (text, color) tuples.
         """
@@ -144,6 +155,14 @@ class ClockScene(object):
                 color = _ALERT_COLOURS.get("white" if rain["type"] in ("snow", "sleet") else "blue")
                 items.append((text, color))
 
+        # Wind alert (from OWM data, already fetched by rain.py)
+        try:
+            wind = get_wind_info()
+        except Exception:
+            wind = None
+        if wind:
+            items.append((wind["text"], _ALERT_COLOURS.get(wind["color"], colours.WHITE)))
+
         # NWS alerts
         try:
             nws = get_active_alerts()
@@ -152,6 +171,38 @@ class ClockScene(object):
         for a in nws:
             color = _ALERT_COLOURS.get(a.get("color", "grey"), colours.GREY)
             items.append((a["text"], color))
+
+        # FAA airport delays
+        try:
+            faa = get_airport_alerts()
+        except Exception:
+            faa = []
+        for a in faa:
+            color = _ALERT_COLOURS.get(a.get("color", "grey"), colours.GREY)
+            items.append((a["text"], color))
+
+        # ISS overhead pass
+        try:
+            iss = get_iss_alert()
+        except Exception:
+            iss = None
+        if iss:
+            items.append((iss["text"], _ALERT_COLOURS.get(iss["color"], colours.WHITE)))
+
+        # Sunrise/sunset countdown (within 30 min)
+        try:
+            if self.today_sunrise and self.today_sunset:
+                now_utc = datetime.now(timezone.utc)
+                to_sunset = (self.today_sunset - now_utc).total_seconds()
+                to_sunrise = (self.today_sunrise - now_utc).total_seconds()
+                if 0 < to_sunset <= 1800:
+                    mins = int(to_sunset / 60)
+                    items.append((f"Sun {mins}m", _ALERT_COLOURS["orange"]))
+                elif 0 < to_sunrise <= 1800:
+                    mins = int(to_sunrise / 60)
+                    items.append((f"Rise {mins}m", _ALERT_COLOURS["yellow"]))
+        except Exception:
+            pass
 
         return items
 
@@ -180,7 +231,9 @@ class ClockScene(object):
         self._alert_cycle_counter += 1
 
         if alert_items:
-            slot = (self._alert_cycle_counter // _ALERT_CYCLE_SECONDS) % len(alert_items)
+            # Speed up rotation when many alerts (3s per item if >4 items)
+            cycle_secs = 3 if len(alert_items) > 4 else _ALERT_CYCLE_SECONDS
+            slot = (self._alert_cycle_counter // cycle_secs) % len(alert_items)
             alert_text, alert_color = alert_items[slot]
         else:
             alert_text, alert_color = None, None
