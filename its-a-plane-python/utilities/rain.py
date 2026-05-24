@@ -27,6 +27,8 @@ _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
 _CACHE_FILE = os.path.join(_CACHE_DIR, "rain.json")
 _POLL_INTERVAL = 300  # 5 minutes
 _PRECIP_THRESHOLD = 0.1  # mm/h — below this is "dry"
+_WIND_THRESHOLD_MPH = 20  # show wind alert above this speed
+_MS_TO_MPH = 2.237  # meters/sec to mph
 
 # In-memory cache
 _cached_data = None  # raw API response dict
@@ -90,7 +92,7 @@ def _refresh():
         return None
 
     now = time.time()
-    if _cached_data and (now - _cached_ts) < _POLL_INTERVAL:
+    if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
         return _cached_data
 
     # Try disk cache first (survives reboot)
@@ -125,6 +127,28 @@ def _precip_type(data):
     except (KeyError, IndexError, TypeError):
         pass
     return "rain"
+
+
+def get_wind_info():
+    """Return wind alert dict if wind is above threshold, else None.
+
+    Uses OWM current.wind_speed (m/s) already fetched by _refresh().
+    Returns {"text": "Wind 25", "color": "cyan"} or None.
+    """
+    data = _refresh()
+    if not data:
+        return None
+    try:
+        current = data.get("current", {})
+        wind_speed_ms = current.get("wind_speed", 0)
+        wind_gust_ms = current.get("wind_gust", 0)
+        # Use gust if available, otherwise sustained
+        peak_mph = int(max(wind_speed_ms, wind_gust_ms) * _MS_TO_MPH)
+        if peak_mph >= _WIND_THRESHOLD_MPH:
+            return {"text": f"Wind {peak_mph}", "color": "cyan"}
+    except (KeyError, TypeError, ValueError):
+        pass
+    return None
 
 
 def get_rain_alert():
