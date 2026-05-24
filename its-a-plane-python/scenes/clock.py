@@ -11,19 +11,36 @@ try:
 except ImportError:
     get_rain_alert = lambda: None
 
-# Setup — normal clock (no rain)
+try:
+    from utilities.nws_alerts import get_active_alerts
+except ImportError:
+    get_active_alerts = lambda: []
+
+# Setup — normal clock (no alerts)
 CLOCK_FONT = fonts.large_bold          # 8x13B
 CLOCK_POSITION = (0, 11)
 DAY_COLOUR = colours.LIGHT_ORANGE
 NIGHT_COLOUR = colours.LIGHT_BLUE
 
-# Rain mode — small clock + alert text below
+# Alert mode — small clock + alert text below
 CLOCK_SMALL_FONT = fonts.small         # 5x8
 CLOCK_SMALL_POSITION = (0, 6)
-RAIN_FONT = fonts.extrasmall           # 4x6
-RAIN_POSITION = (0, 11)
-RAIN_COLOUR = colours.LIGHT_BLUE
-SNOW_COLOUR = colours.WHITE
+ALERT_FONT = fonts.extrasmall          # 4x6
+ALERT_POSITION = (0, 11)
+
+# Alert rotation interval (seconds)
+_ALERT_CYCLE_SECONDS = 4
+
+# Color name → graphics.Color mapping for NWS alerts
+_ALERT_COLOURS = {
+    "red":    colours.RED,
+    "orange": colours.LIGHT_ORANGE,
+    "cyan":   colours.CYAN,
+    "yellow": colours.YELLOW,
+    "grey":   colours.GREY,
+    "white":  colours.WHITE,
+    "blue":   colours.LIGHT_BLUE,
+}
 
 
 class ClockScene(object):
@@ -32,10 +49,11 @@ class ClockScene(object):
         self._last_time = None
         self.today_sunrise = None
         self.today_sunset = None
-        self.last_fetch_date = None  # Store the date of the last forecast fetch
-        self._forecast_retry_after = 0  # Epoch time: don't retry before this
-        self._rain_active = False
-        self._last_rain_text = None
+        self.last_fetch_date = None
+        self._forecast_retry_after = 0
+        self._alert_active = False
+        self._last_alert_text = None
+        self._alert_cycle_counter = 0
 
         # Pre-load sunrise/sunset from disk cache (survives reboots).
         # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
@@ -59,31 +77,26 @@ class ClockScene(object):
         now = datetime.now()
 
         try:
-            # Only fetch forecast if it's a new day or if no cached data
             if self.last_fetch_date != now.date():
-                # Cooldown: don't hammer the API on repeated failures
                 if datetime.now(timezone.utc).timestamp() < self._forecast_retry_after:
                     return self.today_sunrise, self.today_sunset
 
                 forecast = grab_forecast(tag="ClockScene")
-                if not forecast:  # None or empty list
+                if not forecast:
                     logging.error("Forecast data missing or API error.")
-                    self._forecast_retry_after = datetime.now(timezone.utc).timestamp() + 300  # 5 min
+                    self._forecast_retry_after = datetime.now(timezone.utc).timestamp() + 300
                     return None, None
 
                 for day in forecast:
                     forecast_date = day['startTime'][:10]
                     if forecast_date == now.strftime('%Y-%m-%d'):
-                        # Parse UTC sunrise and sunset times
                         utc_sunrise = datetime.fromisoformat(day['values']['sunriseTime'].replace("Z", "+00:00"))
                         utc_sunset = datetime.fromisoformat(day['values']['sunsetTime'].replace("Z", "+00:00"))
 
-                        # Cache values
                         self.today_sunrise = utc_sunrise
                         self.today_sunset = utc_sunset
                         self.last_fetch_date = now.date()
 
-                        # Persist to disk for reboot survival
                         try:
                             from utilities.temperature import _save_file_cache
                             import os
@@ -102,21 +115,45 @@ class ClockScene(object):
 
         return self.today_sunrise, self.today_sunset
 
-    def _format_rain_text(self, alert):
-        """Format rain alert dict into short display text."""
-        if not alert:
-            return None
-        type_labels = {"snow": "Snow", "sleet": "Sleet", "rain": "Rain"}
-        label = type_labels.get(alert["type"], "Rain")
-        action = alert.get("action", "")
-        minutes = alert.get("minutes")
-        if action == "starting" and minutes:
-            return f"{label} {minutes}m"
-        elif action == "stopping" and minutes:
-            return f"Stop {minutes}m"
-        elif action == "now":
-            return label
-        return None
+    def _build_alert_items(self):
+        """Build unified list of alert items from rain + NWS sources.
+
+        Returns list of (text, color) tuples.
+        """
+        items = []
+
+        # Rain/snow/sleet alert
+        try:
+            rain = get_rain_alert()
+        except Exception:
+            rain = None
+        if rain:
+            type_labels = {"snow": "Snow", "sleet": "Sleet", "rain": "Rain"}
+            label = type_labels.get(rain["type"], "Rain")
+            action = rain.get("action", "")
+            minutes = rain.get("minutes")
+            if action == "starting" and minutes:
+                text = f"{label} {minutes}m"
+            elif action == "stopping" and minutes:
+                text = f"Stop {minutes}m"
+            elif action == "now":
+                text = label
+            else:
+                text = None
+            if text:
+                color = _ALERT_COLOURS.get("white" if rain["type"] in ("snow", "sleet") else "blue")
+                items.append((text, color))
+
+        # NWS alerts
+        try:
+            nws = get_active_alerts()
+        except Exception:
+            nws = []
+        for a in nws:
+            color = _ALERT_COLOURS.get(a.get("color", "grey"), colours.GREY)
+            items.append((a["text"], color))
+
+        return items
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def clock(self, count):
@@ -138,19 +175,22 @@ class ClockScene(object):
         else:
             clock_color = NIGHT_COLOUR
 
-        # Check for rain alert
-        try:
-            alert = get_rain_alert()
-        except Exception:
-            alert = None
+        # Build unified alert list and pick current item
+        alert_items = self._build_alert_items()
+        self._alert_cycle_counter += 1
 
-        rain_text = self._format_rain_text(alert)
-        rain_now_active = rain_text is not None
+        if alert_items:
+            slot = (self._alert_cycle_counter // _ALERT_CYCLE_SECONDS) % len(alert_items)
+            alert_text, alert_color = alert_items[slot]
+        else:
+            alert_text, alert_color = None, None
 
-        # Detect transition between rain/no-rain modes
-        mode_changed = rain_now_active != self._rain_active
+        alert_now_active = len(alert_items) > 0
+
+        # Detect transitions
+        mode_changed = alert_now_active != self._alert_active
         time_changed = self._last_time != current_time
-        rain_text_changed = rain_text != self._last_rain_text
+        alert_text_changed = alert_text != self._last_alert_text
         needs_redraw = getattr(self, "_redraw_time", False)
 
         if mode_changed or needs_redraw:
@@ -159,19 +199,19 @@ class ClockScene(object):
         elif time_changed:
             # Just clear old clock text
             if self._last_time:
-                old_font = CLOCK_SMALL_FONT if self._rain_active else CLOCK_FONT
-                old_pos = CLOCK_SMALL_POSITION if self._rain_active else CLOCK_POSITION
+                old_font = CLOCK_SMALL_FONT if self._alert_active else CLOCK_FONT
+                old_pos = CLOCK_SMALL_POSITION if self._alert_active else CLOCK_POSITION
                 graphics.DrawText(self.canvas, old_font, old_pos[0], old_pos[1],
                                   colours.BLACK, self._last_time)
 
-        if rain_text_changed and not mode_changed:
-            # Clear old rain text only
-            if self._last_rain_text:
-                graphics.DrawText(self.canvas, RAIN_FONT, RAIN_POSITION[0],
-                                  RAIN_POSITION[1], colours.BLACK, self._last_rain_text)
+        if alert_text_changed and not mode_changed:
+            # Clear old alert text only
+            if self._last_alert_text:
+                graphics.DrawText(self.canvas, ALERT_FONT, ALERT_POSITION[0],
+                                  ALERT_POSITION[1], colours.BLACK, self._last_alert_text)
 
         # Draw clock
-        if rain_now_active:
+        if alert_now_active:
             graphics.DrawText(self.canvas, CLOCK_SMALL_FONT,
                               CLOCK_SMALL_POSITION[0], CLOCK_SMALL_POSITION[1],
                               clock_color, current_time)
@@ -180,14 +220,13 @@ class ClockScene(object):
                               CLOCK_POSITION[0], CLOCK_POSITION[1],
                               clock_color, current_time)
 
-        # Draw rain text
-        if rain_text:
-            rain_color = SNOW_COLOUR if alert and alert["type"] in ("snow", "sleet") else RAIN_COLOUR
-            graphics.DrawText(self.canvas, RAIN_FONT,
-                              RAIN_POSITION[0], RAIN_POSITION[1],
-                              rain_color, rain_text)
+        # Draw alert text
+        if alert_text:
+            graphics.DrawText(self.canvas, ALERT_FONT,
+                              ALERT_POSITION[0], ALERT_POSITION[1],
+                              alert_color, alert_text)
 
         self._last_time = current_time
-        self._rain_active = rain_now_active
-        self._last_rain_text = rain_text
+        self._alert_active = alert_now_active
+        self._last_alert_text = alert_text
         self._redraw_time = False
