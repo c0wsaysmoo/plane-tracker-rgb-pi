@@ -107,12 +107,6 @@ def _refresh():
         if data:
             _cached_data = data
             _cached_ts = now
-        elif _cached_data is None:
-            # No cache, no API — try disk as last resort
-            disk, disk_ts = _load_cache()
-            if disk:
-                _cached_data = disk
-                _cached_ts = disk_ts
 
     return _cached_data
 
