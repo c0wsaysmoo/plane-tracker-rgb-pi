@@ -166,11 +166,10 @@ function airlineBreakdown(full) {
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
-function airportBreakdown(full) {
+function routeBreakdown(full) {
   const tally={};
   Object.values(full).forEach(day=>(day.flights||[]).forEach(f=>{
-    if(f.origin) tally[f.origin]=(tally[f.origin]||0)+1;
-    if(f.dest)   tally[f.dest]  =(tally[f.dest]  ||0)+1;
+    if(f.origin && f.dest) { const r=`${f.origin}→${f.dest}`; tally[r]=(tally[r]||0)+1; }
   }));
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
@@ -190,7 +189,7 @@ async function render() {
   const dowAvg=avgByDow(summary);
   const peakDowIdx=dowAvg.indexOf(Math.max(...dowAvg));
   const airlines=airlineBreakdown(full);
-  const airports=airportBreakdown(full);
+  const airports=routeBreakdown(full);
   const sorted=[...summary].reverse();
   const maxCount=Math.max(...summary.map(d=>d.count));
 
@@ -207,7 +206,7 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Average Flights by Day of Week</div><canvas id="dowChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Airline Breakdown (Top 12)</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
-      <div class="panel"><div class="panel-title">▸ Airport Codes (Top 12)</div><canvas id="airportChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel chart-full">
         <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
         <table class="day-table">
