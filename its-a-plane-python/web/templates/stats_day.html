@@ -122,6 +122,15 @@ function airlineBreakdown(flights) {
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
+function airportBreakdown(flights) {
+  const tally={};
+  flights.forEach(f=>{
+    if(f.origin) tally[f.origin]=(tally[f.origin]||0)+1;
+    if(f.dest)   tally[f.dest]  =(tally[f.dest]  ||0)+1;
+  });
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
 async function render() {
   try {
     const ac = await fetch('/airport-code').then(r=>r.json());
@@ -142,6 +151,7 @@ async function render() {
   flights.forEach(f=>byHour[f.hour]++);
   const peakHour = byHour.indexOf(Math.max(...byHour));
   const airlines = airlineBreakdown(flights);
+  const airports = airportBreakdown(flights);
 
   const d = new Date(date+'T12:00:00');
   const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
@@ -161,12 +171,13 @@ async function render() {
       <div class="panel chart-full"><div class="panel-title">▸ Flights by Hour</div><canvas id="hourChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airport Codes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel">
         <div class="panel-title">▸ All Flights — ${day.count} total</div>
         <div style="max-height:280px;overflow-y:auto">
           <table class="flight-table">
-            <thead><tr><th>#</th><th>Callsign</th><th>Time</th></tr></thead>
-            <tbody>${flights.map((f,i)=>`<tr><td class="dim">${i+1}</td><td class="callsign">${f.callsign}</td><td class="dim">${f.time}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>#</th><th>Callsign</th><th>Route</th><th>Time</th></tr></thead>
+            <tbody>${flights.map((f,i)=>{const route=(f.origin&&f.dest)?`${f.origin}→${f.dest}`:(f.origin||f.dest||'—');return`<tr><td class="dim">${i+1}</td><td class="callsign">${f.callsign}</td><td class="dim">${route}</td><td class="dim">${f.time}</td></tr>`;}).join('')}</tbody>
           </table>
         </div>
       </div>
@@ -213,6 +224,16 @@ async function render() {
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
       tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+    }}});
+
+  new Chart(document.getElementById('airportChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airports.map(([k])=>k),datasets:[{data:airports.map(([,v])=>v),
+      backgroundColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),
+      borderColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
+      tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
 }
 

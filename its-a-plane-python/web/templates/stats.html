@@ -166,6 +166,15 @@ function airlineBreakdown(full) {
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
+function airportBreakdown(full) {
+  const tally={};
+  Object.values(full).forEach(day=>(day.flights||[]).forEach(f=>{
+    if(f.origin) tally[f.origin]=(tally[f.origin]||0)+1;
+    if(f.dest)   tally[f.dest]  =(tally[f.dest]  ||0)+1;
+  }));
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
 async function render() {
   const {summary,full,airportCode} = await loadData();
   if (!summary.length) {
@@ -181,6 +190,7 @@ async function render() {
   const dowAvg=avgByDow(summary);
   const peakDowIdx=dowAvg.indexOf(Math.max(...dowAvg));
   const airlines=airlineBreakdown(full);
+  const airports=airportBreakdown(full);
   const sorted=[...summary].reverse();
   const maxCount=Math.max(...summary.map(d=>d.count));
 
@@ -197,6 +207,7 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Average Flights by Day of Week</div><canvas id="dowChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Airline Breakdown (Top 12)</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airport Codes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel chart-full">
         <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
         <table class="day-table">
@@ -252,6 +263,14 @@ async function render() {
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
       tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+    }}});
+
+  new Chart(document.getElementById('airportChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airports.map(([k])=>k),datasets:[{data:airports.map(([,v])=>v),backgroundColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),borderColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
+      tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
 }
 
