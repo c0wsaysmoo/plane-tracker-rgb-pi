@@ -17,6 +17,7 @@ from scenes.date import DateScene
 from scenes.trackedroute import TrackedRouteScene
 from scenes.trackedprogress import TrackedProgressScene
 from scenes.trackedstats import TrackedStatsScene
+from scenes.isspass import ISSPassScene
 
 from rgbmatrix import graphics
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
@@ -83,6 +84,7 @@ class Display(
     TrackedProgressScene,
     TrackedStatsScene,
     DateScene,
+    ISSPassScene,
     Animator,
 ):
     def __init__(self):
@@ -149,6 +151,12 @@ class Display(
                 self._data_all_looped = False
                 self._scroll_pos = screen.WIDTH
                 self._scroll_widths = {}
+                # Reset ISS plane cameo flag when zone changes,
+                # but only if ISS pass is NOT active (otherwise the
+                # cameo would re-trigger on every data change)
+                iss = self.overhead.iss_pass_data
+                if not (iss and iss.get("is_active")):
+                    self._iss_plane_shown = False
                 self._data = new_data
 
             reset_required = there_is_data and data_is_different
@@ -174,6 +182,12 @@ class Display(
             return
         max_width = max(self._scroll_widths.values())
         if self._scroll_pos + max_width < 0:
+            # During ISS pass: after one full scroll cycle of plane data,
+            # mark it as shown so ISS takeover resumes
+            iss = self.overhead.iss_pass_data
+            if iss and iss["is_active"] and len(self._data) > 0:
+                self._iss_plane_shown = True
+
             if len(self._data) > 1:
                 self._data_index = (self._data_index + 1) % len(self._data)
                 self._data_all_looped = self._data_index == 0 or self._data_all_looped
