@@ -45,6 +45,7 @@ class TrackedProgressScene(object):
 
     @Animator.KeyFrame.add(1)
     def tracked_progress(self, count):
+        if getattr(self, "_iss_active", False): return
         # Force redraw at brightness transition times
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():

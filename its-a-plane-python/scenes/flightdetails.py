@@ -29,7 +29,7 @@ class FlightDetailsScene(object):
     def flight_details(self, count):
 
         # Guard against no data
-        if len(self._data) == 0:
+        if len(self._data) == 0 or getattr(self, "_iss_active", False):
             return
 
         # Skip rendering after scroll complete (waiting for other regions)

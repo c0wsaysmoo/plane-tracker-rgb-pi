@@ -138,6 +138,14 @@ if MASTER_TRACKER:
             if self._master_connected is True:  return "MasterOK"
             if self._master_connected is False: return "MasterError"
             return None
+        @property
+        def iss_pass_data(self):
+            """Return ISS pass data if a pass is active, else None."""
+            try:
+                from utilities.iss import get_iss_pass_data
+                return get_iss_pass_data()
+            except ImportError:
+                return None
 
 else:
         # ---------------------------------------------------------------
@@ -784,3 +792,12 @@ else:
             @property
             def last_source(self):
                 return self._fr24._last_source
+
+            @property
+            def iss_pass_data(self):
+                """Return ISS pass data if a pass is active, else None."""
+                try:
+                    from utilities.iss import get_iss_pass_data
+                    return get_iss_pass_data()
+                except ImportError:
+                    return None

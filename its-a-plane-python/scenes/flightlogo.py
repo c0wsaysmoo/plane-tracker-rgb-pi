@@ -11,7 +11,7 @@ class FlightLogoScene:
     def logo_details(self):
 
         # Guard against no data
-        if len(self._data) == 0:
+        if len(self._data) == 0 or getattr(self, "_iss_active", False):
             return
 
         # Clear the whole area

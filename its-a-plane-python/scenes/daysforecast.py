@@ -42,6 +42,9 @@ class DaysForecastScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def day(self, count):
+        if getattr(self, "_iss_active", False):
+            self._redraw_forecast = True
+            return
         # Ensure redraw when there's new scene selection or midnight brightness events
         now = datetime.now().replace(microsecond=0).time()
         if now == NIGHT_START_TIME.time() or now == NIGHT_END_TIME.time():
