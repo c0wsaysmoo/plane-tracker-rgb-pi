@@ -22,8 +22,8 @@ class FlightLogoScene:
     @Animator.KeyFrame.add(0)
     def logo_details(self):
 
-        # Guard against no data
-        if len(self._data) == 0:
+        # Guard against no data or ISS takeover
+        if len(self._data) == 0 or getattr(self, '_iss_active', False):
             return
 
         # Clear the whole area

@@ -91,8 +91,8 @@ class PlaneDetailsScene(object):
 
     @Animator.KeyFrame.add(1)
     def plane_details(self, count):
-        # Guard against no data
-        if len(self._data) == 0:
+        # Guard against no data or ISS takeover
+        if len(self._data) == 0 or getattr(self, '_iss_active', False):
             return
 
         # Extract data

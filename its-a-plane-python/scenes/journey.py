@@ -39,7 +39,7 @@ class JourneyScene(object):
 
     @Animator.KeyFrame.add(0)
     def journey(self):
-        if len(self._data) == 0:
+        if len(self._data) == 0 or getattr(self, '_iss_active', False):
             return
 
         origin = self._data[self._data_index]["origin"]
@@ -166,7 +166,7 @@ class JourneyScene(object):
 
     @Animator.KeyFrame.add(0)
     def journey_arrow(self):
-        if len(self._data) == 0:
+        if len(self._data) == 0 or getattr(self, '_iss_active', False):
             return
 
         self.draw_square(
