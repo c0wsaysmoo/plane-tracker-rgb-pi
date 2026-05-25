@@ -124,23 +124,35 @@ class OpenSkyClient:
     # ------------------------------------------------------------------
 
     def get_zone_states(self):
-        """
-        Fetch state vectors for the configured zone.
-        Returns a list of dicts with standardised field names,
-        filtered to airborne flights within altitude limits.
-        """
         lat_min = ZONE_DEFAULT["br_y"]
         lat_max = ZONE_DEFAULT["tl_y"]
         lon_min = ZONE_DEFAULT["tl_x"]
         lon_max = ZONE_DEFAULT["br_x"]
 
+        # 1. Try fetching from OpenSky
+        results = self._fetch_opensky_zone(lat_min, lat_max, lon_min, lon_max)
+        
+        # 2. FALLBACK: If OpenSky returned None (stale/error) OR 
+        # if filtering removed all the stale planes and left an empty list []
+        if not results:
+            print("[OpenSky] No fresh or filter-passing data. Forcing fallback to adsb.lol...")
+            results = self._fetch_adsblo_zone(lat_min, lat_max, lon_min, lon_max)
+            
+        return results or []
+
+    def _fetch_opensky_zone(self, lat_min, lat_max, lon_min, lon_max):
+        """
+        Fetch zone states from OpenSky.
+        Returns None if the request fails or data is stale (>2 minutes old).
+        Returns [] if request succeeded but zone is genuinely empty.
+        """
+        import time as _time
         params = {
             "lamin": lat_min,
             "lamax": lat_max,
             "lomin": lon_min,
             "lomax": lon_max,
         }
-
         try:
             resp = requests.get(
                 f"{BASE_URL}/api/states/all",
@@ -152,11 +164,21 @@ class OpenSkyClient:
             data = resp.json()
         except Exception as e:
             print(f"OpenSky zone fetch failed: {e}")
-            return []
+            return None
 
         raw_states = data.get("states") or []
-        results    = []
 
+        # Staleness check — if any state is >2 minutes old, treat as failed
+        now = _time.time()
+        for s in raw_states:
+            if len(s) > 4 and s[4] is not None:
+                age = now - s[4]  # s[4] is last_contact
+                if age > 120:
+                    print(f"[OpenSky] Stale data detected ({int(age)}s old) — falling back")
+                    return None
+                break  # only need to check first state
+
+        results = []
         for s in raw_states:
             state = _parse_state(s)
             if not state:
@@ -170,6 +192,78 @@ class OpenSkyClient:
 
         return results
 
+    def _fetch_adsblo_zone(self, lat_min, lat_max, lon_min, lon_max):
+        """
+        Fetch zone states from adsb.lol using a circle that fits inside the bounding box.
+        Results are filtered back to the exact bounding box after fetching.
+        """
+        import math as _math
+
+        # Centre of zone
+        lat_c = (lat_min + lat_max) / 2
+        lon_c = (lon_min + lon_max) / 2
+
+        # Half-width and half-height in nautical miles
+        def _nm(la1, lo1, la2, lo2):
+            la1, lo1, la2, lo2 = map(_math.radians, (la1, lo1, la2, lo2))
+            a = (_math.sin((la2-la1)/2)**2
+                 + _math.cos(la1)*_math.cos(la2)*_math.sin((lo2-lo1)/2)**2)
+            return 3440.07 * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
+
+        half_w = _nm(lat_c, lon_min, lat_c, lon_max) / 2
+        half_h = _nm(lat_min, lon_c, lat_max, lon_c) / 2
+        # Use half-diagonal so the circle covers the full bounding box including corners
+        radius_nm = max(1, int(_math.ceil(_math.sqrt(half_w**2 + half_h**2))))
+
+        try:
+            resp = requests.get(
+                f"https://api.adsb.lol/v2/lat/{lat_c}/lon/{lon_c}/dist/{radius_nm}",
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                print(f"[adsb.lol] Zone fetch failed: HTTP {resp.status_code}")
+                return []
+            ac_list = resp.json().get("ac", [])
+        except Exception as e:
+            print(f"[adsb.lol] Zone fetch failed: {e}")
+            return []
+
+        results = []
+        for ac in ac_list:
+            lat = ac.get("lat")
+            lon = ac.get("lon")
+            if lat is None or lon is None:
+                continue
+            # Filter to exact bounding box
+            if not (lat_min <= lat <= lat_max and lon_min <= lon <= lon_max):
+                continue
+            callsign = (ac.get("flight") or "").strip()
+            if not callsign:
+                continue
+            on_ground = ac.get("alt_baro") == "ground" or ac.get("gs", 0) < 50
+            if on_ground:
+                continue
+            alt_baro = ac.get("alt_baro", 0)
+            alt_ft   = alt_baro if isinstance(alt_baro, (int, float)) else 0
+            if alt_ft < MIN_ALTITUDE or alt_ft > MAX_ALTITUDE:
+                continue
+            gs = ac.get("gs", 0) or 0
+            vs = ac.get("baro_rate", 0) or 0
+            results.append({
+                "icao24":         ac.get("hex", ""),
+                "callsign":       callsign,
+                "latitude":       lat,
+                "longitude":      lon,
+                "altitude":       int(alt_ft),
+                "ground_speed":   int(gs),
+                "heading":        ac.get("track", 0) or 0,
+                "vertical_speed": int(vs),
+                "on_ground":      False,
+            })
+
+        print(f"[adsb.lol] Zone fallback returned {len(results)} aircraft")
+        return results
+
     # ------------------------------------------------------------------
     # Global callsign search (for tracked flight)
     # ------------------------------------------------------------------
@@ -178,27 +272,6 @@ class OpenSkyClient:
         """
         Search globally for a specific callsign using adsb.lol (free, no auth).
         Returns a state dict if found airborne, or None.
-        """
-        state = self._fetch_callsign(callsign)
-        if state is None:
-            return None
-        if state.get("on_ground"):
-            return None
-        return state
-
-    def find_callsign_any(self, callsign):
-        """
-        Like find_callsign but also returns ground/taxiing aircraft.
-        Used by the pre-departure tracking logic to confirm a flight exists
-        before it becomes airborne.
-        Returns a state dict (with on_ground=True possible), or None if not found.
-        """
-        return self._fetch_callsign(callsign)
-
-    def _fetch_callsign(self, callsign):
-        """
-        Internal: hit adsb.lol and return the raw state dict regardless of
-        ground status, or None if the callsign isn't found / doesn't match.
         """
         callsign_clean = callsign.strip()
         try:
@@ -215,12 +288,14 @@ class OpenSkyClient:
 
             ac = ac_list[0]
 
-            # Must match callsign exactly
+            # Must match callsign exactly and be airborne
             returned = (ac.get("flight") or "").strip().upper()
             if returned != callsign_clean.upper():
                 return None
 
             on_ground = ac.get("alt_baro") == "ground" or ac.get("gs", 0) < 50
+            if on_ground:
+                return None
 
             lat = ac.get("lat")
             lon = ac.get("lon")
@@ -233,15 +308,15 @@ class OpenSkyClient:
             vs       = ac.get("baro_rate", 0) or 0
 
             return {
-                "icao24":         ac.get("hex", ""),
-                "callsign":       callsign_clean,
-                "latitude":       lat,
-                "longitude":      lon,
-                "altitude":       int(alt_ft),
-                "ground_speed":   int(gs),  # adsb.lol reports in knots
-                "heading":        ac.get("track", 0) or 0,
+                "icao24":        ac.get("hex", ""),
+                "callsign":      callsign_clean,
+                "latitude":      lat,
+                "longitude":     lon,
+                "altitude":      int(alt_ft),
+                "ground_speed":  int(gs),  # already in knots from adsb.lol
+                "heading":       ac.get("track", 0) or 0,
                 "vertical_speed": int(vs),
-                "on_ground":      on_ground,
+                "on_ground":     False,
             }
         except Exception as e:
             print(f"[adsb.lol] Callsign search failed for {callsign}: {e}")
@@ -252,30 +327,28 @@ class OpenSkyClient:
     # ------------------------------------------------------------------
 
     def get_flight_trail(self, icao24):
-        """
-        Fetch the actual flown trail for a live aircraft by icao24 hex code.
-        Returns a list of {"lat": lat, "lon": lon} dicts or empty list.
-        """
         if not icao24:
             return []
         try:
+            self._ensure_token()
+            if not self._token:
+                return []
+
             resp = requests.get(
                 f"{BASE_URL}/api/tracks/all",
-                headers=self._auth_headers(),
+                headers={"Authorization": f"Bearer {self._token}"},
                 params={"icao24": icao24.lower(), "time": 0},
                 timeout=15,
             )
             if resp.status_code != 200:
+                print(f"[OpenSky] Trail fetch HTTP {resp.status_code} for {icao24}")
                 return []
             data   = resp.json()
             points = data.get("path", [])
-            # Each point: [time, lat, lon, baro_alt, true_track, on_ground]
-            # Filter out ground points — keep airborne ones (on_ground=false)
             trail = []
             for p in points:
                 if len(p) >= 6 and p[1] is not None and p[2] is not None:
-                    on_ground = p[5]
-                    if not on_ground:
+                    if not p[5]:  # not on_ground
                         trail.append([p[1], p[2]])
             return trail
         except Exception as e:
