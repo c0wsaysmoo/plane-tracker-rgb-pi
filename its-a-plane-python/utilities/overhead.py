@@ -625,6 +625,7 @@ class Overhead:
         self._first_flight_logged = False    # log first flight details as JSON
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
+        self._iss_pass_data = None          # cached ISS pass data (refreshed each grab cycle)
 
         # Eagerly load cities + parks DBs in background (avoids blocking render on first use)
         Thread(target=self._preload_cities, daemon=True).start()
@@ -1103,6 +1104,16 @@ class Overhead:
             else:
                 stats["tracked_status"] = ""
 
+            # --- ISS pass data (fetched here on background thread to avoid blocking render) ---
+            iss_data = None
+            try:
+                from utilities.iss import get_iss_pass_data
+                iss_data = get_iss_pass_data()
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.debug(f"ISS pass data fetch failed: {e}")
+
             # --- Pipeline Summary ---
             stats["elapsed_ms"] = (time() - _grab_start) * 1000
             self._log_pipeline_summary(stats)
@@ -1110,6 +1121,7 @@ class Overhead:
             with self._lock:
                 self._data = overhead_data
                 self._tracked_data = tracked_data
+                self._iss_pass_data = iss_data
                 self._new_data = True
 
         except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
@@ -1332,6 +1344,21 @@ class Overhead:
         # FIX: Acquire lock to be consistent with all other properties
         with self._lock:
             return len(self._data) == 0
+
+    @property
+    def iss_pass_data(self):
+        """Return ISS pass data if a pass is active, else None.
+
+        Uses cached data from the background grab thread for the API fetch,
+        but recalculates progress/time_remaining in real-time from the cached
+        pass timing data. This avoids blocking the render thread with HTTP calls
+        while still providing smooth 1Hz updates.
+        """
+        try:
+            from utilities.iss import get_iss_pass_data
+            return get_iss_pass_data()
+        except ImportError:
+            return None
 
 
 if __name__ == "__main__":

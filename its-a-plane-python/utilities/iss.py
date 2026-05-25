@@ -99,10 +99,61 @@ def _refresh():
     return _cached_passes or []
 
 
+def _find_active_pass(passes):
+    """Find a pass that is currently in progress. Returns (pass_dict, seconds_since_rise) or (None, 0)."""
+    now = datetime.now(timezone.utc)
+    for p in passes:
+        try:
+            rise_str = p.get("rise", {}).get("time", "")
+            if not rise_str:
+                continue
+            rise_time = datetime.fromisoformat(rise_str.replace("Z", "+00:00"))
+            seconds_since = (now - rise_time).total_seconds()
+            duration = p.get("duration_sec", 0)
+            if 0 <= seconds_since < duration:
+                return p, seconds_since
+        except (KeyError, ValueError, TypeError):
+            continue
+    return None, 0
+
+
+def get_iss_pass_data():
+    """Return detailed pass data when ISS is actively overhead, else None.
+
+    Returns dict with keys:
+        rise_time, set_time, rise_compass, set_compass, max_elevation,
+        duration_sec, progress (0.0-1.0), time_remaining_sec, is_active
+    """
+    passes = _refresh()
+    if not passes:
+        return None
+
+    active_pass, seconds_since = _find_active_pass(passes)
+    if active_pass is None:
+        return None
+
+    duration = active_pass.get("duration_sec", 1) or 1
+    progress = max(0.0, min(1.0, seconds_since / duration))
+    time_remaining = max(0, duration - int(seconds_since))
+
+    return {
+        "rise_time": active_pass.get("rise", {}).get("time", ""),
+        "set_time": active_pass.get("set", {}).get("time", ""),
+        "rise_compass": active_pass.get("rise", {}).get("compass", "?"),
+        "set_compass": active_pass.get("set", {}).get("compass", "?"),
+        "max_elevation": active_pass.get("culmination", {}).get("elevation_deg", 0),
+        "duration_sec": duration,
+        "progress": progress,
+        "time_remaining_sec": time_remaining,
+        "is_active": True,
+    }
+
+
 def get_iss_alert():
     """Return alert dict if a visible ISS pass is within 10 minutes, else None.
 
     Returns {"text": "ISS 3m", "color": "white"} or None.
+    When the pass is actively overhead, returns None (takeover scene handles it).
     """
     passes = _refresh()
     if not passes:
@@ -119,10 +170,10 @@ def get_iss_alert():
             seconds_until = (rise_time - now).total_seconds()
 
             if seconds_until < 0:
-                # Pass already started — show if still in progress
+                # Pass already started — takeover scene handles active passes
                 duration = p.get("duration_sec", 0)
                 if seconds_until > -duration:
-                    return {"text": "ISS now!", "color": "white"}
+                    return None  # suppress "ISS now!" — takeover scene is active
                 continue
 
             if seconds_until <= _ALERT_WINDOW:
