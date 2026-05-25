@@ -44,7 +44,7 @@ COUNTDOWN_COLOUR = colours.YELLOW
 TITLE_Y = 5           # baseline for "ISS OVERHEAD"
 SPRITE_Y = 6          # top of sprite region (sprite is 8px tall)
 SPRITE_MID_Y = 10     # vertical center of sprite for trail dots
-INFO_Y = 19           # baseline for direction + elevation
+INFO_Y = 20           # baseline for direction + elevation
 PROGRESS_Y = 23       # center row of progress bar
 COUNTDOWN_Y = 31      # baseline for countdown text
 
@@ -85,15 +85,17 @@ class ISSPassScene(object):
         super().__init__()
         self._iss_plane_shown = False
         self._iss_was_active = False
+        self._iss_active = False  # checked by other scenes to yield
 
     @Animator.KeyFrame.add(1)
     def iss_pass_scene(self, count):
         iss = self.overhead.iss_pass_data
         if not iss or not iss["is_active"]:
             if self._iss_was_active:
-                # Pass just ended — reset flag
+                # Pass just ended — reset flags
                 self._iss_was_active = False
                 self._iss_plane_shown = False
+            self._iss_active = False
             return
 
         self._iss_was_active = True
@@ -102,14 +104,10 @@ class ISSPassScene(object):
         # If a plane is in zone and we haven't shown it yet, let normal
         # plane display run for one full scroll cycle
         if len(self._data) > 0 and not self._iss_plane_shown:
-            return  # let plane scene render (one cycle)
+            self._iss_active = False  # let other scenes draw during cameo
+            return
 
-        # --- Draw ISS takeover scene ---
-        # Clear screen regions we own
-        self.draw_square(0, 0, screen.WIDTH, 13, colours.BLACK)     # title + sprite
-        self.draw_square(0, 14, screen.WIDTH, 20, colours.BLACK)    # info
-        self.draw_square(0, 21, screen.WIDTH, 25, colours.BLACK)    # progress bar
-        self.draw_square(0, 26, screen.WIDTH, 32, colours.BLACK)    # countdown
+        self._iss_active = True  # suppress other scenes
 
         progress = iss["progress"]
         time_remaining = iss["time_remaining_sec"]

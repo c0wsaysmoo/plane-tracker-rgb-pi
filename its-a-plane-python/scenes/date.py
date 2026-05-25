@@ -102,6 +102,10 @@ class DateScene(object):
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def date(self, count):
+        if getattr(self, '_iss_active', False):
+            self._redraw_date = True
+            return
+
         now = datetime.now()
         current_date = now.strftime("%b %d")
 

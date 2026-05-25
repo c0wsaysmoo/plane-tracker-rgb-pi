@@ -172,6 +172,8 @@ class TrackedStatsScene(object):
 
     @Animator.KeyFrame.add(1)
     def tracked_stats(self, count):
+        if getattr(self, '_iss_active', False):
+            return
         if len(self._data) > 0:
             return
 
