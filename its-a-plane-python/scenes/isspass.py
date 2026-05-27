@@ -60,7 +60,7 @@ def _load_iss_sprite():
     if _ISS_IMAGE is not None:
         return _ISS_IMAGE, _ISS_W, _ISS_H
     try:
-        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logos", "ISS.png")
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logos", "ISS_STATION.png")
         img = Image.open(img_path).convert("RGBA")
         _ISS_IMAGE = img.load()
         _ISS_W, _ISS_H = img.size
