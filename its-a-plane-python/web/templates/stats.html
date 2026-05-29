@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flight Stats</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
   :root {
@@ -86,6 +88,10 @@
   @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
   @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+  .route-map-wrap { height: 340px; position: relative; }
+  .route-map-wrap .leaflet-container { background: #0a0a08; }
+  .route-tip { background: #1a1a15 !important; border: 1px solid var(--amber-dim) !important; color: var(--amber) !important; font-family: 'Share Tech Mono', monospace !important; font-size: 12px !important; padding: 4px 8px !important; box-shadow: none !important; }
+  .route-tip::before { display: none !important; }
 </style>
 </head>
 <body>
@@ -192,6 +198,8 @@ async function render() {
   const airports=routeBreakdown(full);
   const sorted=[...summary].reverse();
   const maxCount=Math.max(...summary.map(d=>d.count));
+  const allRouteTally=routeTallyFromFull(full);
+  const totalUniqueRoutes=Object.keys(allRouteTally).length;
 
   document.getElementById('content').innerHTML=`
     <div class="stats-row">
@@ -199,6 +207,7 @@ async function render() {
       <div class="stat-card"><div class="stat-label">Busiest Day</div><div class="stat-value">${maxDay.count}</div><div class="stat-sub">${maxDay.date}</div></div>
       <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${peakHour}:00</div><div class="stat-sub">${hourAvg[peakHour].toFixed(1)} avg flights</div></div>
       <div class="stat-card"><div class="stat-label">Peak Day</div><div class="stat-value">${DAYS[peakDowIdx]}</div><div class="stat-sub">${dowAvg[peakDowIdx].toFixed(1)} avg flights</div></div>
+      <div class="stat-card"><div class="stat-label">Unique Routes</div><div class="stat-value">${totalUniqueRoutes}</div><div class="stat-sub">unique routes</div></div>
     </div>
 
     <div class="charts-grid">
@@ -207,6 +216,10 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Airline Breakdown (Top 12)</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
+        <div id="routeMap" class="route-map-wrap"></div>
+      </div>
       <div class="panel chart-full">
         <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
         <table class="day-table">
@@ -271,6 +284,120 @@ async function render() {
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
       tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
+
+  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub');
+}
+
+// ── Route Heat Map ────────────────────────────────────────────────────────────
+function routeTallyFromFull(full) {
+  const tally = {};
+  Object.values(full).forEach(day => (day.flights || []).forEach(f => {
+    if (f.origin && f.dest) {
+      const r = `${f.origin}→${f.dest}`;
+      tally[r] = (tally[r] || 0) + 1;
+    }
+  }));
+  return tally;
+}
+
+function gcPoints(lat1, lon1, lat2, lon2, steps=60) {
+  const R = Math.PI / 180;
+  const φ1=lat1*R, λ1=lon1*R, φ2=lat2*R, λ2=lon2*R;
+  const a = Math.sin((φ2-φ1)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin((λ2-λ1)/2)**2;
+  const Δ = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  if (Δ < 0.001) return [[lat1,lon1],[lat2,lon2]];
+  const pts = [];
+  for (let i=0; i<=steps; i++) {
+    const f=i/steps, A=Math.sin((1-f)*Δ)/Math.sin(Δ), B=Math.sin(f*Δ)/Math.sin(Δ);
+    const x=A*Math.cos(φ1)*Math.cos(λ1)+B*Math.cos(φ2)*Math.cos(λ2);
+    const y=A*Math.cos(φ1)*Math.sin(λ1)+B*Math.cos(φ2)*Math.sin(λ2);
+    const z=A*Math.sin(φ1)+B*Math.sin(φ2);
+    pts.push([Math.atan2(z,Math.sqrt(x*x+y*y))/R, Math.atan2(y,x)/R]);
+  }
+  // Unwrap antimeridian crossings: keep longitudes continuous
+  for (let i=1; i<pts.length; i++) {
+    const dlon = pts[i][1] - pts[i-1][1];
+    if (dlon > 180) pts[i][1] -= 360;
+    else if (dlon < -180) pts[i][1] += 360;
+  }
+  // If the arc went east past the dateline (end lon > 180°), the algorithm chose the
+  // Pacific path going east, putting the destination on the eastern world-copy ghost.
+  // Shift everything −360° so it uses the western world copy instead — matching how
+  // the farthest map places Asian airports at e.g. lon −246° rather than +114°.
+  if (pts[pts.length-1][1] > 180) {
+    for (let i=0; i<pts.length; i++) pts[i][1] -= 360;
+  }
+  return pts;
+}
+
+function heatColor(t) {
+  if (t < 0.5) {
+    const s = t*2;
+    return `rgb(${Math.round(105+150*s)},${Math.round(240-61*s)},${Math.round(174*(1-s))})`;
+  }
+  const s = (t-0.5)*2;
+  return `rgb(255,${Math.round(179*(1-s))},0)`;
+}
+
+let _routeMap = null;
+async function buildRouteMap(mapId, tally, subId) {
+  // Sort descending to tally all routes, but draw ascending so hot routes paint on top
+  const entries = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,300);
+  if (!entries.length) return;
+
+  const codes = new Set();
+  entries.forEach(([r]) => { const [o,d]=r.split('→'); codes.add(o); codes.add(d); });
+
+  let coords = {};
+  try {
+    const r = await fetch(`/api/airport-coords?codes=${[...codes].join(',')}`);
+    coords = await r.json();
+  } catch(e) { return; }
+
+  const valid = entries.filter(([r]) => { const [o,d]=r.split('→'); return coords[o] && coords[d]; });
+  if (!valid.length) return;
+
+  if (_routeMap) { _routeMap.remove(); _routeMap = null; }
+  const map = L.map(mapId, { zoomControl: true, attributionControl: false });
+  _routeMap = map;
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18
+  }).addTo(map);
+
+  const sub = subId && document.getElementById(subId);
+  const total = Object.keys(tally).length;
+  if (sub) sub.textContent = valid.length < total ? `— ${valid.length} of ${total} drawn` : `— ${valid.length} drawn`;
+
+  const maxCount = valid[0][1];
+  const bounds = [];
+  const tipOpts = { sticky: true, className: 'route-tip' };
+
+  // Draw rarest first so most-frequent routes paint on top and stay visible.
+  // Collect actual normalized arc endpoints for dot placement — pts[0]/pts[last]
+  // already have the world-copy-adjusted longitude (e.g. HKG at −246° not +114°).
+  const actualPos = {};
+  [...valid].reverse().forEach(([route, count]) => {
+    const [o,d] = route.split('→');
+    const oc = coords[o], dc = coords[d];
+    const t = count / maxCount;
+    const pts = gcPoints(oc.lat, oc.lon, dc.lat, dc.lon);
+    bounds.push([oc.lat, oc.lon], [dc.lat, dc.lon]);
+    if (!actualPos[o]) actualPos[o] = pts[0];
+    if (!actualPos[d]) actualPos[d] = pts[pts.length-1];
+    L.polyline(pts, {
+      color: heatColor(t),
+      weight: Math.max(1, 1 + t * 4),
+      opacity: 0.2 + t * 0.7,
+    }).bindTooltip(`${route} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
+  });
+
+  Object.entries(actualPos).forEach(([code, pos]) => {
+    L.circleMarker(pos, {
+      radius: 3, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
+    }).bindTooltip(code, { permanent: false, className: 'route-tip' }).addTo(map);
+  });
+
+  if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
 }
 
 render().catch(e=>{document.getElementById('content').innerHTML=`<div class="loading">Error: ${e.message}</div>`;});
