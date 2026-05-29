@@ -563,6 +563,24 @@ def api_usage():
     except Exception:
         return jsonify({"AirLabs": 0, "FlightAware": 0.0, "FR24": 0})
 
+@app.get("/api/airport-coords")
+def airport_coords_endpoint():
+    """Resolve a comma-separated list of IATA codes to lat/lon."""
+    codes = request.args.get("codes", "").split(",")
+    try:
+        from utilities.airports import get_airport_coords
+    except Exception:
+        return jsonify({})
+    result = {}
+    for raw in codes[:200]:
+        code = raw.strip().upper()
+        if not code:
+            continue
+        coords = get_airport_coords(code)
+        if coords:
+            result[code] = {"lat": coords["lat"], "lon": coords["lon"]}
+    return jsonify(result)
+
 @app.get("/api/wifi/status")
 def wifi_status():
     """Return current WiFi connection info via nmcli."""
