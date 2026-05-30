@@ -326,6 +326,7 @@ else:
                     "hour":     now.hour,
                     "origin":   entry.get("origin", ""),
                     "dest":     entry.get("destination", ""),
+                    "aircraft": entry.get("plane", ""),
                 })
                 log[today]["count"]     = len(log[today]["flights"])
                 log[today]["last_seen"] = now_str
