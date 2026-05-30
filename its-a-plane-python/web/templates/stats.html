@@ -139,16 +139,17 @@ async function loadData() {
 }
 
 function localVsFlyover(full, airportCode) {
-  let local = 0, flyover = 0, unknown = 0;
+  let departing = 0, arriving = 0, flyover = 0, unknown = 0;
   Object.values(full).forEach(day => (day.flights||[]).forEach(f => {
     const origin = (f.origin || '').toUpperCase();
     const dest   = (f.dest   || '').toUpperCase();
     const code   = airportCode.toUpperCase();
     if (!origin && !dest) { unknown++; }
-    else if (origin === code || dest === code) { local++; }
+    else if (origin === code) { departing++; }
+    else if (dest === code)   { arriving++;  }
     else { flyover++; }
   }));
-  return {local, flyover, unknown};
+  return {departing, arriving, flyover, unknown};
 }
 
 function avgByHour(days) {
@@ -180,6 +181,14 @@ function routeBreakdown(full) {
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
+function aircraftBreakdown(full) {
+  const tally={};
+  Object.values(full).forEach(day=>(day.flights||[]).forEach(f=>{
+    if(f.aircraft) tally[f.aircraft]=(tally[f.aircraft]||0)+1;
+  }));
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
 async function render() {
   const {summary,full,airportCode} = await loadData();
   if (!summary.length) {
@@ -196,6 +205,7 @@ async function render() {
   const peakDowIdx=dowAvg.indexOf(Math.max(...dowAvg));
   const airlines=airlineBreakdown(full);
   const airports=routeBreakdown(full);
+  const aircraft=aircraftBreakdown(full);
   const sorted=[...summary].reverse();
   const maxCount=Math.max(...summary.map(d=>d.count));
   const allRouteTally=routeTallyFromFull(full);
@@ -216,6 +226,7 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Airline Breakdown (Top 12)</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Top Aircraft (Top 12)</div><canvas id="aircraftChart"></canvas></div>
       <div class="panel chart-full">
         <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
         <div id="routeMap" class="route-map-wrap"></div>
@@ -242,11 +253,11 @@ async function render() {
   new Chart(document.getElementById('localFlyoverChart').getContext('2d'), {
     type: 'doughnut',
     data: {
-      labels: [`Local (${airportCode})`, 'Flyover', 'Unknown'],
+      labels: [`Departing (${airportCode}→)`, 'Flyover', `Arriving (→${airportCode})`, 'Unknown'],
       datasets: [{
-        data: [lf.local, lf.flyover, lf.unknown],
-        backgroundColor: ['#ffb30099','#69f0ae99','#7a550099'],
-        borderColor:     ['#ffb300',  '#69f0ae',  '#7a5500'],
+        data: [lf.departing, lf.flyover, lf.arriving, lf.unknown],
+        backgroundColor: ['#ff6b3599','#69f0ae99','#ffb30099','#7a550099'],
+        borderColor:     ['#ff6b35',  '#69f0ae',  '#ffb300',  '#7a5500'],
         borderWidth: 2,
       }]
     },
@@ -284,6 +295,16 @@ async function render() {
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
       tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
+
+  if (aircraft.length) {
+    new Chart(document.getElementById('aircraftChart').getContext('2d'),{
+      type:'doughnut',
+      data:{labels:aircraft.map(([k])=>k),datasets:[{data:aircraft.map(([,v])=>v),backgroundColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),borderColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+        legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
+        tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+      }}});
+  }
 
   await buildRouteMap('routeMap', allRouteTally, 'routeMapSub');
 }
