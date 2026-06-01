@@ -59,15 +59,32 @@ def _to_unix(dt_str):
 # Usage tracking
 # ---------------------------------------------------------------------------
 
+def _billing_period_start():
+    import calendar
+    try:
+        from config import AIRLABS_RESET_DAY as _day
+    except Exception:
+        _day = 1
+    day = max(1, min(31, int(_day)))
+    today = datetime.now().date()
+    def _clamp(year, month):
+        return min(day, calendar.monthrange(year, month)[1])
+    if today.day >= _clamp(today.year, today.month):
+        return today.replace(day=_clamp(today.year, today.month)).isoformat()
+    prev_year, prev_month = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    return today.replace(year=prev_year, month=prev_month, day=_clamp(prev_year, prev_month)).isoformat()
+
+
 def _load_usage():
+    period = _billing_period_start()
     try:
         with open(USAGE_FILE, "r") as f:
             usage = json.load(f)
-        if usage.get("month") != datetime.now().strftime("%Y-%m"):
-            return {"month": datetime.now().strftime("%Y-%m"), "calls": 0}
+        if usage.get("period_start") != period:
+            return {"period_start": period, "calls": 0}
         return usage
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"month": datetime.now().strftime("%Y-%m"), "calls": 0}
+        return {"period_start": period, "calls": 0}
 
 
 def _save_usage(usage):
