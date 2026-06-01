@@ -24,19 +24,48 @@ USAGE_FILE = os.path.join(BASE_DIR, "api_usage.json")
 API_LOG    = os.path.join(BASE_DIR, "api_calls.log")
 
 
+def _billing_period_start(reset_day=1):
+    import calendar
+    day = max(1, min(31, int(reset_day)))
+    today = datetime.now().date()
+    def _clamp(year, month):
+        return min(day, calendar.monthrange(year, month)[1])
+    if today.day >= _clamp(today.year, today.month):
+        return today.replace(day=_clamp(today.year, today.month)).isoformat()
+    prev_year, prev_month = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    return today.replace(year=prev_year, month=prev_month, day=_clamp(prev_year, prev_month)).isoformat()
+
+
 def _load_usage():
+    try:
+        from config import AIRLABS_RESET_DAY, FLIGHTAWARE_RESET_DAY, FR24_RESET_DAY
+    except Exception:
+        AIRLABS_RESET_DAY = FLIGHTAWARE_RESET_DAY = FR24_RESET_DAY = 1
+    al_p = _billing_period_start(AIRLABS_RESET_DAY)
+    fa_p = _billing_period_start(FLIGHTAWARE_RESET_DAY)
+    fr_p = _billing_period_start(FR24_RESET_DAY)
     try:
         with open(USAGE_FILE, "r") as f:
             data = json.load(f)
-        # Reset if month changed
-        if data.get("month") != datetime.now().strftime("%Y-%m"):
-            return {"month": datetime.now().strftime("%Y-%m"), "AirLabs": 0, "FlightAware": 0.0, "FR24": 0}
-        # Strip any legacy keys from old installs
-        for _k in ("FlightStats", "FR24Unofficial"):
+        # Reset each source independently when its billing period rolls over
+        if data.get("AirLabs_period_start") != al_p:
+            data["AirLabs"] = 0
+            data["AirLabs_period_start"] = al_p
+        if data.get("FlightAware_period_start") != fa_p:
+            data["FlightAware"] = 0.0
+            data["FlightAware_period_start"] = fa_p
+        if data.get("FR24_period_start") != fr_p:
+            data["FR24"] = 0
+            data["FR24_period_start"] = fr_p
+        for _k in ("FlightStats", "FR24Unofficial", "month", "period_start"):
             data.pop(_k, None)
         return data
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"month": datetime.now().strftime("%Y-%m"), "AirLabs": 0, "FlightAware": 0.0, "FR24": 0}
+        return {
+            "AirLabs": 0,           "AirLabs_period_start": al_p,
+            "FlightAware": 0.0,     "FlightAware_period_start": fa_p,
+            "FR24": 0,              "FR24_period_start": fr_p,
+        }
 
 
 def _save_usage(data):
