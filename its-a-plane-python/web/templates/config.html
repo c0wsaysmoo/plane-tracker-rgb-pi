@@ -511,6 +511,21 @@ function renderForm() {
             <label>FlightAware Monthly $ Limit per Key</label>
             <input id="flightaware_monthly_limit" type="number" step="0.5" value="${_sec.flightaware_monthly_limit??4.00}">
           </div>
+          <div class="field">
+            <label>AirLabs Billing Reset Day</label>
+            <input id="airlabs_reset_day" type="number" min="1" max="31" step="1" value="${(_cfg.api_sources||{}).airlabs_reset_day??(_cfg.api_sources||{}).reset_day??1}">
+            <div class="hint">Day of month your AirLabs subscription renews (1–31)</div>
+          </div>
+          <div class="field">
+            <label>FlightAware Billing Reset Day</label>
+            <input id="flightaware_reset_day" type="number" min="1" max="31" step="1" value="${(_cfg.api_sources||{}).flightaware_reset_day??(_cfg.api_sources||{}).reset_day??1}">
+            <div class="hint">Day of month your FlightAware subscription renews (1–31)</div>
+          </div>
+          <div class="field">
+            <label>FR24 Billing Reset Day</label>
+            <input id="fr24_reset_day" type="number" min="1" max="31" step="1" value="${(_cfg.api_sources||{}).fr24_reset_day??(_cfg.api_sources||{}).reset_day??1}">
+            <div class="hint">Day of month your FR24 subscription renews (1–31)</div>
+          </div>
         </div>
       </div>
     </div>
@@ -689,7 +704,12 @@ function collectConfig() {
       },
       api_sources: (() => {
         const a = getApiSources();
-        return { order: a.order, enabled: a.enabled };
+        return {
+            order: a.order, enabled: a.enabled,
+            airlabs_reset_day:     gi('airlabs_reset_day')     || 1,
+            flightaware_reset_day: gi('flightaware_reset_day') || 1,
+            fr24_reset_day:        gi('fr24_reset_day')        || 1,
+          };
       })(),
     },
     secrets: {
@@ -963,10 +983,12 @@ async function loadSystemStatus() {
     const tempStr = tempC != null ? `${tempC}°C / ${tempF}°F` : '—';
     const tempWarn = tempC != null && tempC >= 70;
 
-    const al  = usage.AirLabs        ?? 0;
-    const fa  = usage.FlightAware     ?? 0;
-    const fr  = usage.FR24            ?? 0;
-    const mon = usage.month           ?? '';
+    const al     = usage.AirLabs        ?? 0;
+    const fa     = usage.FlightAware     ?? 0;
+    const fr     = usage.FR24            ?? 0;
+    const al_mon = (usage.AirLabs_period_start     || usage.month || '').slice(0, 7);
+    const fa_mon = (usage.FlightAware_period_start || usage.month || '').slice(0, 7);
+    const fr_mon = (usage.FR24_period_start        || usage.month || '').slice(0, 7);
 
     document.getElementById('system-status').innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
@@ -987,17 +1009,17 @@ async function loadSystemStatus() {
         </div>
 
         <div style="border:1px solid var(--amber-dim);border-top:2px solid ${al>=900?'var(--red)':'var(--amber)'};padding:10px 12px">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">AIRLABS ${mon}</div>
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">AIRLABS ${al_mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:${al>=900?'var(--red)':'var(--amber-bright)'}">${al}<span style="font-size:13px;color:var(--amber-dim)">/1,000${al>=900?' ⚠':''}</span></div>
         </div>
 
         <div style="border:1px solid var(--amber-dim);border-top:2px solid ${fa>=4.5?'var(--red)':'var(--amber)'};padding:10px 12px">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FLIGHTAWARE ${mon}</div>
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FLIGHTAWARE ${fa_mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:${fa>=4.5?'var(--red)':'var(--amber-bright)'}">$${fa.toFixed(2)}<span style="font-size:13px;color:var(--amber-dim)">/$5.00${fa>=4.5?' ⚠':''}</span></div>
         </div>
 
         <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 ${mon}</div>
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 ${fr_mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fr}<span style="font-size:13px;color:var(--amber-dim)"> credits</span></div>
         </div>
 
