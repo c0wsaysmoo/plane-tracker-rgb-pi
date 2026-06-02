@@ -180,11 +180,12 @@ def _load_cities():
 
 
 def _format_city(name, state, country):
-    if country == "US" and state:
+    if country in ("US", "CA") and state:
         candidate = f"{name}, {state}"
         if len(candidate) <= MAX_NAME_LEN:
             return candidate
         return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+    # All other countries: append 2-letter country code
     candidate = f"{name}, {country}" if country else name
     if len(candidate) <= MAX_NAME_LEN:
         return candidate
@@ -266,10 +267,17 @@ def _get_state_abbr(address):
     return _STATE_ABBR.get(address.get("state", ""), "")
 
 
-def _format_with_state(name, state):
-    with_state = f"{name}, {state}" if state else name
-    if len(with_state) <= MAX_NAME_LEN:
-        return with_state
+def _format_with_state(name, state, country_code=""):
+    if country_code.lower() in ("us", "ca") and state:
+        with_state = f"{name}, {state}"
+        if len(with_state) <= MAX_NAME_LEN:
+            return with_state
+        return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+    # All other countries: append country code
+    suffix = country_code.upper()
+    candidate = f"{name}, {suffix}" if suffix else name
+    if len(candidate) <= MAX_NAME_LEN:
+        return candidate
     return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
 
 
@@ -324,7 +332,7 @@ def _nominatim_fetch(lat, lon):
             c = _clean_name(candidate)
             if c is None:
                 continue
-            cleaned = _format_with_state(c, state)
+            cleaned = _format_with_state(c, state, country_code)
             break
 
         # Step 2: local cities.json nearest-neighbour
