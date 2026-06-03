@@ -482,6 +482,13 @@ else:
                         plane_lat = state["latitude"]
                         plane_lon = state["longitude"]
 
+                        try:
+                            import config as _cfg_mod
+                            if callsign in _cfg_mod.BLOCKED_CALLSIGNS:
+                                continue
+                        except Exception:
+                            pass
+
                         if callsign in self._flight_cache:
                             details = self._flight_cache[callsign]
                         else:
