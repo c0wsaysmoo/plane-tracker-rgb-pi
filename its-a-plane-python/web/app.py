@@ -531,10 +531,14 @@ def api_system():
             result["cpu_temp_c"] = round(int(f.read().strip()) / 1000, 1)
     except Exception: result["cpu_temp_c"] = None
     try:
-        # Added back here to pull the first value from the split list
         with open("/proc/uptime") as f:
             result["uptime_secs"] = int(float(f.read().split()[0]))
     except Exception: result["uptime_secs"] = None
+    try:
+        with open("/proc/loadavg") as f:
+            parts = f.read().split()
+            result["load_avg"] = [float(parts[0]), float(parts[1]), float(parts[2])]
+    except Exception: result["load_avg"] = None
     try:
         # Copy the existing environment and safely add/override TZ and LANG
         custom_env = os.environ.copy()
