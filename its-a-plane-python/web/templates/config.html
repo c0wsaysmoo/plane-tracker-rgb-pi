@@ -438,6 +438,11 @@ function renderForm() {
           <input id="email" type="email" value="${flt.email||''}">
           <div class="hint">Leave blank to disable email alerts</div>
         </div>
+        <div class="field">
+          <label>Blocked Callsigns</label>
+          <input id="blocked_callsigns" value="${(flt.blocked_callsigns||[]).join(', ')}" placeholder="N12345, UAL1234, …" spellcheck="false" autocomplete="off" style="text-transform:uppercase">
+          <div class="hint">Comma-separated. Matching planes are ignored before any API lookup.</div>
+        </div>
       </div>
     </div>
 
@@ -692,8 +697,9 @@ function collectConfig() {
       flights: {
         min_altitude: gi('min_altitude'),
         max_farthest: gi('max_farthest'),
-        max_closest:  gi('max_closest'),
-        email:        gv('email'),
+        max_closest:        gi('max_closest'),
+        email:              gv('email'),
+        blocked_callsigns:  gv('blocked_callsigns').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean),
       },
         stats: {
         stats_log_days: gi('stats_log_days') || 0,
@@ -1021,6 +1027,14 @@ async function loadSystemStatus() {
         <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
           <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">FR24 ${fr_mon}</div>
           <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">${fr}<span style="font-size:13px;color:var(--amber-dim)"> credits</span></div>
+        </div>
+
+        <div style="border:1px solid var(--amber-dim);border-top:2px solid var(--amber);padding:10px 12px">
+          <div style="font-size:10px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px">LOAD AVG</div>
+          <div style="font-family:'VT323',monospace;font-size:24px;color:var(--amber-bright)">
+            ${sys.load_avg ? sys.load_avg.map(v=>v.toFixed(2)).join(' / ') : '—'}
+          </div>
+          <div style="font-size:10px;color:var(--amber-dim);margin-top:2px">1 min / 5 min / 15 min</div>
         </div>
 
       </div>
