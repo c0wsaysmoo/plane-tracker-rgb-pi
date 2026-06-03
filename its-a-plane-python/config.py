@@ -29,9 +29,10 @@ def reload():
     global BRIGHTNESS, BRIGHTNESS_NIGHT, NIGHT_BRIGHTNESS
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
     global LED_RGB_SEQUENCE, FORECAST_DAYS
-    global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL
+    global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL, BLOCKED_CALLSIGNS
     global MASTER_TRACKER, OTHER_TRACKER_HOSTNAMES
     global API_SOURCE_ORDER, API_SOURCE_ENABLED
+    global AIRLABS_RESET_DAY, FLIGHTAWARE_RESET_DAY, FR24_RESET_DAY
     global STATS_LOG_DAYS
     global TOMORROW_API_KEY, OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET
     global AIRLABS_API_KEYS, AIRLABS_API_KEY
@@ -72,10 +73,11 @@ def reload():
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
 
     # Flights
-    MIN_ALTITUDE = _flt.get("min_altitude", 2000)
-    MAX_FARTHEST = _flt.get("max_farthest", 3)
-    MAX_CLOSEST  = _flt.get("max_closest", 3)
-    EMAIL        = _flt.get("email", "")
+    MIN_ALTITUDE      = _flt.get("min_altitude", 2000)
+    MAX_FARTHEST      = _flt.get("max_farthest", 3)
+    MAX_CLOSEST       = _flt.get("max_closest", 3)
+    EMAIL             = _flt.get("email", "")
+    BLOCKED_CALLSIGNS = {c.strip().upper() for c in _flt.get("blocked_callsigns", []) if c.strip()}
 
     # Master / slave
     MASTER_TRACKER          = _ms.get("master_tracker", "")
@@ -89,6 +91,10 @@ def reload():
     _apis = _cfg.get("api_sources", {})
     API_SOURCE_ORDER   = _apis.get("order",   ["AirLabs", "FlightAware", "FR24"])
     API_SOURCE_ENABLED = _apis.get("enabled", {})
+    _legacy = max(1, min(31, int(_apis.get("reset_day", 1))))
+    AIRLABS_RESET_DAY     = max(1, min(31, int(_apis.get("airlabs_reset_day",     _legacy))))
+    FLIGHTAWARE_RESET_DAY = max(1, min(31, int(_apis.get("flightaware_reset_day", _legacy))))
+    FR24_RESET_DAY        = max(1, min(31, int(_apis.get("fr24_reset_day",        _legacy))))
 
     # Secrets
     TOMORROW_API_KEY          = _sec.get("tomorrow_api_key", "")
