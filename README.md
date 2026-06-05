@@ -265,14 +265,17 @@ Map will show the top 3 (by default) farthest flights, and the top 3 closest pin
 
 The email
 
-<img width="2557" height="1129" alt="4" src="https://github.com/user-attachments/assets/d344c640-4bd4-4ad7-8ba4-dab8aa5d33af" />
-<img width="2555" height="1273" alt="3" src="https://github.com/user-attachments/assets/3dbc2803-2c2c-41dc-9f60-a629ab3ed0e7" />
-<img width="2554" height="626" alt="1" src="https://github.com/user-attachments/assets/607370bf-a855-486c-9339-ba1eb53a18ce" />
-
+<img width="1433" height="1862" alt="day" src="https://github.com/user-attachments/assets/5b513583-1b76-411f-8f5f-316a2ad11bbc" />
+<img width="1429" height="2319" alt="main" src="https://github.com/user-attachments/assets/f66e705c-f9d4-43c6-a0b8-70ee8b198782" />
+<img width="1438" height="677" alt="index" src="https://github.com/user-attachments/assets/89825447-1160-4f72-9ef0-c5bc7cfc25a6" />
 
 The local webpage to track flights or to look at your maps/logs/stats. You can look at the overall stats or click on the dates at the bottom to look at stats for individual days
 
-https://github.com/user-attachments/assets/0b4b1fd7-0fd1-4d9d-8753-bb8d455cce10
+
+
+https://github.com/user-attachments/assets/1944d063-83e5-4118-aad3-f6a9678fa22f
+
+
 
 How the display looks while it is tracking a flight
 
