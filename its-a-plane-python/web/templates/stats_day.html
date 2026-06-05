@@ -247,6 +247,12 @@ async function render() {
       tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
 
+  const _routeCodes = new Set();
+  airports.forEach(([r]) => { const [o,d]=r.split('→'); if(o)_routeCodes.add(o); if(d)_routeCodes.add(d); });
+  let _apInfo = {};
+  try { _apInfo = await fetch(`/api/airport-coords?codes=${[..._routeCodes].join(',')}`).then(r=>r.json()); } catch(e) {}
+  const routeApLabel = code => { const n=_apInfo[code]?.name; return n ? `${n} (${code})` : code; };
+
   new Chart(document.getElementById('airportChart').getContext('2d'),{
     type:'doughnut',
     data:{labels:airports.map(([k])=>k),datasets:[{data:airports.map(([,v])=>v),
@@ -254,7 +260,7 @@ async function render() {
       borderColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
-      tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+      tooltip:{callbacks:{label:ctx=>{const [o,d]=ctx.label.split('→');const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${routeApLabel(o)} → ${routeApLabel(d)} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
     }}});
 
   if (aircraft.length) {
@@ -360,6 +366,7 @@ async function buildRouteMap(mapId, tally, subId) {
   // Collect actual normalized arc endpoints for dot placement — pts[0]/pts[last]
   // already have the world-copy-adjusted longitude (e.g. HKG at −246° not +114°).
   const actualPos = {};
+  const apLabel = code => { const n=coords[code]?.name; return n ? `${n} (${code})` : code; };
   [...valid].reverse().forEach(([route, count]) => {
     const [o,d] = route.split('→');
     const oc = coords[o], dc = coords[d];
@@ -372,13 +379,13 @@ async function buildRouteMap(mapId, tally, subId) {
       color: heatColor(t),
       weight: Math.max(1, 1 + t * 4),
       opacity: 0.2 + t * 0.7,
-    }).bindTooltip(`${route} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
+    }).bindTooltip(`${apLabel(o)} → ${apLabel(d)} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
   });
 
   Object.entries(actualPos).forEach(([code, pos]) => {
     L.circleMarker(pos, {
       radius: 3, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
-    }).bindTooltip(code, { permanent: false, className: 'route-tip' }).addTo(map);
+    }).bindTooltip(apLabel(code), { permanent: false, className: 'route-tip' }).addTo(map);
   });
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
