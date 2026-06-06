@@ -7,7 +7,7 @@ from rgbmatrix import graphics
 
 # Setup
 DATE_FONT = fonts.extrasmall
-DATE_POSITION = (40, 11)
+DATE_POSITION = (36, 11)
 
 # Tide colors
 TIDE_HIGH_COLOUR = graphics.Color(0, 255, 255)     # Cyan
@@ -131,7 +131,7 @@ class DateScene(object):
                 from utilities.tides import get_water_temp
                 wt = get_water_temp()
                 if wt:
-                    items.append(("water", f"Water {wt}\xb0"))
+                    items.append(("water", f"Sea {wt}\xb0"))
             except Exception:
                 pass
 
