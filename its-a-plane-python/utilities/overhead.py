@@ -1,7 +1,6 @@
 import os
 import json
 import math
-import socket
 import logging
 import requests
 from time import time
@@ -118,14 +117,7 @@ LOG_FILE_FARTHEST = os.path.join(DATA_DIR, "farthest.txt")
 TRACKED_FILE = os.path.join(DATA_DIR, "tracked_flight.json")
 MAPS_DIR = os.path.join(DATA_DIR, "maps")
 os.makedirs(MAPS_DIR, exist_ok=True)
-ROUTE_AUDIT_LOG = os.path.join(DATA_DIR, "route_audit.log")
-COMPARISON_LOG = os.path.join(DATA_DIR, "source_comparison.log")
 COUNTER_FILE = os.path.join(DATA_DIR, "flight_counter.json")
-
-HOSTNAME = socket.gethostname()
-
-# Lock for comparison log writes from multiple threads
-_comparison_log_lock = Lock()
 
 # In-memory caches for adsbdb lookups (GA aircraft owner info)
 _aircraft_cache = {}  # registration -> {data, ts}
@@ -380,20 +372,6 @@ def _adsbdb_aircraft(registration):
         return {}
 
 
-# --- Audit Logging ---
-
-def _log_route_audit(callsign, aircraft_type, distance, source, origin, destination):
-    """Append to route_audit.log with hostname prefix for multi-device monitoring."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    route_str = f"{origin or '?'}->{destination or '?'}"
-    line = f"{ts} [{HOSTNAME}] {callsign} {aircraft_type} {distance:.1f} {source} {route_str}\n"
-    try:
-        with open(ROUTE_AUDIT_LOG, "a", encoding="utf-8") as f:
-            f.write(line)
-    except Exception:
-        pass
-
-
 def log_flight_count(callsign, entry=None):
     """Log unique callsign to daily flight counter. De-duplicates per day.
     Concept from c0wsaysmoo/plane-tracker-rgb-pi."""
@@ -490,7 +468,7 @@ def log_flight_data(entry: dict):
             email_alerts.send_flight_summary(subject, entry, map_url=url)
 
     except Exception as e:
-        print("Failed to log closest flight:", e)
+        logger.error(f"Failed to log closest flight: {e}")
 
 
 def log_farthest_flight(entry: dict):
@@ -556,55 +534,6 @@ def log_farthest_flight(entry: dict):
         logger.error(f"Failed to log farthest flight: {e}", exc_info=True)
 
 
-# =============================================================================
-# Source Comparison (FR24 vs adsb.lol/adsbdb — background logging only)
-# =============================================================================
-
-def _compare_sources(callsign, fr24_origin, fr24_dest, plane_lat, plane_lon, dist):
-    """Background comparison: query adsbdb for the same callsign and log differences.
-    This does NOT affect the display — purely for analysis."""
-    try:
-        url = f"{ADSBDB_BASE}/v0/callsign/{callsign}"
-        r = requests.get(url, timeout=5)
-        if r.status_code != 200:
-            adsbdb_origin = ""
-            adsbdb_dest = ""
-            adsbdb_airline = ""
-        else:
-            data = r.json().get("response", {}).get("flightroute", {}) or {}
-            origin_info = data.get("origin", {}) or {}
-            dest_info = data.get("destination", {}) or {}
-            adsbdb_origin = origin_info.get("iata_code", "")
-            adsbdb_dest = dest_info.get("iata_code", "")
-            airline_info = data.get("airline", {}) or {}
-            adsbdb_airline = airline_info.get("name", "")
-
-        fr24_route = f"{fr24_origin or '?'}->{fr24_dest or '?'}"
-        adsbdb_route = f"{adsbdb_origin or '?'}->{adsbdb_dest or '?'}"
-
-        if fr24_route == adsbdb_route:
-            status = "MATCH"
-        elif not adsbdb_origin and not adsbdb_dest:
-            status = "ADSBDB_EMPTY"
-        elif not fr24_origin and not fr24_dest:
-            status = "FR24_EMPTY"
-        else:
-            status = "MISMATCH"
-
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        dist_unit = "km" if DISTANCE_UNITS == "metric" else "mi"
-        line = (f"{ts} [{HOSTNAME}] {callsign:12s} {dist:5.1f}{dist_unit} "
-                f"fr24={fr24_route:15s} adsbdb={adsbdb_route:15s} "
-                f"adsbdb_airline={adsbdb_airline:20s} {status}\n")
-
-        with _comparison_log_lock:
-            with open(COMPARISON_LOG, "a", encoding="utf-8") as f:
-                f.write(line)
-
-    except Exception:
-        pass  # never affect the main loop
-
-
 # Overhead Class
 
 class Overhead:
@@ -625,7 +554,6 @@ class Overhead:
         self._first_flight_logged = False    # log first flight details as JSON
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
-        self._iss_pass_data = None          # cached ISS pass data (refreshed each grab cycle)
 
         # Eagerly load cities + parks DBs in background (avoids blocking render on first use)
         Thread(target=self._preload_cities, daemon=True).start()
@@ -711,6 +639,11 @@ class Overhead:
         logger.info("\n".join(lines))
 
     def grab_data(self):
+        with self._lock:
+            if self._processing:
+                logger.debug("grab_data: previous _grab still running, skipping")
+                return
+            self._processing = True
         Thread(target=self._grab, daemon=True).start()
 
     def safe_get(self, d, *keys, default=None):
@@ -723,7 +656,6 @@ class Overhead:
     def _grab(self):
         with self._lock:
             self._new_data = False
-            self._processing = True
 
         overhead_data = []
         tracked_data = None
@@ -905,7 +837,7 @@ class Overhead:
                             [pt["lat"], pt["lng"]]
                             for pt in raw_trail
                             if isinstance(pt, dict) and pt.get("alt", 0) > 0
-                        ]
+                        ][-200:]  # cap trail length for memory
 
                         entry = {
                             "airline": airline_name,
@@ -946,21 +878,12 @@ class Overhead:
                             "origin": origin,
                             "destination": destination,
                             "distance": entry["distance"],
-                            "data_source": "fr24_grpc",
+                            "data_source": route_source,
                         })
-
-                        # Audit log
-                        _log_route_audit(callsign, plane, entry["distance"], route_source, origin, destination)
 
                         log_flight_data(entry)
                         log_farthest_flight(entry)
                         log_flight_count(callsign, entry)
-
-                        # Background comparison: FR24 vs adsbdb (non-blocking)
-                        Thread(target=_compare_sources,
-                               args=(callsign, origin, destination,
-                                     f.latitude, f.longitude, entry["distance"]),
-                               daemon=True).start()
                         break
 
                     except Exception as e:
@@ -1104,11 +1027,10 @@ class Overhead:
             else:
                 stats["tracked_status"] = ""
 
-            # --- ISS pass data (fetched here on background thread to avoid blocking render) ---
-            iss_data = None
+            # --- ISS pass data (pre-warm cache on background thread) ---
             try:
                 from utilities.iss import get_iss_pass_data
-                iss_data = get_iss_pass_data()
+                get_iss_pass_data()
             except ImportError:
                 pass
             except Exception as e:
@@ -1121,7 +1043,6 @@ class Overhead:
             with self._lock:
                 self._data = overhead_data
                 self._tracked_data = tracked_data
-                self._iss_pass_data = iss_data
                 self._new_data = True
 
         except (ConnectionError, ConnectError, TimeoutException, OSError) as e:
@@ -1149,9 +1070,9 @@ class Overhead:
                 os.chmod(TRACKED_FILE, 0o666)
             except OSError:
                 pass
-            print("Tracked flight ended — auto-cleared.")
+            logger.info("Tracked flight ended — auto-cleared.")
         except Exception as e:
-            print(f"Failed to auto-clear tracked flight: {e}")
+            logger.error(f"Failed to auto-clear tracked flight: {e}")
         self._tracked_was_live = False
         self._tracked_miss_count = 0
         self._tracked_last_eta = None
@@ -1349,10 +1270,9 @@ class Overhead:
     def iss_pass_data(self):
         """Return ISS pass data if a pass is active, else None.
 
-        Uses cached data from the background grab thread for the API fetch,
-        but recalculates progress/time_remaining in real-time from the cached
-        pass timing data. This avoids blocking the render thread with HTTP calls
-        while still providing smooth 1Hz updates.
+        The background _grab thread pre-warms the iss module's internal cache.
+        This property calls get_iss_pass_data() which returns cached results
+        without blocking the render thread.
         """
         try:
             from utilities.iss import get_iss_pass_data
