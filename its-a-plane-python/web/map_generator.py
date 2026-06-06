@@ -138,7 +138,19 @@ def generate_farthest_map(entries, filename="farthest.html"):
         orig_lon_raw = entry.get("origin_longitude") or origin_lon
         if trail:
             trail_ordered = list(reversed(trail))
-            trail_aligned = [[lat, align_to_reference_tile(lon, ref_lon)] for lat, lon in trail_ordered]
+            # Interpolate great circle arcs between each consecutive waypoint so
+            # ocean gaps (where ADS-B coverage is absent) curve correctly rather
+            # than cutting straight across in Mercator projection.
+            interpolated = []
+            for i in range(len(trail_ordered) - 1):
+                arc = great_circle_points(trail_ordered[i], trail_ordered[i + 1], steps=20)
+                if interpolated:
+                    interpolated.extend(arc[1:])
+                else:
+                    interpolated.extend(arc)
+            if not interpolated:
+                interpolated = trail_ordered
+            trail_aligned = [[lat, align_to_reference_tile(lon, ref_lon)] for lat, lon in interpolated]
             folium.PolyLine(trail_aligned, color=color, weight=2, opacity=0.9,
                             tooltip=f"Flown: {entry.get('origin','')}→current").add_to(m)
         else:
