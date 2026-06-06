@@ -7,8 +7,8 @@ from config import NIGHT_START, NIGHT_END
 
 # Scene Setup
 TEMPERATURE_REFRESH_SECONDS = 600
-TEMPERATURE_FONT = fonts.small
-TEMPERATURE_FONT_HEIGHT = 6
+TEMPERATURE_FONT = fonts.extrasmall
+TEMPERATURE_FONT_HEIGHT = 5
 NIGHT_START_TIME = datetime.strptime(NIGHT_START, "%H:%M")
 NIGHT_END_TIME = datetime.strptime(NIGHT_END, "%H:%M")
 
@@ -94,8 +94,8 @@ class TemperatureScene(object):
             self._last_temperature = current_temperature
             self._redraw_temp = False
 
-            # Left-justify at x=40 (aligned with date/tide below)
-            TEMPERATURE_POSITION = (40, TEMPERATURE_FONT_HEIGHT)
+            # Left-justify at x=36 (aligned with date/tide below)
+            TEMPERATURE_POSITION = (36, TEMPERATURE_FONT_HEIGHT)
 
             # Draw temperature/error
             graphics.DrawText(
