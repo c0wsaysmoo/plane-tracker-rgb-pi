@@ -12,6 +12,7 @@ DATE_POSITION = (40, 11)
 # Tide colors
 TIDE_HIGH_COLOUR = graphics.Color(0, 255, 255)     # Cyan
 TIDE_LOW_COLOUR = graphics.Color(66, 164, 244)      # Light blue
+WATER_TEMP_COLOUR = graphics.Color(0, 200, 150)    # Teal
 
 # Cycle timing: 5 seconds per item (called once per second)
 _CYCLE_SECONDS = 5
@@ -117,7 +118,7 @@ class DateScene(object):
         # Increment cycle counter
         self._cycle_counter += 1
 
-        # Build display items: date always, tides if available
+        # Build display items: date always, tides + water temp if available
         tides = self._get_tides()
         items = [("date", current_date)]
         if tides:
@@ -125,6 +126,14 @@ class DateScene(object):
                 items.append(("high", f"H{tides['high']}"))
             if tides.get("low"):
                 items.append(("low", f"L{tides['low']}"))
+            # Water temp after tides (same coastal context)
+            try:
+                from utilities.tides import get_water_temp
+                wt = get_water_temp()
+                if wt:
+                    items.append(("water", f"Water {wt}\xb0"))
+            except Exception:
+                pass
 
         # Pick current item based on cycle
         cycle_len = len(items) * _CYCLE_SECONDS
@@ -170,5 +179,7 @@ class DateScene(object):
             graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], TIDE_HIGH_COLOUR, display_text)
         elif item_type == "low":
             graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], TIDE_LOW_COLOUR, display_text)
+        elif item_type == "water":
+            graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], WATER_TEMP_COLOUR, display_text)
 
         self._redraw_date = False
