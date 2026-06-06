@@ -33,14 +33,14 @@ except ImportError:
     get_uv_index = lambda: None
 
 # Setup — normal clock (no alerts)
-CLOCK_FONT = fonts.large_bold          # 8x13B
-CLOCK_POSITION = (0, 11)
+CLOCK_FONT = fonts.extrasmall          # 4x6
+CLOCK_POSITION = (0, 5)
 DAY_COLOUR = colours.LIGHT_ORANGE
 NIGHT_COLOUR = colours.LIGHT_BLUE
 
-# Alert mode — small clock + alert text below
-CLOCK_SMALL_FONT = fonts.small         # 5x8
-CLOCK_SMALL_POSITION = (0, 6)
+# Alert mode — same font, alerts on second line
+CLOCK_SMALL_FONT = fonts.extrasmall    # 4x6
+CLOCK_SMALL_POSITION = (0, 5)
 ALERT_FONT = fonts.extrasmall          # 4x6
 ALERT_POSITION = (0, 11)
 

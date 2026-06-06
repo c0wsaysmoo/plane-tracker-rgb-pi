@@ -134,9 +134,10 @@ class DaysForecastScene(object):
                 min_temp_width = len(min_temp) * 4
                 max_temp_width = len(max_temp) * 4
 
-                temp_x = offset + (space_width - min_temp_width - max_temp_width - 1) // 2 + 1
+                temp_gap = 3  # pixels between high and low temps
+                temp_x = offset + (space_width - min_temp_width - max_temp_width - temp_gap) // 2 + 1
                 max_temp_x = temp_x
-                min_temp_x = temp_x + max_temp_width
+                min_temp_x = temp_x + max_temp_width + temp_gap
 
                 icon_x = offset + (space_width - ICON_SIZE) // 2
                 day_x = offset + (space_width - 12) // 2 + 1
