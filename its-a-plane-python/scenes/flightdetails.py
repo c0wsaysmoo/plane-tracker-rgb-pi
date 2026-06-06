@@ -60,16 +60,27 @@ class FlightDetailsScene(object):
             else:
                 main_text = flight_no
 
-            # Draw main text (airline + flight number) with alpha/numeric colours
-            for ch in main_text:
+            # Colour: airline name + IATA designator in alpha colour,
+            # trailing digits in numeric colour.
+            # When iata_flight is set (e.g. "B61234"), the designator is
+            # always the first 2 chars (IATA codes are 2 chars: B6, AA, F9).
+            # When it's a raw callsign with ICAO stripped, it's already numeric-only.
+            designator_len = 2 if iata_flight else 0
+            alpha_len = (len(airline) + 1 if airline else 0) + designator_len
+
+            for i, ch in enumerate(main_text):
+                if i < alpha_len:
+                    colour = FLIGHT_NUMBER_ALPHA_COLOUR
+                else:
+                    colour = (FLIGHT_NUMBER_NUMERIC_COLOUR
+                              if ch.isnumeric()
+                              else FLIGHT_NUMBER_ALPHA_COLOUR)
                 ch_length = graphics.DrawText(
                     self.canvas,
                     FLIGHT_NO_FONT,
                     self._scroll_pos + flight_no_text_length,
                     FLIGHT_NO_DISTANCE_FROM_TOP,
-                    FLIGHT_NUMBER_NUMERIC_COLOUR
-                    if ch.isnumeric()
-                    else FLIGHT_NUMBER_ALPHA_COLOUR,
+                    colour,
                     ch,
                 )
                 flight_no_text_length += ch_length
