@@ -29,9 +29,19 @@ except (ImportError, ModuleNotFoundError, NameError):
     TIDE_STATION = ""
 
 try:
+    from config import WATER_TEMP_STATION
+except (ImportError, ModuleNotFoundError, NameError):
+    WATER_TEMP_STATION = ""
+
+try:
     from config import CLOCK_FORMAT
 except (ImportError, ModuleNotFoundError, NameError):
     CLOCK_FORMAT = "24hr"
+
+try:
+    from config import TEMPERATURE_UNITS
+except (ImportError, ModuleNotFoundError, NameError):
+    TEMPERATURE_UNITS = "imperial"
 
 # In-memory cache
 _cached_tides = None  # list of {"t": "...", "type": "H"/"L"}
@@ -160,3 +170,52 @@ def get_next_tides():
         return None
 
     return {"high": next_high or "--", "low": next_low or "--"}
+
+
+# --- Water Temperature ---
+
+_water_temp = None       # cached value (string like "62")
+_water_temp_ts = 0.0     # last fetch timestamp
+_WATER_TEMP_POLL = 1800  # refresh every 30 minutes
+
+
+def get_water_temp():
+    """
+    Return current ocean water temperature as a string (e.g. "62") or None.
+
+    Uses NOAA CO-OPS water_temperature product. Station is configured via
+    WATER_TEMP_STATION in .env (e.g. "8510560" for Montauk).
+    """
+    global _water_temp, _water_temp_ts
+    from time import time
+
+    if not WATER_TEMP_STATION:
+        return None
+
+    now = time()
+    if _water_temp is not None and (now - _water_temp_ts) < _WATER_TEMP_POLL:
+        return _water_temp
+
+    try:
+        r = requests.get(_BASE_URL, params={
+            "station": WATER_TEMP_STATION,
+            "product": "water_temperature",
+            "date": "latest",
+            "time_zone": "lst_ldt",
+            "units": "metric" if TEMPERATURE_UNITS == "metric" else "english",
+            "format": "json",
+        }, timeout=(5, 15))
+        r.raise_for_status()
+        data = r.json()
+        readings = data.get("data", [])
+        if readings:
+            val = float(readings[0]["v"])
+            _water_temp = str(round(val))
+            _water_temp_ts = now
+            logger.info(f"[WaterTemp] {_water_temp}° from station {WATER_TEMP_STATION}")
+        else:
+            logger.warning("[WaterTemp] No data returned")
+    except Exception as e:
+        logger.error(f"[WaterTemp] Fetch failed: {e}")
+
+    return _water_temp
