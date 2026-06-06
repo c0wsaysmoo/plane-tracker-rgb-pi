@@ -220,12 +220,12 @@ def grab_temperature_and_humidity():
 
     # Return cache if still fresh
     if _cached_temp and (time.time() - _cached_temp_ts) < _TEMP_CACHE_TTL:
-        return _cached_temp
+        return _cached_temp[0], _cached_temp[1]
 
     # Rate limit check
     if _rate_limited("temp"):
         logger.debug("Rate limit: skipping temperature API call, using cache")
-        return _cached_temp if _cached_temp else (None, None)
+        return (_cached_temp[0], _cached_temp[1]) if _cached_temp else (None, None)
 
     try:
         s = get_session()
@@ -242,7 +242,7 @@ def grab_temperature_and_humidity():
         if request.status_code == 429:
             _record_call("temp")
             _enter_backoff()
-            return _cached_temp if _cached_temp else (None, None)
+            return (_cached_temp[0], _cached_temp[1]) if _cached_temp else (None, None)
 
         request.raise_for_status()
         _record_call("temp")
@@ -255,7 +255,7 @@ def grab_temperature_and_humidity():
 
         if temperature is None or humidity is None:
             logger.error("Incomplete data from Tomorrow.io API")
-            return _cached_temp if _cached_temp else (None, None)
+            return (_cached_temp[0], _cached_temp[1]) if _cached_temp else (None, None)
 
         _cached_temp = (temperature, humidity, uv_index)
         _cached_temp_ts = time.time()
@@ -274,7 +274,7 @@ def grab_temperature_and_humidity():
                 f"[{timestamp}] Temperature request failed: {e}"
             )
 
-        return _cached_temp if _cached_temp else (None, None)
+        return (_cached_temp[0], _cached_temp[1]) if _cached_temp else (None, None)
 
 
 def get_uv_index():
