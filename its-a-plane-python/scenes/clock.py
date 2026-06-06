@@ -27,6 +27,11 @@ try:
 except ImportError:
     get_iss_alert = lambda: None
 
+try:
+    from utilities.temperature import get_uv_index
+except ImportError:
+    get_uv_index = lambda: None
+
 # Setup — normal clock (no alerts)
 CLOCK_FONT = fonts.large_bold          # 8x13B
 CLOCK_POSITION = (0, 11)
@@ -191,12 +196,11 @@ class ClockScene(object):
 
         # UV index alert
         try:
-            from utilities.temperature import get_uv_index
             uv = get_uv_index()
         except Exception:
             uv = None
         if uv is not None and uv > 0:
-            uv_int = int(round(uv))
+            uv_int = max(1, int(round(uv)))
             # EPA/WHO standard colors
             if uv_int >= 11:    color = colours.PURPLE        # Extreme
             elif uv_int >= 8:   color = colours.RED           # Very High
