@@ -189,6 +189,22 @@ class ClockScene(object):
         if iss:
             items.append((iss["text"], _ALERT_COLOURS.get(iss["color"], colours.WHITE)))
 
+        # UV index alert
+        try:
+            from utilities.temperature import get_uv_index
+            uv = get_uv_index()
+        except Exception:
+            uv = None
+        if uv is not None and uv > 0:
+            uv_int = int(round(uv))
+            # EPA/WHO standard colors
+            if uv_int >= 11:    color = colours.PURPLE        # Extreme
+            elif uv_int >= 8:   color = colours.RED           # Very High
+            elif uv_int >= 6:   color = colours.LIGHT_ORANGE  # High
+            elif uv_int >= 3:   color = colours.YELLOW        # Moderate
+            else:               color = colours.GREEN         # Low
+            items.append((f"UV {uv_int}", color))
+
         # Sunrise/sunset countdown (within 30 min)
         try:
             if self.today_sunrise and self.today_sunset:
