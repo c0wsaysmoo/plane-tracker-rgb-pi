@@ -251,14 +251,15 @@ def grab_temperature_and_humidity():
         data = request.json().get("data", {}).get("values", {})
         temperature = data.get("temperature")
         humidity = data.get("humidity")
+        uv_index = data.get("uvIndex")
 
         if temperature is None or humidity is None:
             logger.error("Incomplete data from Tomorrow.io API")
             return _cached_temp if _cached_temp else (None, None)
 
-        _cached_temp = (temperature, humidity)
+        _cached_temp = (temperature, humidity, uv_index)
         _cached_temp_ts = time.time()
-        _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
+        _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity, uv_index], units=TEMPERATURE_UNITS)
         return temperature, humidity
 
     except (RequestException, ValueError) as e:
@@ -274,6 +275,13 @@ def grab_temperature_and_humidity():
             )
 
         return _cached_temp if _cached_temp else (None, None)
+
+
+def get_uv_index():
+    """Return the cached UV index from the last realtime fetch, or None."""
+    if _cached_temp and len(_cached_temp) >= 3:
+        return _cached_temp[2]
+    return None
 
 
 # ─── Forecast ────────────────────────────────────────────────────────────────
