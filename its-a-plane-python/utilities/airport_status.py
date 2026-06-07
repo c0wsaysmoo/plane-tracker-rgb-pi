@@ -64,8 +64,13 @@ def _parse_xml(xml_text):
         elif "Closure" in name:
             for cl in delay_type.findall(".//Airport"):
                 arpt = (cl.findtext("ARPT") or "").strip().upper()
+                reason = (cl.findtext("Reason") or "").upper()
                 if arpt:
-                    results.append({"type": "closure", "arpt": arpt})
+                    # GA-only closures (transient GA, non-sked GA) are not full closures
+                    if "GA" in reason and ("TRANSIENT" in reason or "NON SKED" in reason or "NON-SKED" in reason):
+                        results.append({"type": "closure_ga", "arpt": arpt})
+                    else:
+                        results.append({"type": "closure", "arpt": arpt})
 
     return results
 
@@ -159,6 +164,8 @@ def get_airport_alerts():
             alerts.append({"text": f"{arpt} GStop", "color": "red"})
         elif dtype == "closure":
             alerts.append({"text": f"{arpt} Closd", "color": "red"})
+        elif dtype == "closure_ga":
+            alerts.append({"text": f"{arpt} GA Cl", "color": "grey"})
         elif dtype in ("ground_delay", "arr_dep_delay"):
             alerts.append({"text": f"{arpt} Delay", "color": "orange"})
 
