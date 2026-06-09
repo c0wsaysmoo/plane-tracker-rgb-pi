@@ -805,8 +805,8 @@ class Overhead:
 
                         # Calculate distances: prefer local airport coords, fallback to flight_progress
                         fp = self.safe_get(d, "flight_progress") or {}
-                        traversed_km = fp.get("traversed_distance", 0) or 0
-                        remaining_km = fp.get("remaining_distance", 0) or 0
+                        traversed_km = (fp.get("traversed_distance", 0) or 0) / 1000.0
+                        remaining_km = (fp.get("remaining_distance", 0) or 0) / 1000.0
 
                         # Use local airport coords for distance if available
                         if origin_lat is not None and origin_lon is not None:
