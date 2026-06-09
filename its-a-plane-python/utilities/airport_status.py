@@ -44,6 +44,10 @@ def _parse_minutes(text):
         total += int(hours.group(1)) * 60
     if mins:
         total += int(mins.group(1))
+    if total == 0:
+        bare = re.fullmatch(r'(\d+)', text.strip())
+        if bare:
+            total = int(bare.group(1))
     return total
 
 
@@ -237,6 +241,6 @@ def get_airport_alerts():
         elif dtype == "arr_dep_delay":
             color = _delay_color(minutes)
             if color:
-                alerts.append({"text": f"{arpt} Delay {minutes}m", "color": color})
+                alerts.append({"text": f"{arpt} Dly {minutes}m", "color": color})
 
     return alerts
