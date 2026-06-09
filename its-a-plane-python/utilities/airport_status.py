@@ -189,7 +189,7 @@ def _refresh():
 def get_airport_alerts():
     """Return list of alert dicts for configured airports.
 
-    Each dict: {"text": "JFK Dep", "color": "yellow"|"orange"|"red"}
+    Each dict: {"text": "JFK Dep 90m", "color": "yellow"|"orange"|"red"}
     Returns [] if no delays or no airports configured.
     """
     import config as cfg
@@ -217,26 +217,26 @@ def get_airport_alerts():
         minutes = item.get("minutes", 0)
 
         if dtype == "ground_stop":
-            alerts.append({"text": f"{arpt} GS", "color": "red"})
+            alerts.append({"text": f"{arpt} Grnd Stop", "color": "red"})
         elif dtype == "closure":
-            alerts.append({"text": f"{arpt} CLSD", "color": "red"})
+            alerts.append({"text": f"{arpt} Closed", "color": "red"})
         elif dtype == "closure_ga":
-            alerts.append({"text": f"{arpt} GA", "color": "grey"})
+            alerts.append({"text": f"{arpt} GA Closed", "color": "grey"})
         elif dtype == "ground_delay":
             color = _delay_color(minutes)
             if color:
-                alerts.append({"text": f"{arpt} G{minutes}", "color": color})
+                alerts.append({"text": f"{arpt} GDly {minutes}m", "color": color})
         elif dtype == "dep_delay":
             color = _delay_color(minutes)
             if color:
-                alerts.append({"text": f"{arpt} D{minutes}", "color": color})
+                alerts.append({"text": f"{arpt} Dep {minutes}m", "color": color})
         elif dtype == "arr_delay":
             color = _delay_color(minutes)
             if color:
-                alerts.append({"text": f"{arpt} A{minutes}", "color": color})
+                alerts.append({"text": f"{arpt} Arr {minutes}m", "color": color})
         elif dtype == "arr_dep_delay":
             color = _delay_color(minutes)
             if color:
-                alerts.append({"text": f"{arpt} DA{minutes}", "color": color})
+                alerts.append({"text": f"{arpt} Delay {minutes}m", "color": color})
 
     return alerts
