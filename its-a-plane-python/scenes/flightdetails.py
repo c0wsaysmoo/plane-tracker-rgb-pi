@@ -60,17 +60,28 @@ class FlightDetailsScene(object):
             # Add airline name if there is one
             airline = self._data[self._data_index]["airline"]
             if airline:
-                flight_no = f"{airline} {flight_no}"
+                main_text = f"{airline} {flight_no}"
+            else:
+                main_text = flight_no
 
-            for ch in flight_no:
+            # Colour: airline name in alpha colour, flight number digits in numeric colour.
+            # This prevents digits in airline names (e.g. "S7 Airlines") from being
+            # coloured as flight-number digits.
+            alpha_len = len(airline) + 1 if airline else 0  # +1 for space
+
+            for i, ch in enumerate(main_text):
+                if i < alpha_len:
+                    colour = FLIGHT_NUMBER_ALPHA_COLOUR
+                else:
+                    colour = (FLIGHT_NUMBER_NUMERIC_COLOUR
+                              if ch.isnumeric()
+                              else FLIGHT_NUMBER_ALPHA_COLOUR)
                 ch_length = graphics.DrawText(
                     self.canvas,
                     FLIGHT_NO_FONT,
                     self.flight_position + flight_no_text_length,
                     FLIGHT_NO_DISTANCE_FROM_TOP,
-                    FLIGHT_NUMBER_NUMERIC_COLOUR
-                    if ch.isnumeric()
-                    else FLIGHT_NUMBER_ALPHA_COLOUR,
+                    colour,
                     ch,
                 )
                 flight_no_text_length += ch_length
