@@ -79,12 +79,15 @@ if MASTER_TRACKER:
             print(f"[Overhead] Slave mode — polling master at {_url('')}")
 
         def grab_data(self):
+            with self._lock:
+                if self._processing:
+                    return
+                self._processing = True
             Thread(target=self._grab, daemon=True).start()
 
         def _grab(self):
             with self._lock:
                 self._new_data = False
-                self._processing = True
             try:
                 r = requests.get(_url("/overhead/json"), timeout=10)
                 r.raise_for_status()
@@ -458,12 +461,15 @@ else:
                 self._tracked_just_airborne   = False # True for one cycle after first airborne detection
 
             def grab_data(self):
+                with self._lock:
+                    if self._processing:
+                        return
+                    self._processing = True
                 Thread(target=self._grab, daemon=True).start()
 
             def _grab(self):
                 with self._lock:
                     self._new_data   = False
-                    self._processing = True
 
                 self._fr24._last_source = None
                 overhead_data = []
