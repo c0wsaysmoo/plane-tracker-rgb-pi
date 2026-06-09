@@ -8,12 +8,13 @@ API returns XML which is parsed into alert dicts.
 Usage:
     from utilities.airport_status import get_airport_alerts
     alerts = get_airport_alerts()
-    # [{"text": "JFK Delay", "color": "orange"}, {"text": "EWR GStop", "color": "red"}]
+    # [{"text": "JFK Dep", "color": "orange"}, {"text": "EWR GStop", "color": "red"}]
 """
 
 import json
 import logging
 import os
+import re
 import time
 import xml.etree.ElementTree as ET
 
@@ -27,8 +28,35 @@ _CACHE_FILE = os.path.join(_CACHE_DIR, "airport_status.json")
 _POLL_INTERVAL = 300  # 5 minutes
 
 # In-memory cache
-_cached_data = None  # list of {"type": "ground_stop"|"ground_delay"|"closure", "arpt": "JFK", ...}
+_cached_data = None
 _cached_ts = 0.0
+
+
+def _parse_minutes(text):
+    """Extract total minutes from strings like '1 hour and 46 minutes' or '31 minutes'."""
+    if not text:
+        return 0
+    text = text.lower().strip()
+    total = 0
+    hours = re.search(r'(\d+)\s*hour', text)
+    mins  = re.search(r'(\d+)\s*min', text)
+    if hours:
+        total += int(hours.group(1)) * 60
+    if mins:
+        total += int(mins.group(1))
+    return total
+
+
+def _delay_color(minutes):
+    """Return color string based on delay severity, or None if below threshold."""
+    if minutes >= 120:
+        return "red"
+    elif minutes >= 90:
+        return "orange"
+    elif minutes >= 45:
+        return "yellow"
+    else:
+        return None  # too minor to show
 
 
 def _parse_xml(xml_text):
@@ -44,33 +72,59 @@ def _parse_xml(xml_text):
         name = (delay_type.findtext("Name") or "").strip()
 
         if "Ground Stop" in name:
-            for prog in delay_type.findall(".//Program"):
+            for prog in delay_type.findall(".//Ground_Stop_List/Program"):
                 arpt = (prog.findtext("ARPT") or "").strip().upper()
                 if arpt:
-                    results.append({"type": "ground_stop", "arpt": arpt})
+                    results.append({"type": "ground_stop", "arpt": arpt, "minutes": 0})
 
         elif "Ground Delay" in name:
-            for gd in delay_type.findall(".//Ground_Delay"):
+            for gd in delay_type.findall(".//Ground_Delay_List/Ground_Delay"):
                 arpt = (gd.findtext("ARPT") or "").strip().upper()
                 if arpt:
-                    results.append({"type": "ground_delay", "arpt": arpt})
+                    avg_text = gd.findtext("Avg") or ""
+                    results.append({
+                        "type": "ground_delay",
+                        "arpt": arpt,
+                        "minutes": _parse_minutes(avg_text),
+                    })
 
         elif "Arrival" in name or "Departure" in name:
-            for ad in delay_type.findall(".//Delay"):
+            for ad in delay_type.findall(".//Arrival_Departure_Delay_List/Delay"):
                 arpt = (ad.findtext("ARPT") or "").strip().upper()
-                if arpt:
-                    results.append({"type": "arr_dep_delay", "arpt": arpt})
+                if not arpt:
+                    continue
+                arr_mins = dep_mins = 0
+                has_arr = has_dep = False
+                for ad_el in ad.findall("Arrival_Departure"):
+                    dtype = (ad_el.get("Type") or "").lower()
+                    mins = _parse_minutes(ad_el.findtext("Min") or "")
+                    if "arrival" in dtype:
+                        has_arr = True
+                        arr_mins = max(arr_mins, mins)
+                    elif "departure" in dtype:
+                        has_dep = True
+                        dep_mins = max(dep_mins, mins)
+
+                if has_arr and has_dep:
+                    results.append({"type": "arr_dep_delay", "arpt": arpt,
+                                    "minutes": max(arr_mins, dep_mins)})
+                elif has_dep:
+                    results.append({"type": "dep_delay", "arpt": arpt, "minutes": dep_mins})
+                elif has_arr:
+                    results.append({"type": "arr_delay", "arpt": arpt, "minutes": arr_mins})
+                else:
+                    results.append({"type": "arr_dep_delay", "arpt": arpt, "minutes": 0})
 
         elif "Closure" in name:
-            for cl in delay_type.findall(".//Airport"):
+            for cl in delay_type.findall(".//Airport_Closure_List/Airport"):
                 arpt = (cl.findtext("ARPT") or "").strip().upper()
                 reason = (cl.findtext("Reason") or "").upper()
-                if arpt:
-                    # GA-only closures (transient GA, non-sked GA) are not full closures
-                    if "GA" in reason and ("TRANSIENT" in reason or "NON SKED" in reason or "NON-SKED" in reason):
-                        results.append({"type": "closure_ga", "arpt": arpt})
-                    else:
-                        results.append({"type": "closure", "arpt": arpt})
+                if not arpt:
+                    continue
+                if "GA" in reason and ("TRANSIENT" in reason or "NON SKED" in reason or "NON-SKED" in reason):
+                    results.append({"type": "closure_ga", "arpt": arpt, "minutes": 0})
+                else:
+                    results.append({"type": "closure", "arpt": arpt, "minutes": 0})
 
     return results
 
@@ -135,7 +189,7 @@ def _refresh():
 def get_airport_alerts():
     """Return list of alert dicts for configured airports.
 
-    Each dict: {"text": "JFK Delay", "color": "orange"}
+    Each dict: {"text": "JFK Dep", "color": "yellow"|"orange"|"red"}
     Returns [] if no delays or no airports configured.
     """
     import config as cfg
@@ -159,14 +213,30 @@ def get_airport_alerts():
             continue
         seen.add(arpt)
 
-        dtype = item.get("type", "")
+        dtype   = item.get("type", "")
+        minutes = item.get("minutes", 0)
+
         if dtype == "ground_stop":
-            alerts.append({"text": f"{arpt} GStop", "color": "red"})
+            alerts.append({"text": f"{arpt} GS", "color": "red"})
         elif dtype == "closure":
-            alerts.append({"text": f"{arpt} Closd", "color": "red"})
+            alerts.append({"text": f"{arpt} CLSD", "color": "red"})
         elif dtype == "closure_ga":
-            alerts.append({"text": f"{arpt} GA Cl", "color": "grey"})
-        elif dtype in ("ground_delay", "arr_dep_delay"):
-            alerts.append({"text": f"{arpt} Delay", "color": "orange"})
+            alerts.append({"text": f"{arpt} GA", "color": "grey"})
+        elif dtype == "ground_delay":
+            color = _delay_color(minutes)
+            if color:
+                alerts.append({"text": f"{arpt} G{minutes}", "color": color})
+        elif dtype == "dep_delay":
+            color = _delay_color(minutes)
+            if color:
+                alerts.append({"text": f"{arpt} D{minutes}", "color": color})
+        elif dtype == "arr_delay":
+            color = _delay_color(minutes)
+            if color:
+                alerts.append({"text": f"{arpt} A{minutes}", "color": color})
+        elif dtype == "arr_dep_delay":
+            color = _delay_color(minutes)
+            if color:
+                alerts.append({"text": f"{arpt} DA{minutes}", "color": color})
 
     return alerts
