@@ -301,6 +301,9 @@
     .col-headers, a.board-row { grid-template-columns: 70px 1fr 80px; }
     .col-header:nth-child(n+4), .row-cell:nth-child(n+4) { display: none; }
     .board-title { font-size: 24px; }
+    .board-header { flex-wrap: wrap; gap: 6px; }
+    .board-header > div:last-child { margin-left: 0; width: 100%; justify-content: flex-end; }
+    #date-display { display: none; }
   }
 </style>
 </head>
@@ -312,7 +315,14 @@
     <span class="board-title" id="board-title">Flight Tracker</span>
     <span class="board-subtitle" id="location-name"></span>
   </div>
-  <div class="board-clock" id="clock">00:00:00</div>
+  <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+    <div class="board-clock" id="clock">00:00:00</div>
+    <span class="board-clock" id="date-display"></span>
+    <span class="board-clock" style="display:flex;align-items:center;gap:6px;padding:2px 12px;">
+      <img id="weather-icon" src="" alt="" style="height:22px;width:22px;display:none;">
+      <span id="temp-display"></span>
+    </span>
+  </div>
 </div>
 
 <div class="col-headers">
@@ -375,8 +385,16 @@
     <div class="row-cell"><span class="status-data">DATA</span></div>
   </a>
 
-  <a class="board-row" href="/config">
+  <a class="board-row" href="/api_calls/log">
     <div class="row-cell time" id="t6">--:--</div>
+    <div class="row-cell">API CALL LOG</div>
+    <div class="row-cell flight">LOG04</div>
+    <div class="row-cell gate">--</div>
+    <div class="row-cell"><span class="status-data">DATA</span></div>
+  </a>
+
+  <a class="board-row" href="/config">
+    <div class="row-cell time" id="t7">--:--</div>
     <div class="row-cell">CONFIGURATION</div>
     <div class="row-cell flight">CFG</div>
     <div class="row-cell gate">--</div>
@@ -422,12 +440,27 @@
     document.getElementById('location-name').textContent = '';
   }).catch(()=>{});
 
+  let _clockFormat = '12hr';
+  fetch('/api/config').then(r=>r.json()).then(d=>{
+    _clockFormat = d.config?.location?.clock_format || '12hr';
+  }).catch(()=>{});
+
   function updateClock() {
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
-    document.getElementById('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    let timeStr;
+    if (_clockFormat === '24hr') {
+      timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    } else {
+      const h = now.getHours();
+      const h12 = h % 12 || 12;
+      const ampm = h < 12 ? 'AM' : 'PM';
+      timeStr = `${h12}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+    }
+    document.getElementById('clock').textContent = timeStr;
+    document.getElementById('date-display').textContent = `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()}`;
     const base = now.getHours() * 60 + now.getMinutes();
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       const m = base + i * 5;
       document.getElementById('t'+i).textContent = `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
     }
@@ -435,20 +468,39 @@
   updateClock();
   setInterval(updateClock, 1000);
 
+  function updateTemp() {
+    Promise.all([
+      fetch('/weather/json').then(r=>r.json()),
+      fetch('/api/config').then(r=>r.json()).catch(()=>({})),
+    ]).then(([weather, cfg]) => {
+      const temp  = weather.temperature;
+      const rawUnits = cfg.config?.location?.temperature_units || 'imperial';
+      const units = rawUnits === 'metric' ? '°C' : '°F';
+      if (temp !== null && temp !== undefined) {
+        document.getElementById('temp-display').textContent = `${Math.round(temp)}${units}`;
+      }
+      const code = weather.weatherCode;
+      const icon = document.getElementById('weather-icon');
+      if (code !== null && code !== undefined) {
+        icon.src = `/icons/${code}.png`;
+        icon.style.display = 'inline';
+      } else {
+        icon.style.display = 'none';
+      }
+    }).catch(()=>{});
+  }
+  updateTemp();
+  setInterval(updateTemp, 300000); // refresh every 5 minutes
+
   let pendingCallsign = "";
+  let pendingCachedRoute = null;
 
   async function loadCurrent() {
     try {
       const res  = await fetch("/tracked/json");
       const data = await res.json();
       const el   = document.getElementById("current-tracked");
-      if (data.callsign) {
-        const route = data.cached_route;
-        const leg   = route && route.origin && route.destination ? ` ${route.origin}→${route.destination}` : "";
-        el.innerHTML = `TRACKING: <span>${data.callsign}${leg}</span>`;
-      } else {
-        el.innerHTML = "NOT CURRENTLY TRACKING ANY FLIGHT";
-      }
+      el.innerHTML = data.callsign ? `TRACKING: <span>${data.callsign}</span>` : `NOT CURRENTLY TRACKING ANY FLIGHT`;
     } catch { document.getElementById("current-tracked").textContent = "ERROR"; }
   }
 
@@ -461,40 +513,21 @@
     document.getElementById("confirm-row").style.display = show ? "flex" : "none";
   }
 
-  function fmtDep(ts) {
-    if (!ts) return "";
-    const d = new Date(ts * 1000);
-    return d.toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
-  }
-
-  function showPicker(callsign, flights) {
+  function showPicker(flights) {
     const picker = document.getElementById("flight-picker");
     picker.innerHTML = "";
     picker.style.display = "flex";
-
-    // Header
-    const hdr = document.createElement("div");
-    hdr.style.cssText = "font-size:11px;letter-spacing:2px;color:var(--amber-dim);margin-bottom:4px";
-    hdr.textContent = `SELECT A LEG FOR ${callsign}:`;
-    picker.appendChild(hdr);
-
     flights.forEach(f => {
-      const dep    = fmtDep(f.scheduled_departure);
-      const route  = f.origin && f.destination ? `${f.origin}→${f.destination}` : "???→???";
-      const live   = f.is_live;
-      const status = live
-        ? `<span style="color:var(--green)">● AIRBORNE</span>`
-        : (dep ? `<span style="color:var(--amber-dim)">DEP ${dep}</span>` : `<span style="color:var(--amber-dim)">SCHEDULED</span>`);
-      const parts = [
-        `<span style="color:var(--amber-bright);font-size:20px">${route}</span>`,
-        f.airline ? `<span style="font-size:14px;color:var(--amber-dim)">${f.airline}</span>` : "",
-        f.aircraft ? `<span style="font-size:13px;color:var(--amber-dim)">${f.aircraft}</span>` : "",
-        status,
-      ].filter(Boolean).join("  &nbsp;");
-
+      const dep = f.scheduled_departure
+        ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+        : "";
+      const parts = [f.airline || f.callsign, f.origin && f.destination ? `${f.origin}→${f.destination}` : "",
+        f.aircraft || "", f.registration || "", dep ? `DEP ${dep}` : "",
+        `<span style="color:${f.is_live?'var(--green)':'var(--amber-dim)'}">${f.status}</span>`].filter(Boolean);
       const btn = document.createElement("button");
-      btn.style.cssText = "text-align:left;padding:8px 10px;border-color:var(--amber-dim)";
-      btn.innerHTML = parts;
+      btn.className = "save-anyway";
+      btn.style.cssText = "text-align:left;font-size:12px;letter-spacing:1px;padding:6px 10px";
+      btn.innerHTML = parts.join("  ·  ");
       btn.onclick = () => selectFlight(f);
       picker.appendChild(btn);
     });
@@ -508,11 +541,13 @@
   async function selectFlight(f) {
     hidePicker();
     await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
-    const dep   = fmtDep(f.scheduled_departure);
+    const dep = f.scheduled_departure
+      ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+      : null;
     const route = f.origin && f.destination ? `${f.origin}→${f.destination}` : "";
-    const mode  = f.is_live ? "AIRBORNE NOW" : (dep ? `DEPARTS ${dep} — WILL TRACK FROM WHEELS-UP` : "WILL TRACK FROM DEPARTURE");
-    const parts = [f.callsign, f.airline || "", route, f.aircraft || "", mode].filter(Boolean);
-    setStatus("track-status", parts.join("  ·  "), f.is_live ? "found" : "saved");
+    const parts = [`✓ SAVED: ${f.callsign}`, f.airline || "", route, f.aircraft || "",
+      dep ? `DEP ${dep}` : "", f.status === "Airborne" ? "AIRBORNE NOW" : (dep ? "WILL TRACK FROM DEPARTURE" : "")].filter(Boolean);
+    setStatus("track-status", parts.join("  ·  "), "found");
     document.getElementById("callsign-input").value = "";
   }
 
@@ -524,59 +559,56 @@
     showConfirm(false); hidePicker();
     setStatus("track-status", `SEARCHING ${val}...`, "searching");
     try {
-      const res  = await fetch("/tracked/lookup", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({callsign:val})});
+      const res  = await fetch("/tracked/lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({callsign:val})});
       const data = await res.json();
-
       if (data.found && data.multiple) {
-        // Multiple legs — show picker, don't auto-save
-        setStatus("track-status", data.summary, "searching");
-        showPicker(val, data.flights);
-
+        setStatus("track-status", data.summary, "not-found");
+        showPicker(data.flights);
       } else if (data.found) {
-        // Single result — auto-select
-        await selectFlight(data.flight);
-
+        const f = data.flight;
+        await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
+        const dep = f.scheduled_departure
+          ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+          : null;
+        const route = f.origin && f.destination ? `${f.origin}→${f.destination}` : "";
+        const parts = [`✓ SAVED: ${f.callsign}`, f.airline || "", route, f.aircraft || "",
+          dep ? `DEP ${dep}` : "", f.status === "Airborne" ? "AIRBORNE NOW" : (dep ? "WILL TRACK FROM DEPARTURE" : "")].filter(Boolean);
+        setStatus("track-status", parts.join("  ·  "), "found");
+        document.getElementById("callsign-input").value = "";
+        showConfirm(false);
       } else {
-        // Not found in any API — offer callsign-only save so it tracks when airborne
-        pendingCallsign = val;
-        setStatus("track-status", `${val} NOT FOUND — CALLSIGN WRONG, OR TRY AGAIN CLOSER TO DEPARTURE.`, "not-found");
+        pendingCallsign = val; pendingCachedRoute = null;
+        setStatus("track-status", `${val} NOT FOUND — NOT AIRBORNE? SAVE ANYWAY TO TRACK WHEN LIVE.`, "not-found");
         showConfirm(true);
       }
-    } catch(e) {
-      setStatus("track-status", "LOOKUP FAILED: " + e.message, "error");
-      showConfirm(false);
-    }
+    } catch(e) { setStatus("track-status", "LOOKUP FAILED: " + e.message, "error"); showConfirm(false); }
     btn.disabled = false; btn.textContent = "Track";
   }
 
   async function saveAnyway() {
     if (!pendingCallsign) return;
     await saveCallsign(pendingCallsign, null, "", null);
-    setStatus("track-status", `SAVED: ${pendingCallsign} — WILL TRACK WHEN AIRBORNE (NO ROUTE DATA)`, "saved");
+    setStatus("track-status", `SAVED: ${pendingCallsign} — WILL TRACK WHEN LIVE`, "saved");
     document.getElementById("callsign-input").value = "";
-    showConfirm(false); hidePicker(); pendingCallsign = "";
+    showConfirm(false); hidePicker(); pendingCallsign = ""; pendingCachedRoute = null;
   }
 
-  function cancelSave() {
-    showConfirm(false); hidePicker();
-    setStatus("track-status", "", "");
-    pendingCallsign = "";
-  }
+  function cancelSave() { showConfirm(false); hidePicker(); setStatus("track-status","",""); pendingCallsign=""; pendingCachedRoute=null; }
 
   async function saveCallsign(callsign, cached_route=null, flight_id="", scheduled_departure=null) {
     const body = {callsign};
     if (cached_route)        body.cached_route        = cached_route;
     if (flight_id)           body.flight_id           = flight_id;
     if (scheduled_departure) body.scheduled_departure = scheduled_departure;
-    await fetch("/tracked/set", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    await fetch("/tracked/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     loadCurrent();
   }
 
   async function clearTracked() {
     await saveCallsign("", null, "", null);
     document.getElementById("callsign-input").value = "";
-    setStatus("track-status", "TRACKING CLEARED", "saved");
-    showConfirm(false); hidePicker(); pendingCallsign = "";
+    setStatus("track-status","TRACKING CLEARED","saved");
+    showConfirm(false); hidePicker(); pendingCallsign = ""; pendingCachedRoute = null;
   }
 
   document.addEventListener("DOMContentLoaded", () => {
