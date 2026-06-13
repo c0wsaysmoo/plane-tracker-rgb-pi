@@ -149,6 +149,10 @@ def closest_json():
 def farthest_json():
     return jsonify(load_json(FARTHEST_FILE, []))
 
+@app.get("/api_calls/log")
+def api_calls_log():
+    return send_from_directory(BASE_DIR, "api_calls.log", mimetype="text/plain")
+
 @app.get("/closest")
 def closest_page():
     return render_template("closest_map.html")
@@ -290,6 +294,18 @@ def debug_route():
     """Debug endpoint — not available without FR24 scraper."""
     return jsonify({"error": "Debug route endpoint deprecated"})
 
+@app.get("/debug/flightaware/<callsign>")
+def debug_flightaware(callsign):
+    """Return raw FlightAware API response for a callsign."""
+    try:
+        from utilities.flightaware import FlightAwareClient
+        fa = FlightAwareClient()
+        result = fa.get_tracked_flight(callsign.strip().upper())
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()})
+
 @app.get("/overhead/json")
 def overhead_json():
     """Return current overhead flight data for slave trackers."""
@@ -304,7 +320,19 @@ def overhead_json():
 
 @app.get("/tracked/json/live")
 def tracked_json_live():
-    """Return current tracked flight data for slave trackers."""
+    """Return current tracked flight data for slave trackers.
+    If the flight is airborne (is_live=True), returns empty so slaves don't show it.
+    If pre-departure, returns the saved forecast data from tracked_flight.json.
+    """
+    # Check if currently airborne via the live data written by overhead.py
+    try:
+        with open(os.path.join(BASE_DIR, "tracked_live.json"), "r") as f:
+            live = json.load(f)
+        if live and live.get("callsign") and live.get("is_live"):
+            return jsonify({"callsign": ""})
+    except Exception:
+        pass
+    # Not airborne — serve the forecast/pre-departure record
     try:
         with open(os.path.join(BASE_DIR, "tracked_flight.json"), "r") as f:
             return jsonify(json.load(f))
@@ -313,19 +341,19 @@ def tracked_json_live():
 
 @app.get("/weather/json")
 def weather_json():
-    """Serve cached weather data (temp, humidity, forecast) to slave Pis."""
+    """Serve cached weather data (temp, humidity, weatherCode, forecast) to slave Pis."""
     _cache_dir = os.path.join(BASE_DIR, ".cache")
-    temp_data, forecast_data = None, None
+    temp_data = humidity_data = weather_code_data = None
+    forecast_data = []
     try:
         with open(os.path.join(_cache_dir, "temperature.json"), "r") as f:
             obj = json.load(f)
             vals = obj.get("data", [])
-            if isinstance(vals, list) and len(vals) == 2:
-                temp_data, humidity_data = vals
-            else:
-                temp_data = humidity_data = None
+            if isinstance(vals, list) and len(vals) >= 2:
+                temp_data, humidity_data = vals[0], vals[1]
+                weather_code_data = vals[2] if len(vals) >= 3 else None
     except Exception:
-        humidity_data = None
+        pass
     try:
         with open(os.path.join(_cache_dir, "forecast.json"), "r") as f:
             obj = json.load(f)
@@ -335,8 +363,102 @@ def weather_json():
     return jsonify({
         "temperature": temp_data,
         "humidity":    humidity_data,
+        "weatherCode": weather_code_data,
         "forecast":    forecast_data,
     })
+
+@app.get("/clock/json")
+def clock_json():
+    """Serve astronomy data and pre-computed clock alerts to slave Pis."""
+    result = {"sunrise": "", "sunset": "", "moonrise": "", "moonset": "", "illumination": "NA", "alerts": []}
+    try:
+        with open(os.path.join(BASE_DIR, ".cache", "astronomy.json"), "r") as f:
+            obj = json.load(f)
+        result.update({
+            "sunrise":      obj.get("sunrise", ""),
+            "sunset":       obj.get("sunset", ""),
+            "moonrise":     obj.get("moonrise", ""),
+            "moonset":      obj.get("moonset", ""),
+            "illumination": obj.get("illumination", "NA"),
+        })
+    except Exception:
+        pass
+
+    alerts = []
+    try:
+        from utilities.airport_status import get_airport_alerts
+        alerts.extend(get_airport_alerts())
+    except Exception:
+        pass
+    try:
+        from utilities.iss import get_iss_alert
+        iss = get_iss_alert()
+        if iss:
+            alerts.append(iss)
+    except Exception:
+        pass
+    try:
+        from utilities.nws import get_nws_alerts
+        alerts.extend(get_nws_alerts())
+    except Exception:
+        pass
+    result["alerts"] = alerts
+
+    return jsonify(result)
+
+@app.get("/iss/json")
+def iss_json():
+    """Serve computed ISS alert and pass data to slave Pis."""
+    try:
+        from utilities.iss import get_iss_alert, get_iss_pass_data
+        return jsonify({"alert": get_iss_alert(), "pass_data": get_iss_pass_data()})
+    except Exception:
+        return jsonify({"alert": None, "pass_data": None})
+
+@app.get("/nws/json")
+def nws_json():
+    """Serve computed NWS weather alerts to slave Pis."""
+    try:
+        from utilities.nws import get_nws_alerts
+        return jsonify(get_nws_alerts())
+    except Exception:
+        return jsonify([])
+
+@app.get("/airport-status/json")
+def airport_status_json():
+    """Serve computed FAA airport alerts to slave Pis."""
+    try:
+        from utilities.airport_status import get_airport_alerts
+        return jsonify(get_airport_alerts())
+    except Exception:
+        return jsonify([])
+
+@app.get("/icons/<path:filename>")
+def serve_icon(filename):
+    """Serve weather icon PNGs upscaled to 64x64 for web display."""
+    import io
+    from PIL import Image
+    for candidate in [
+        os.path.join(BASE_DIR, "icons", filename),
+        os.path.join(BASE_DIR, "..", "icons", filename),
+        os.path.expanduser(f"~/icons/{filename}"),
+    ]:
+        if os.path.isfile(candidate):
+            icon_path = candidate
+            break
+    else:
+        return ("Not found", 404)
+    try:
+        img = Image.open(icon_path).convert("RGBA")
+        img = img.resize((64, 64), Image.NEAREST)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        from flask import Response
+        return Response(buf.read(), mimetype="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        return (str(e), 500)
 
 @app.get("/stats")
 def stats_page():
@@ -582,8 +704,35 @@ def airport_coords_endpoint():
             continue
         coords = get_airport_coords(code)
         if coords:
-            result[code] = {"lat": coords["lat"], "lon": coords["lon"]}
+            result[code] = {"lat": coords["lat"], "lon": coords["lon"], "name": coords.get("name", "")}
     return jsonify(result)
+
+@app.get("/api/aircraft-types")
+def api_aircraft_types():
+    """Serve aircraft type code → friendly name lookup to the frontend."""
+    types_path = os.path.join(BASE_DIR, "aircraft_types.json")
+    try:
+        with open(types_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    result = {}
+    for icao, entry in raw.items():
+        name = entry.get("name", icao)
+        result[icao] = name
+        for short in entry.get("short_codes", []):
+            result[short] = name
+    return jsonify(result)
+
+@app.get("/api/airlines")
+def api_airlines():
+    """Serve the full airlines.json lookup table to the frontend."""
+    airlines_path = os.path.join(BASE_DIR, "airlines.json")
+    try:
+        with open(airlines_path, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.get("/api/wifi/status")
 def wifi_status():
