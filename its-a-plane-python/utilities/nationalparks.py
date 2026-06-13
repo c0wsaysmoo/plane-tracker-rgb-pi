@@ -142,6 +142,25 @@ def get_nearest_park(latitude, longitude):
     return {"name": best_name, "distance_km": best_dist}
 
 
+def get_nearby_parks(latitude, longitude, radius_km):
+    """
+    Return all NPS parks within radius_km, sorted nearest first.
+    Each entry is {"name": str, "distance_km": float}.
+    """
+    _load()
+    if not _db:
+        return []
+
+    results = []
+    for name, plat, plon in _db:
+        dist = _haversine_km(latitude, longitude, plat, plon)
+        if dist <= radius_km:
+            results.append({"name": name, "distance_km": dist})
+
+    results.sort(key=lambda x: x["distance_km"])
+    return results
+
+
 def refresh():
     """Force re-download of park data."""
     global _db, _loaded

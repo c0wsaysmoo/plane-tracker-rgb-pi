@@ -79,15 +79,12 @@ if MASTER_TRACKER:
             print(f"[Overhead] Slave mode — polling master at {_url('')}")
 
         def grab_data(self):
-            with self._lock:
-                if self._processing:
-                    return
-                self._processing = True
             Thread(target=self._grab, daemon=True).start()
 
         def _grab(self):
             with self._lock:
                 self._new_data = False
+                self._processing = True
             try:
                 r = requests.get(_url("/overhead/json"), timeout=10)
                 r.raise_for_status()
@@ -99,7 +96,9 @@ if MASTER_TRACKER:
                     tr = requests.get(_url("/tracked/json/live"), timeout=10)
                     tr.raise_for_status()
                     td = tr.json()
-                    tracked = td if td.get("callsign") else None
+                    # Only show forecast (pre-departure) on slave — not live/airborne flights
+                    if td.get("callsign") and not td.get("is_live"):
+                        tracked = td
                 except Exception as e:
                     print(f"[Slave] Tracked poll failed: {e}")
                 with self._lock:
@@ -461,15 +460,12 @@ else:
                 self._tracked_just_airborne   = False # True for one cycle after first airborne detection
 
             def grab_data(self):
-                with self._lock:
-                    if self._processing:
-                        return
-                    self._processing = True
                 Thread(target=self._grab, daemon=True).start()
 
             def _grab(self):
                 with self._lock:
                     self._new_data   = False
+                    self._processing = True
 
                 self._fr24._last_source = None
                 overhead_data = []
@@ -610,6 +606,11 @@ else:
                                             print(f"[Tracked] No origin coords in API refresh for "
                                                   f"{route.get('origin')}-{route.get('destination')} — accepting")
                                         if _plausible:
+                                            # Preserve time fields from saved cache if API returns None
+                                            for _tf in ("time_scheduled_departure", "time_scheduled_arrival",
+                                                        "time_real_departure", "time_estimated_arrival"):
+                                                if route.get(_tf) is None and tracked_cached_route.get(_tf) is not None:
+                                                    route[_tf] = tracked_cached_route[_tf]
                                             self._tracked_route_cached   = route
                                             self._tracked_route_callsign = tracked_callsign
                                             print(f"[Tracked] Route confirmed by API: "
@@ -665,7 +666,6 @@ else:
                                     from time import time as _time
                                     eta_ts = _time() + hours_remaining * 3600
                                     tracked_data["time_estimated_arrival"]   = eta_ts
-                                    tracked_data["time_scheduled_arrival"]   = eta_ts
                                     try:
                                         from config import DISTANCE_UNITS as _DU
                                     except Exception:
@@ -734,6 +734,14 @@ else:
                             json.dump(overhead_data, f)
                     except Exception as e:
                         print(f"Failed to write current_overhead.json: {e}")
+
+                    # Write live tracked data for slave trackers
+                    try:
+                        tracked_live_file = os.path.join(BASE_DIR, "tracked_live.json")
+                        with open(tracked_live_file, "w", encoding="utf-8") as f:
+                            json.dump(tracked_data if tracked_data else {}, f)
+                    except Exception as e:
+                        print(f"Failed to write tracked_live.json: {e}")
 
                     # Print API usage tally once per cycle
                     try:

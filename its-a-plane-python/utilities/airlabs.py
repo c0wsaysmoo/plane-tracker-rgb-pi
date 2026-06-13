@@ -197,7 +197,7 @@ def get_flight_details(callsign):
             "time_scheduled_departure": data.get("dep_time_ts") or _to_unix(data.get("dep_time")),
             "time_scheduled_arrival":   data.get("arr_time_ts") or _to_unix(data.get("arr_time")),
             "time_real_departure":      data.get("dep_actual_ts") or data.get("dep_estimated_ts") or _to_unix(data.get("dep_actual")),
-            "time_estimated_arrival":   data.get("arr_estimated_ts") or data.get("arr_actual_ts") or _to_unix(data.get("arr_estimated")) or data.get("arr_time_ts"),
+            "time_estimated_arrival":   data.get("arr_estimated_ts") or data.get("arr_actual_ts") or _to_unix(data.get("arr_estimated")),
         }
 
         return result

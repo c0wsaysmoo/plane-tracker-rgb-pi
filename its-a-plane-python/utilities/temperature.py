@@ -94,25 +94,29 @@ if MASTER_TRACKER:
         return f"{host}{path}"
 
     def grab_temperature_and_humidity():
-        """Fetch current temperature and humidity from the master's /weather/json endpoint."""
+        """Fetch current temperature, humidity and weather code from the master's /weather/json endpoint."""
         try:
             r = requests.get(_url("/weather/json"), timeout=10)
             r.raise_for_status()
             data = r.json()
-            temperature = data.get("temperature")
-            humidity    = data.get("humidity")
+            temperature  = data.get("temperature")
+            humidity     = data.get("humidity")
+            weather_code = data.get("weatherCode")
             if temperature is None or humidity is None:
                 logging.warning("[Slave/Weather] Master returned incomplete temp/humidity data")
-                return None, None
-            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
-            return temperature, humidity
+                return None, None, None
+            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity, weather_code], units=TEMPERATURE_UNITS)
+            return temperature, humidity, weather_code
         except RequestException as e:
             logging.error(f"[Slave/Weather] Cannot reach master for weather: {e}")
             cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
             if cached and (time.time() - ts) < _CACHE_TTL:
                 logging.info("[Slave/Weather] Using cached temperature data")
-                return tuple(cached) if isinstance(cached, list) else cached
-            return None, None
+                vals = tuple(cached) if isinstance(cached, list) else cached
+                if len(vals) == 2:
+                    return vals[0], vals[1], None
+                return vals
+            return None, None, None
 
     def grab_forecast(tag="unknown"):
         """Fetch forecast intervals from the master's /weather/json endpoint."""
@@ -215,16 +219,17 @@ else:
 
             request.raise_for_status()
 
-            data        = request.json().get("data", {}).get("values", {})
-            temperature = data.get("temperature")
-            humidity    = data.get("humidity")
+            data         = request.json().get("data", {}).get("values", {})
+            temperature  = data.get("temperature")
+            humidity     = data.get("humidity")
+            weather_code = data.get("weatherCode")
 
             if temperature is None or humidity is None:
                 logging.error("Incomplete data from API")
-                return None, None
+                return None, None, None
 
-            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity], units=TEMPERATURE_UNITS)
-            return temperature, humidity
+            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity, weather_code], units=TEMPERATURE_UNITS)
+            return temperature, humidity, weather_code
 
         except (RequestException, ValueError) as e:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -235,8 +240,11 @@ else:
 
             cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
             if cached and (time.time() - ts) < _CACHE_TTL:
-                return tuple(cached) if isinstance(cached, list) else cached
-            return None, None
+                vals = tuple(cached) if isinstance(cached, list) else cached
+                if len(vals) == 2:
+                    return vals[0], vals[1], None
+                return vals
+            return None, None, None
 
 
     def grab_forecast(tag="unknown"):
