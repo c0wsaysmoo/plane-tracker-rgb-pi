@@ -129,6 +129,8 @@ def get_airport_coords(code):
         return result
 
     # Miss — try a refresh if cooldown has elapsed
+    if code == "?":
+        return {}
     import time as _time
     if _time.time() - _last_refresh > _REFRESH_COOLDOWN:
         print(f"[Airports] '{code}' not found — refreshing database...")
