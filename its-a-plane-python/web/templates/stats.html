@@ -107,17 +107,8 @@
 
 <script>
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const AIRLINE_NAMES = {
-  'AAL':'American Airlines','UAL':'United Airlines','DAL':'Delta Air Lines',
-  'SWA':'Southwest Airlines','ASA':'Alaska Airlines','JBU':'JetBlue Airways',
-  'FFT':'Frontier Airlines','NKS':'Spirit Airlines','SKW':'SkyWest Airlines',
-  'RPA':'Republic Airways','ENY':'Envoy Air','GJS':'GoJet Airlines',
-  'EDV':'Endeavor Air','JIA':'Mesa Airlines','GTI':'Atlas Air',
-  'FDX':'FedEx Express','UPS':'UPS Airlines','ACA':'Air Canada',
-  'WJA':'WestJet','AFR':'Air France','DLH':'Lufthansa','BAW':'British Airways',
-  'KLM':'KLM','UAE':'Emirates','QFA':'Qantas','SIA':'Singapore Airlines',
-  'CPA':'Cathay Pacific','JAL':'Japan Airlines','ANA':'All Nippon Airways',
-};
+let AIRLINE_NAMES = {};
+let AIRCRAFT_NAMES = {};
 const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
 
 const CHART_OPT = {
@@ -130,12 +121,36 @@ const CHART_OPT = {
 };
 
 async function loadData() {
-  const [s,f,a] = await Promise.all([
+  const [s,f,a,cfg,an,at] = await Promise.all([
     fetch('/counter/summary').then(r=>r.json()),
     fetch('/counter').then(r=>r.json()),
     fetch('/airport-code').then(r=>r.json()),
+    fetch('/api/config').then(r=>r.json()).catch(()=>({})),
+    fetch('/api/airlines').then(r=>r.json()).catch(()=>({})),
+    fetch('/api/aircraft-types').then(r=>r.json()).catch(()=>({})),
   ]);
-  return {summary:s, full:f, airportCode:a.code};
+  AIRLINE_NAMES = an;
+  AIRCRAFT_NAMES = at;
+  const distUnits = (cfg.config?.location?.distance_units) || 'imperial';
+  const homeCoords = cfg.config?.location?.location_home || [];
+  const homeLat = homeCoords[0] ?? null;
+  const homeLon = homeCoords[1] ?? null;
+  return {summary:s, full:f, airportCode:a.code, distUnits, homeLat, homeLon};
+}
+
+function haversineDist(lat1, lon1, lat2, lon2, units) {
+  const R = units === 'nautical' ? 3440.065 : units === 'metric' ? 6371 : 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distLabel(dist, units) {
+  const d = Math.round(dist);
+  if (units === 'nautical') return `${d}nm`;
+  if (units === 'metric')   return `${d}km`;
+  return `${d}mi`;
 }
 
 function localVsFlyover(full, airportCode) {
@@ -144,10 +159,12 @@ function localVsFlyover(full, airportCode) {
     const origin = (f.origin || '').toUpperCase();
     const dest   = (f.dest   || '').toUpperCase();
     const code   = airportCode.toUpperCase();
-    if (!origin && !dest) { unknown++; }
-    else if (origin === code) { departing++; }
-    else if (dest === code)   { arriving++;  }
-    else { flyover++; }
+    const hasUnknown = origin.includes('?') || dest.includes('?');
+    if (hasUnknown)          { unknown++;   }
+    else if (!origin && !dest) { unknown++;   }
+    else if (origin === code)  { departing++; }
+    else if (dest === code)    { arriving++;  }
+    else                       { flyover++;   }
   }));
   return {departing, arriving, flyover, unknown};
 }
@@ -173,11 +190,32 @@ function airlineBreakdown(full) {
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
+// Build a tally where each route key is ordered by dominant direction.
+// e.g. if PDX→DEN=10 and DEN→PDX=2, key is "PDX↔DEN" (combined count=12).
+function buildRouteTally(flights) {
+  const dir = {};  // "A→B" directional counts
+  flights.forEach(f => {
+    if (f.origin && f.dest) {
+      const k = `${f.origin}→${f.dest}`;
+      dir[k] = (dir[k] || 0) + 1;
+    }
+  });
+  const tally = {};
+  Object.entries(dir).forEach(([k, count]) => {
+    const [o, d] = k.split('→');
+    const rev = `${d}→${o}`;
+    const revCount = dir[rev] || 0;
+    // Canonical key: dominant direction first (or forward if tied/first seen)
+    const key = count >= revCount ? `${o}↔${d}` : `${d}↔${o}`;
+    tally[key] = (tally[key] || 0) + count;
+  });
+  return tally;
+}
+
 function routeBreakdown(full) {
-  const tally={};
-  Object.values(full).forEach(day=>(day.flights||[]).forEach(f=>{
-    if(f.origin && f.dest) { const r=`${f.origin}→${f.dest}`; tally[r]=(tally[r]||0)+1; }
-  }));
+  const flights = [];
+  Object.values(full).forEach(day => (day.flights||[]).forEach(f => flights.push(f)));
+  const tally = buildRouteTally(flights);
   return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
 }
 
@@ -190,7 +228,7 @@ function aircraftBreakdown(full) {
 }
 
 async function render() {
-  const {summary,full,airportCode} = await loadData();
+  const {summary,full,airportCode,distUnits,homeLat,homeLon} = await loadData();
   if (!summary.length) {
     document.getElementById('content').innerHTML='<div class="loading">No data yet — flights will appear here once logged.</div>';
     return;
@@ -256,8 +294,8 @@ async function render() {
       labels: [`Departing (${airportCode}→)`, 'Flyover', `Arriving (→${airportCode})`, 'Unknown'],
       datasets: [{
         data: [lf.departing, lf.flyover, lf.arriving, lf.unknown],
-        backgroundColor: ['#ff6b3599','#69f0ae99','#ffb30099','#7a550099'],
-        borderColor:     ['#ff6b35',  '#69f0ae',  '#ffb300',  '#7a5500'],
+        backgroundColor: ['#ff6b3599','#69f0ae99','#ffb30099','#aaaaaa99'],
+        borderColor:     ['#ff6b35',  '#69f0ae',  '#ffb300',  '#aaaaaa'],
         borderWidth: 2,
       }]
     },
@@ -289,7 +327,7 @@ async function render() {
     }}});
 
   const _routeCodes = new Set();
-  airports.forEach(([r]) => { const [o,d]=r.split('→'); if(o)_routeCodes.add(o); if(d)_routeCodes.add(d); });
+  airports.forEach(([r]) => { const [o,d]=r.split('↔'); if(o)_routeCodes.add(o); if(d)_routeCodes.add(d); });
   let _apInfo = {};
   try { _apInfo = await fetch(`/api/airport-coords?codes=${[..._routeCodes].join(',')}`).then(r=>r.json()); } catch(e) {}
   const routeApLabel = code => { const n=_apInfo[code]?.name; return n ? `${n} (${code})` : code; };
@@ -299,7 +337,13 @@ async function render() {
     data:{labels:airports.map(([k])=>k),datasets:[{data:airports.map(([,v])=>v),backgroundColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),borderColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
       legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
-      tooltip:{callbacks:{label:ctx=>{const [o,d]=ctx.label.split('→');const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${routeApLabel(o)} → ${routeApLabel(d)} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+      tooltip:{callbacks:{label:ctx=>{
+        const [o,d]=ctx.label.split('↔');
+        const t=ctx.dataset.data.reduce((a,b)=>a+b,0);
+        const oc=_apInfo[o], dc=_apInfo[d];
+        const dist = oc && dc ? ' · ' + distLabel(haversineDist(oc.lat,oc.lon,dc.lat,dc.lon,distUnits),distUnits) : '';
+        return ` ${routeApLabel(o)} ↔ ${routeApLabel(d)}${dist} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;
+      }}}
     }}});
 
   if (aircraft.length) {
@@ -308,23 +352,17 @@ async function render() {
       data:{labels:aircraft.map(([k])=>k),datasets:[{data:aircraft.map(([,v])=>v),backgroundColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),borderColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
       options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
         legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:10}},
-        tooltip:{callbacks:{label:ctx=>{const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${ctx.label} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
-      }}});
+        tooltip:{callbacks:{label:ctx=>{const n=AIRCRAFT_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}      }}});
   }
 
-  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub');
+  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon);
 }
 
 // ── Route Heat Map ────────────────────────────────────────────────────────────
 function routeTallyFromFull(full) {
-  const tally = {};
-  Object.values(full).forEach(day => (day.flights || []).forEach(f => {
-    if (f.origin && f.dest) {
-      const r = `${f.origin}→${f.dest}`;
-      tally[r] = (tally[r] || 0) + 1;
-    }
-  }));
-  return tally;
+  const flights = [];
+  Object.values(full).forEach(day => (day.flights || []).forEach(f => flights.push(f)));
+  return buildRouteTally(flights);
 }
 
 function gcPoints(lat1, lon1, lat2, lon2, steps=60) {
@@ -367,13 +405,13 @@ function heatColor(t) {
 }
 
 let _routeMap = null;
-async function buildRouteMap(mapId, tally, subId) {
+async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon) {
   // Sort descending to tally all routes, but draw ascending so hot routes paint on top
   const entries = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,300);
   if (!entries.length) return;
 
   const codes = new Set();
-  entries.forEach(([r]) => { const [o,d]=r.split('→'); codes.add(o); codes.add(d); });
+  entries.forEach(([r]) => { const [o,d]=r.split('↔'); codes.add(o); codes.add(d); });
 
   let coords = {};
   try {
@@ -381,7 +419,7 @@ async function buildRouteMap(mapId, tally, subId) {
     coords = await r.json();
   } catch(e) { return; }
 
-  const valid = entries.filter(([r]) => { const [o,d]=r.split('→'); return coords[o] && coords[d]; });
+  const valid = entries.filter(([r]) => { const [o,d]=r.split('↔'); return coords[o] && coords[d]; });
   if (!valid.length) return;
 
   if (_routeMap) { _routeMap.remove(); _routeMap = null; }
@@ -405,24 +443,29 @@ async function buildRouteMap(mapId, tally, subId) {
   const actualPos = {};
   const apLabel = code => { const n=coords[code]?.name; return n ? `${n} (${code})` : code; };
   [...valid].reverse().forEach(([route, count]) => {
-    const [o,d] = route.split('→');
+    const [o,d] = route.split('↔');
     const oc = coords[o], dc = coords[d];
     const t = count / maxCount;
     const pts = gcPoints(oc.lat, oc.lon, dc.lat, dc.lon);
     bounds.push([oc.lat, oc.lon], [dc.lat, dc.lon]);
     if (!actualPos[o]) actualPos[o] = pts[0];
     if (!actualPos[d]) actualPos[d] = pts[pts.length-1];
+    const dist = distLabel(haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits), distUnits);
     L.polyline(pts, {
       color: heatColor(t),
       weight: Math.max(1, 1 + t * 4),
       opacity: 0.2 + t * 0.7,
-    }).bindTooltip(`${apLabel(o)} → ${apLabel(d)} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
+    }).bindTooltip(`${apLabel(o)} ↔ ${apLabel(d)} · ${dist} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
   });
 
   Object.entries(actualPos).forEach(([code, pos]) => {
+    const apCoord = coords[code];
+    const homeDist = (homeLat != null && homeLon != null && apCoord)
+      ? ' · ' + distLabel(haversineDist(homeLat, homeLon, apCoord.lat, apCoord.lon, distUnits), distUnits) + ' from home'
+      : '';
     L.circleMarker(pos, {
       radius: 3, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
-    }).bindTooltip(apLabel(code), { permanent: false, className: 'route-tip' }).addTo(map);
+    }).bindTooltip(apLabel(code) + homeDist, { permanent: false, className: 'route-tip' }).addTo(map);
   });
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });

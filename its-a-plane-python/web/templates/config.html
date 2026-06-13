@@ -443,6 +443,19 @@ function renderForm() {
           <input id="blocked_callsigns" value="${(flt.blocked_callsigns||[]).join(', ')}" placeholder="N12345, UAL1234, …" spellcheck="false" autocomplete="off" style="text-transform:uppercase">
           <div class="hint">Comma-separated. Matching planes are ignored before any API lookup.</div>
         </div>
+        <div class="field">
+          <label>Airport Status Watch List</label>
+          <input id="airport_status_list" value="${flt.airport_status_list||''}" placeholder="ORD, MDW, LAX, …" spellcheck="false" autocomplete="off" style="text-transform:uppercase">
+          <div class="hint">Comma-separated IATA codes. FAA delay/ground stop alerts shown on clock. Leave blank to disable.</div>
+        </div>
+        <div class="field checkbox">
+          <input id="weather_alerts_enabled" type="checkbox" ${flt.weather_alerts_enabled!==false?'checked':''}>
+          <label for="weather_alerts_enabled">Enable NWS Weather Alerts (US only, no key required)</label>
+        </div>
+        <div class="field checkbox">
+          <input id="iss_alerts_enabled" type="checkbox" ${flt.iss_alerts_enabled!==false?'checked':''}>
+          <label for="iss_alerts_enabled">Enable ISS Pass Alerts (no key required)</label>
+        </div>
       </div>
     </div>
 
@@ -699,7 +712,10 @@ function collectConfig() {
         max_farthest: gi('max_farthest'),
         max_closest:        gi('max_closest'),
         email:              gv('email'),
-        blocked_callsigns:  gv('blocked_callsigns').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean),
+        blocked_callsigns:      gv('blocked_callsigns').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean),
+        airport_status_list:    gv('airport_status_list').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean).join(', '),
+        weather_alerts_enabled: gc('weather_alerts_enabled'),
+        iss_alerts_enabled:     gc('iss_alerts_enabled'),
       },
         stats: {
         stats_log_days: gi('stats_log_days') || 0,
