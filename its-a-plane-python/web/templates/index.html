@@ -331,12 +331,19 @@
             btn.textContent = "Search";
         }
 
+        let _clockFormat = '24hr';
         function tickClock() {
             const now = new Date();
-            const h = now.getHours().toString().padStart(2, '0');
+            let h = now.getHours();
             const m = now.getMinutes().toString().padStart(2, '0');
             const s = now.getSeconds().toString().padStart(2, '0');
-            document.getElementById('live-clock').textContent = `${h}:${m}:${s}`;
+            if (_clockFormat === '12hr') {
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12 || 12;
+                document.getElementById('live-clock').textContent = `${h}:${m}:${s} ${ampm}`;
+            } else {
+                document.getElementById('live-clock').textContent = `${h.toString().padStart(2,'0')}:${m}:${s}`;
+            }
         }
 
         async function loadWeather() {
@@ -359,6 +366,8 @@
             });
             loadCurrent();
             loadLocation();
+            // Load clock format from config
+            fetch('/api/config').then(r=>r.json()).then(d=>{if(d.CLOCK_FORMAT) _clockFormat=d.CLOCK_FORMAT;}).catch(()=>{});
             tickClock();
             setInterval(tickClock, 1000);
             loadWeather();
