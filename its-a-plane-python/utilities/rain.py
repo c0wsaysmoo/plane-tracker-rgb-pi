@@ -141,9 +141,7 @@ def get_wind_info():
     try:
         current = data.get("current", {})
         wind_speed_ms = current.get("wind_speed", 0)
-        wind_gust_ms = current.get("wind_gust", 0)
-        # Use gust if available, otherwise sustained
-        peak_mph = int(max(wind_speed_ms, wind_gust_ms) * _MS_TO_MPH)
+        peak_mph = int(wind_speed_ms * _MS_TO_MPH)
         if peak_mph >= _WIND_THRESHOLD_MPH:
             return {"text": f"Wind {peak_mph}", "color": "cyan"}
     except (KeyError, TypeError, ValueError):
