@@ -30,7 +30,9 @@ def reload():
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
     global LED_RGB_SEQUENCE, FORECAST_DAYS
     global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL, BLOCKED_CALLSIGNS
+    global AIRPORT_STATUS_LIST, ISS_ALERTS_ENABLED, WEATHER_ALERTS_ENABLED
     global MASTER_TRACKER, OTHER_TRACKER_HOSTNAMES
+    global ROUTE_CACHE_ENABLED, ROUTE_CACHE_DAYS
     global API_SOURCE_ORDER, API_SOURCE_ENABLED
     global AIRLABS_RESET_DAY, FLIGHTAWARE_RESET_DAY, FR24_RESET_DAY
     global STATS_LOG_DAYS
@@ -46,6 +48,7 @@ def reload():
     _disp = _cfg.get("display", {})
     _flt  = _cfg.get("flights", {})
     _ms   = _cfg.get("master_slave", {})
+    _rc   = _cfg.get("route_cache", {})
 
     # Location / units
     ZONE_HOME = _loc.get("zone_home", {
@@ -73,15 +76,22 @@ def reload():
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
 
     # Flights
-    MIN_ALTITUDE      = _flt.get("min_altitude", 2000)
-    MAX_FARTHEST      = _flt.get("max_farthest", 3)
-    MAX_CLOSEST       = _flt.get("max_closest", 3)
-    EMAIL             = _flt.get("email", "")
-    BLOCKED_CALLSIGNS = {c.strip().upper() for c in _flt.get("blocked_callsigns", []) if c.strip()}
+    MIN_ALTITUDE         = _flt.get("min_altitude", 2000)
+    MAX_FARTHEST         = _flt.get("max_farthest", 3)
+    MAX_CLOSEST          = _flt.get("max_closest", 3)
+    EMAIL                = _flt.get("email", "")
+    BLOCKED_CALLSIGNS    = {c.strip().upper() for c in _flt.get("blocked_callsigns", []) if c.strip()}
+    AIRPORT_STATUS_LIST    = _flt.get("airport_status_list", "")
+    ISS_ALERTS_ENABLED     = _flt.get("iss_alerts_enabled", True)
+    WEATHER_ALERTS_ENABLED = _flt.get("weather_alerts_enabled", True)
 
     # Master / slave
     MASTER_TRACKER          = _ms.get("master_tracker", "")
     OTHER_TRACKER_HOSTNAMES = _ms.get("other_tracker_hostnames", [])
+
+    # Route cache
+    ROUTE_CACHE_ENABLED = _rc.get("enabled", True)
+    ROUTE_CACHE_DAYS    = _rc.get("days", 30)
     
     # Stats
     _stats = _cfg.get("stats", {})
