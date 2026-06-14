@@ -486,7 +486,7 @@ def airport_code():
             import requests as _req
             r = _req.get(
                 "https://nominatim.openstreetmap.org/reverse",
-                params={"lat": lat, "lon": lon, "format": "json", "zoom": 13},
+                params={"lat": lat, "lon": lon, "format": "json", "zoom": 15},
                 headers={"User-Agent": "plane-tracker-rgb-pi/1.0"},
                 timeout=5,
             )
