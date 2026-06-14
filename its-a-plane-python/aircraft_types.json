@@ -1,0 +1,1226 @@
+{
+  "B737": {
+    "name": "Boeing 737",
+    "short_codes": [
+      "73G",
+      "73W",
+      "7S7"
+    ]
+  },
+  "B738": {
+    "name": "Boeing 737-800",
+    "short_codes": [
+      "738",
+      "73H",
+      "7S8"
+    ]
+  },
+  "B739": {
+    "name": "Boeing 737-900",
+    "short_codes": [
+      "739",
+      "73J",
+      "7S9"
+    ]
+  },
+  "B733": {
+    "name": "Boeing 737-300",
+    "short_codes": [
+      "733",
+      "73C"
+    ]
+  },
+  "B734": {
+    "name": "Boeing 737-400",
+    "short_codes": [
+      "734"
+    ]
+  },
+  "B735": {
+    "name": "Boeing 737-500",
+    "short_codes": [
+      "735",
+      "73E"
+    ]
+  },
+  "B736": {
+    "name": "Boeing 737-600",
+    "short_codes": [
+      "736"
+    ]
+  },
+  "B37M": {
+    "name": "Boeing 737 MAX 7",
+    "short_codes": [
+      "7M7"
+    ]
+  },
+  "B38M": {
+    "name": "Boeing 737 MAX 8",
+    "short_codes": [
+      "7M8"
+    ]
+  },
+  "B39M": {
+    "name": "Boeing 737 MAX 9",
+    "short_codes": [
+      "7M9"
+    ]
+  },
+  "B3XM": {
+    "name": "Boeing 737 MAX 10",
+    "short_codes": [
+      "7M1"
+    ]
+  },
+  "B712": {
+    "name": "Boeing 717-200",
+    "short_codes": [
+      "717"
+    ]
+  },
+  "B721": {
+    "name": "Boeing 727-100",
+    "short_codes": [
+      "721"
+    ]
+  },
+  "B722": {
+    "name": "Boeing 727-200",
+    "short_codes": [
+      "722",
+      "72W"
+    ]
+  },
+  "B731": {
+    "name": "Boeing 737-100",
+    "short_codes": [
+      "731"
+    ]
+  },
+  "B732": {
+    "name": "Boeing 737-200",
+    "short_codes": [
+      "732"
+    ]
+  },
+  "B741": {
+    "name": "Boeing 747-100",
+    "short_codes": [
+      "741"
+    ]
+  },
+  "B742": {
+    "name": "Boeing 747-200",
+    "short_codes": [
+      "742"
+    ]
+  },
+  "B743": {
+    "name": "Boeing 747-300",
+    "short_codes": [
+      "743"
+    ]
+  },
+  "B744": {
+    "name": "Boeing 747-400",
+    "short_codes": [
+      "744"
+    ]
+  },
+  "B748": {
+    "name": "Boeing 747-8",
+    "short_codes": [
+      "74H"
+    ]
+  },
+  "B74D": {
+    "name": "Boeing 747-400D",
+    "short_codes": [
+      "74J"
+    ]
+  },
+  "B752": {
+    "name": "Boeing 757-200",
+    "short_codes": [
+      "752",
+      "75W"
+    ]
+  },
+  "B753": {
+    "name": "Boeing 757-300",
+    "short_codes": [
+      "753",
+      "75T"
+    ]
+  },
+  "B762": {
+    "name": "Boeing 767-200",
+    "short_codes": [
+      "762"
+    ]
+  },
+  "B763": {
+    "name": "Boeing 767-300",
+    "short_codes": [
+      "763",
+      "76W"
+    ]
+  },
+  "B764": {
+    "name": "Boeing 767-400",
+    "short_codes": [
+      "764"
+    ]
+  },
+  "B772": {
+    "name": "Boeing 777-200",
+    "short_codes": [
+      "772"
+    ]
+  },
+  "B773": {
+    "name": "Boeing 777-300",
+    "short_codes": [
+      "773"
+    ]
+  },
+  "B77L": {
+    "name": "Boeing 777-200LR",
+    "short_codes": [
+      "77L"
+    ]
+  },
+  "B77W": {
+    "name": "Boeing 777-300ER",
+    "short_codes": [
+      "77W"
+    ]
+  },
+  "B788": {
+    "name": "Boeing 787-8",
+    "short_codes": [
+      "788"
+    ]
+  },
+  "B789": {
+    "name": "Boeing 787-9",
+    "short_codes": [
+      "789"
+    ]
+  },
+  "B78X": {
+    "name": "Boeing 787-10",
+    "short_codes": [
+      "781"
+    ]
+  },
+  "BCS1": {
+    "name": "Airbus A220-100",
+    "short_codes": [
+      "221"
+    ]
+  },
+  "BCS3": {
+    "name": "Airbus A220-300",
+    "short_codes": [
+      "223"
+    ]
+  },
+  "A306": {
+    "name": "Airbus A300-600",
+    "short_codes": [
+      "AB6"
+    ]
+  },
+  "A30B": {
+    "name": "Airbus A300B",
+    "short_codes": [
+      "AB4"
+    ]
+  },
+  "A310": {
+    "name": "Airbus A310",
+    "short_codes": [
+      "312",
+      "313"
+    ]
+  },
+  "A318": {
+    "name": "Airbus A318",
+    "short_codes": [
+      "318",
+      "31A"
+    ]
+  },
+  "A319": {
+    "name": "Airbus A319",
+    "short_codes": [
+      "319",
+      "31B"
+    ]
+  },
+  "A19N": {
+    "name": "Airbus A319neo",
+    "short_codes": [
+      "31N"
+    ]
+  },
+  "A320": {
+    "name": "Airbus A320",
+    "short_codes": [
+      "320",
+      "32A"
+    ]
+  },
+  "A20N": {
+    "name": "Airbus A320neo",
+    "short_codes": [
+      "32N"
+    ]
+  },
+  "A321": {
+    "name": "Airbus A321",
+    "short_codes": [
+      "321",
+      "32B"
+    ]
+  },
+  "A21N": {
+    "name": "Airbus A321neo",
+    "short_codes": [
+      "32Q"
+    ]
+  },
+  "A332": {
+    "name": "Airbus A330-200",
+    "short_codes": [
+      "332"
+    ]
+  },
+  "A333": {
+    "name": "Airbus A330-300",
+    "short_codes": [
+      "333"
+    ]
+  },
+  "A338": {
+    "name": "Airbus A330-800neo",
+    "short_codes": [
+      "338"
+    ]
+  },
+  "A339": {
+    "name": "Airbus A330-900neo",
+    "short_codes": [
+      "339"
+    ]
+  },
+  "A342": {
+    "name": "Airbus A340-200",
+    "short_codes": [
+      "342"
+    ]
+  },
+  "A343": {
+    "name": "Airbus A340-300",
+    "short_codes": [
+      "343"
+    ]
+  },
+  "A345": {
+    "name": "Airbus A340-500",
+    "short_codes": [
+      "345"
+    ]
+  },
+  "A346": {
+    "name": "Airbus A340-600",
+    "short_codes": [
+      "346"
+    ]
+  },
+  "A358": {
+    "name": "Airbus A350-800",
+    "short_codes": [
+      "358"
+    ]
+  },
+  "A359": {
+    "name": "Airbus A350-900",
+    "short_codes": [
+      "359"
+    ]
+  },
+  "A35K": {
+    "name": "Airbus A350-1000",
+    "short_codes": [
+      "351"
+    ]
+  },
+  "A388": {
+    "name": "Airbus A380-800",
+    "short_codes": [
+      "388"
+    ]
+  },
+  "A124": {
+    "name": "Antonov An-124",
+    "short_codes": [
+      "A4F"
+    ]
+  },
+  "AN24": {
+    "name": "Antonov An-24",
+    "short_codes": [
+      "AN4"
+    ]
+  },
+  "AN72": {
+    "name": "Antonov An-72",
+    "short_codes": [
+      "AN7"
+    ]
+  },
+  "AT4": {
+    "name": "ATR 42",
+    "short_codes": [
+      "AT4"
+    ]
+  },
+  "AT72": {
+    "name": "ATR 72",
+    "short_codes": [
+      "AT7"
+    ]
+  },
+  "B461": {
+    "name": "BAe 146-100",
+    "short_codes": [
+      "141"
+    ]
+  },
+  "B462": {
+    "name": "BAe 146-200",
+    "short_codes": [
+      "142"
+    ]
+  },
+  "B463": {
+    "name": "BAe 146-300",
+    "short_codes": [
+      "143"
+    ]
+  },
+  "RJ1H": {
+    "name": "Avro RJ100",
+    "short_codes": [
+      "AR1"
+    ]
+  },
+  "RJ70": {
+    "name": "Avro RJ70",
+    "short_codes": [
+      "AR7"
+    ]
+  },
+  "RJ85": {
+    "name": "Avro RJ85",
+    "short_codes": [
+      "AR8"
+    ]
+  },
+  "CRJ1": {
+    "name": "Bombardier CRJ-100",
+    "short_codes": [
+      "CR1"
+    ]
+  },
+  "CRJ2": {
+    "name": "Bombardier CRJ-200",
+    "short_codes": [
+      "CR2"
+    ]
+  },
+  "CRJ7": {
+    "name": "Bombardier CRJ-700",
+    "short_codes": [
+      "CR7",
+      "CR5"
+    ]
+  },
+  "CRJ9": {
+    "name": "Bombardier CRJ-900",
+    "short_codes": [
+      "CR9",
+      "CRA"
+    ]
+  },
+  "CRJX": {
+    "name": "Bombardier CRJ-1000",
+    "short_codes": [
+      "CRK"
+    ]
+  },
+  "CL30": {
+    "name": "Bombardier Challenger 300",
+    "short_codes": [
+      "CL3"
+    ]
+  },
+  "CL35": {
+    "name": "Bombardier Challenger 350",
+    "short_codes": [
+      "CL5"
+    ]
+  },
+  "CL60": {
+    "name": "Bombardier Challenger 600",
+    "short_codes": [
+      "CCJ"
+    ]
+  },
+  "GLEX": {
+    "name": "Bombardier Global Express",
+    "short_codes": [
+      "CCX",
+      "CC6"
+    ]
+  },
+  "GL7T": {
+    "name": "Bombardier Global 7500",
+    "short_codes": [
+      "CC7",
+      "C75"
+    ]
+  },
+  "C510": {
+    "name": "Cessna Citation Mustang",
+    "short_codes": [
+      "CJM"
+    ]
+  },
+  "C525": {
+    "name": "Cessna CitationJet",
+    "short_codes": [
+      "CJ1"
+    ]
+  },
+  "C550": {
+    "name": "Cessna Citation II",
+    "short_codes": [
+      "CJ2"
+    ]
+  },
+  "C560": {
+    "name": "Cessna Citation V",
+    "short_codes": [
+      "CJ5"
+    ]
+  },
+  "C56X": {
+    "name": "Cessna Citation Excel",
+    "short_codes": [
+      "CJL"
+    ]
+  },
+  "C650": {
+    "name": "Cessna Citation III/VI/VII",
+    "short_codes": [
+      "CJ6"
+    ]
+  },
+  "C680": {
+    "name": "Cessna Citation Sovereign",
+    "short_codes": [
+      "CJ8",
+      "CJS"
+    ]
+  },
+  "C68A": {
+    "name": "Cessna Citation Sovereign+",
+    "short_codes": [
+      "CJT"
+    ]
+  },
+  "C700": {
+    "name": "Cessna Citation Longitude",
+    "short_codes": [
+      "CJ7"
+    ]
+  },
+  "C750": {
+    "name": "Cessna Citation X",
+    "short_codes": [
+      "CJX"
+    ]
+  },
+  "FA10": {
+    "name": "Dassault Falcon 10",
+    "short_codes": [
+      "DF1"
+    ]
+  },
+  "FA20": {
+    "name": "Dassault Falcon 20",
+    "short_codes": [
+      "DF2"
+    ]
+  },
+  "FA50": {
+    "name": "Dassault Falcon 50",
+    "short_codes": [
+      "DF5"
+    ]
+  },
+  "FA7X": {
+    "name": "Dassault Falcon 7X",
+    "short_codes": [
+      "DF7"
+    ]
+  },
+  "FA8X": {
+    "name": "Dassault Falcon 8X",
+    "short_codes": [
+      "DF8"
+    ]
+  },
+  "F900": {
+    "name": "Dassault Falcon 900",
+    "short_codes": [
+      "DF9"
+    ]
+  },
+  "F2TH": {
+    "name": "Dassault Falcon 2000",
+    "short_codes": [
+      "D20",
+      "D2L"
+    ]
+  },
+  "DH8A": {
+    "name": "De Havilland Dash 8-100",
+    "short_codes": [
+      "DH1"
+    ]
+  },
+  "DH8B": {
+    "name": "De Havilland Dash 8-200",
+    "short_codes": [
+      "DH2"
+    ]
+  },
+  "DH8C": {
+    "name": "De Havilland Dash 8-300",
+    "short_codes": [
+      "DH3"
+    ]
+  },
+  "DH8D": {
+    "name": "De Havilland Dash 8-400",
+    "short_codes": [
+      "DH4"
+    ]
+  },
+  "DC10": {
+    "name": "McDonnell Douglas DC-10",
+    "short_codes": [
+      "D11",
+      "D1C"
+    ]
+  },
+  "DC91": {
+    "name": "McDonnell Douglas DC-9-10",
+    "short_codes": [
+      "D91"
+    ]
+  },
+  "DC92": {
+    "name": "McDonnell Douglas DC-9-20",
+    "short_codes": [
+      "D92"
+    ]
+  },
+  "DC93": {
+    "name": "McDonnell Douglas DC-9-30",
+    "short_codes": [
+      "D93"
+    ]
+  },
+  "DC94": {
+    "name": "McDonnell Douglas DC-9-40",
+    "short_codes": [
+      "D94"
+    ]
+  },
+  "DC95": {
+    "name": "McDonnell Douglas DC-9-50",
+    "short_codes": [
+      "D95"
+    ]
+  },
+  "E135": {
+    "name": "Embraer ERJ-135",
+    "short_codes": [
+      "ER3",
+      "ERD"
+    ]
+  },
+  "E145": {
+    "name": "Embraer ERJ-145",
+    "short_codes": [
+      "ER4"
+    ]
+  },
+  "E170": {
+    "name": "Embraer E170",
+    "short_codes": [
+      "E70"
+    ]
+  },
+  "E75S": {
+    "name": "Embraer E175",
+    "short_codes": [
+      "E75"
+    ]
+  },
+  "E75L": {
+    "name": "Embraer E175-E2",
+    "short_codes": [
+      "E7W"
+    ]
+  },
+  "E190": {
+    "name": "Embraer E190",
+    "short_codes": [
+      "E90"
+    ]
+  },
+  "E195": {
+    "name": "Embraer E195",
+    "short_codes": [
+      "E95"
+    ]
+  },
+  "E275": {
+    "name": "Embraer E175-E2",
+    "short_codes": [
+      "275"
+    ]
+  },
+  "E290": {
+    "name": "Embraer E190-E2",
+    "short_codes": [
+      "290"
+    ]
+  },
+  "E295": {
+    "name": "Embraer E195-E2",
+    "short_codes": [
+      "295"
+    ]
+  },
+  "E50P": {
+    "name": "Embraer Phenom 100",
+    "short_codes": [
+      "EP1"
+    ]
+  },
+  "E55P": {
+    "name": "Embraer Phenom 300",
+    "short_codes": [
+      "EP3"
+    ]
+  },
+  "E450": {
+    "name": "Embraer Praetor 500",
+    "short_codes": [
+      "EM4"
+    ]
+  },
+  "E500": {
+    "name": "Embraer Praetor 600",
+    "short_codes": [
+      "EM5"
+    ]
+  },
+  "F100": {
+    "name": "Fokker 100",
+    "short_codes": [
+      "100"
+    ]
+  },
+  "F50": {
+    "name": "Fokker 50",
+    "short_codes": [
+      "F50"
+    ]
+  },
+  "F70": {
+    "name": "Fokker 70",
+    "short_codes": [
+      "F70"
+    ]
+  },
+  "GLF2": {
+    "name": "Gulfstream II",
+    "short_codes": [
+      "GJ2"
+    ]
+  },
+  "GLF3": {
+    "name": "Gulfstream III",
+    "short_codes": [
+      "GJ3"
+    ]
+  },
+  "GLF4": {
+    "name": "Gulfstream IV/G450",
+    "short_codes": [
+      "GJ4",
+      "G450"
+    ]
+  },
+  "GLF5": {
+    "name": "Gulfstream V/G550",
+    "short_codes": [
+      "GJ5"
+    ]
+  },
+  "GLF6": {
+    "name": "Gulfstream G650",
+    "short_codes": [
+      "GJ6"
+    ]
+  },
+  "HDJT": {
+    "name": "Honda HondaJet",
+    "short_codes": [
+      "HHJ"
+    ]
+  },
+  "IL62": {
+    "name": "Ilyushin Il-62",
+    "short_codes": [
+      "IL6"
+    ]
+  },
+  "IL76": {
+    "name": "Ilyushin Il-76",
+    "short_codes": [
+      "IL7"
+    ]
+  },
+  "IL96": {
+    "name": "Ilyushin Il-96",
+    "short_codes": [
+      "IL9"
+    ]
+  },
+  "JS41": {
+    "name": "BAe Jetstream 41",
+    "short_codes": [
+      "J41"
+    ]
+  },
+  "LJ2": {
+    "name": "Learjet 20",
+    "short_codes": [
+      "LJ2"
+    ]
+  },
+  "LJ3": {
+    "name": "Learjet 30",
+    "short_codes": [
+      "LJ3"
+    ]
+  },
+  "LJ4": {
+    "name": "Learjet 40",
+    "short_codes": [
+      "LJ4"
+    ]
+  },
+  "LJ6": {
+    "name": "Learjet 60",
+    "short_codes": [
+      "LJ6"
+    ]
+  },
+  "LJ7": {
+    "name": "Learjet 70/75",
+    "short_codes": [
+      "LJ7"
+    ]
+  },
+  "L101": {
+    "name": "Lockheed L-1011 TriStar",
+    "short_codes": [
+      "L11",
+      "L15"
+    ]
+  },
+  "L410": {
+    "name": "Let L-410 Turbolet",
+    "short_codes": [
+      "L4T"
+    ]
+  },
+  "MD11": {
+    "name": "McDonnell Douglas MD-11",
+    "short_codes": [
+      "M11"
+    ]
+  },
+  "MD81": {
+    "name": "McDonnell Douglas MD-81",
+    "short_codes": [
+      "M81"
+    ]
+  },
+  "MD82": {
+    "name": "McDonnell Douglas MD-82",
+    "short_codes": [
+      "M82"
+    ]
+  },
+  "MD83": {
+    "name": "McDonnell Douglas MD-83",
+    "short_codes": [
+      "M83"
+    ]
+  },
+  "MD87": {
+    "name": "McDonnell Douglas MD-87",
+    "short_codes": [
+      "M87"
+    ]
+  },
+  "MD88": {
+    "name": "McDonnell Douglas MD-88",
+    "short_codes": [
+      "M88"
+    ]
+  },
+  "MD90": {
+    "name": "McDonnell Douglas MD-90",
+    "short_codes": [
+      "M90"
+    ]
+  },
+  "PC12": {
+    "name": "Pilatus PC-12",
+    "short_codes": [
+      "PL2"
+    ]
+  },
+  "PC24": {
+    "name": "Pilatus PC-24",
+    "short_codes": [
+      "PL4"
+    ]
+  },
+  "SB20": {
+    "name": "Saab 2000",
+    "short_codes": [
+      "S20"
+    ]
+  },
+  "SF34": {
+    "name": "Saab 340",
+    "short_codes": [
+      "SFA",
+      "SFB"
+    ]
+  },
+  "T134": {
+    "name": "Tupolev Tu-134",
+    "short_codes": [
+      "TU3"
+    ]
+  },
+  "T154": {
+    "name": "Tupolev Tu-154",
+    "short_codes": [
+      "TU5"
+    ]
+  },
+  "T204": {
+    "name": "Tupolev Tu-204",
+    "short_codes": [
+      "T20"
+    ]
+  },
+  "GA5C": {
+    "name": "Gulfstream G500/G540",
+    "short_codes": []
+  },
+  "GA6C": {
+    "name": "Gulfstream G600",
+    "short_codes": []
+  },
+  "GA7C": {
+    "name": "Gulfstream G700",
+    "short_codes": []
+  },
+  "AC50": {
+    "name": "Aero Commander 500",
+    "short_codes": [
+      "AC5"
+    ]
+  },
+  "AT46": {
+    "name": "ATR 42-600",
+    "short_codes": [
+      "AT6"
+    ]
+  },
+  "B350": {
+    "name": "Beechcraft King Air 350",
+    "short_codes": [
+      "BE9"
+    ]
+  },
+  "B407": {
+    "name": "Bell 407",
+    "short_codes": [
+      "B07"
+    ]
+  },
+  "B58T": {
+    "name": "Beechcraft Baron 58T",
+    "short_codes": [
+      "B5T"
+    ]
+  },
+  "BE20": {
+    "name": "Beechcraft King Air 200",
+    "short_codes": [
+      "BE2"
+    ]
+  },
+  "BE35": {
+    "name": "Beechcraft Bonanza 35",
+    "short_codes": [
+      "BE3"
+    ]
+  },
+  "BE40": {
+    "name": "Beechcraft Premier I",
+    "short_codes": [
+      "BE4"
+    ]
+  },
+  "BE58": {
+    "name": "Beechcraft Baron 58",
+    "short_codes": [
+      "BE5"
+    ]
+  },
+  "C06T": {
+    "name": "Cessna 206 Turbo Stationair",
+    "short_codes": [
+      "C6T"
+    ]
+  },
+  "C25B": {
+    "name": "Cessna Citation CJ2+",
+    "short_codes": [
+      "C2P"
+    ]
+  },
+  "C25C": {
+    "name": "Cessna Citation CJ3",
+    "short_codes": [
+      "CJ3"
+    ]
+  },
+  "C25M": {
+    "name": "Cessna Citation M2",
+    "short_codes": [
+      "CM2"
+    ]
+  },
+  "C441": {
+    "name": "Cessna Conquest II",
+    "short_codes": [
+      "C44"
+    ]
+  },
+  "C55B": {
+    "name": "Cessna Citation Bravo",
+    "short_codes": [
+      "CBR"
+    ]
+  },
+  "C77R": {
+    "name": "Cessna 177 Cardinal RG",
+    "short_codes": []
+  },
+  "CL64": {
+    "name": "Bombardier Challenger 604",
+    "short_codes": [
+      "CL4"
+    ]
+  },
+  "CL65": {
+    "name": "Bombardier Challenger 605/650",
+    "short_codes": [
+      "CL6"
+    ]
+  },
+  "E120": {
+    "name": "Embraer EMB-120 Brasilia",
+    "short_codes": [
+      "EMB"
+    ]
+  },
+  "E545": {
+    "name": "Embraer Legacy 450",
+    "short_codes": [
+      "EL4"
+    ]
+  },
+  "E550": {
+    "name": "Embraer Legacy 500",
+    "short_codes": [
+      "EL5"
+    ]
+  },
+  "EA50": {
+    "name": "Eclipse 500",
+    "short_codes": [
+      "EA5"
+    ]
+  },
+  "F2EX": {
+    "name": "Dassault Falcon 2000EX",
+    "short_codes": [
+      "D2E"
+    ]
+  },
+  "F2LX": {
+    "name": "Dassault Falcon 2000LX",
+    "short_codes": [
+      "D2X"
+    ]
+  },
+  "F9EX": {
+    "name": "Dassault Falcon 900EX",
+    "short_codes": [
+      "F9X"
+    ]
+  },
+  "G200": {
+    "name": "IAI Gulfstream G200",
+    "short_codes": [
+      "G20"
+    ]
+  },
+  "G280": {
+    "name": "Gulfstream G280",
+    "short_codes": [
+      "G28"
+    ]
+  },
+  "G500": {
+    "name": "Gulfstream G500",
+    "short_codes": [
+      "G50"
+    ]
+  },
+  "G550": {
+    "name": "Gulfstream G550",
+    "short_codes": []
+  },
+  "G650": {
+    "name": "Gulfstream G650",
+    "short_codes": []
+  },
+  "GL5T": {
+    "name": "Bombardier Global 5000",
+    "short_codes": [
+      "GL5"
+    ]
+  },
+  "GL6T": {
+    "name": "Bombardier Global 6000",
+    "short_codes": [
+      "GL6"
+    ]
+  },
+  "H25B": {
+    "name": "Hawker 800/800XP",
+    "short_codes": [
+      "H25"
+    ]
+  },
+  "H900": {
+    "name": "Hawker 900XP",
+    "short_codes": [
+      "H9X"
+    ]
+  },
+  "LJ31": {
+    "name": "Learjet 31",
+    "short_codes": [
+      "L31"
+    ]
+  },
+  "LJ35": {
+    "name": "Learjet 35",
+    "short_codes": [
+      "L35"
+    ]
+  },
+  "LJ45": {
+    "name": "Learjet 45",
+    "short_codes": [
+      "L45"
+    ]
+  },
+  "LJ60": {
+    "name": "Learjet 60",
+    "short_codes": []
+  },
+  "MU2": {
+    "name": "Mitsubishi MU-2",
+    "short_codes": [
+      "MU2"
+    ]
+  },
+  "P28A": {
+    "name": "Piper PA-28 Cherokee/Archer",
+    "short_codes": [
+      "P28"
+    ]
+  },
+  "P28R": {
+    "name": "Piper PA-28R Arrow",
+    "short_codes": [
+      "P2R"
+    ]
+  },
+  "PA46": {
+    "name": "Piper Malibu/Meridian/M600",
+    "short_codes": [
+      "PA4"
+    ]
+  },
+  "RV8": {
+    "name": "Van's Aircraft RV-8",
+    "short_codes": []
+  },
+  "S22T": {
+    "name": "Cirrus SR22T",
+    "short_codes": [
+      "SR2"
+    ]
+  },
+  "TBM8": {
+    "name": "Daher TBM 850/900/910/960",
+    "short_codes": [
+      "TBM"
+    ]
+  }
+}
