@@ -430,6 +430,12 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon) {
     }).bindTooltip(apLabel(code) + homeDist, { permanent: false, className: 'route-tip' }).addTo(map);
   });
 
+  if (homeLat != null && homeLon != null) {
+    L.circleMarker([homeLat, homeLon], {
+      radius: 6, fillColor: '#ff3d00', fillOpacity: 0.95, color: '#ff9800', weight: 1.5
+    }).bindTooltip('Home', { permanent: false, className: 'route-tip' }).addTo(map);
+  }
+
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
 }
 
