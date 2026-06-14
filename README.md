@@ -2,6 +2,15 @@
 
 I have done some more polishing and made things easier. Now the config also allows for wifi so changing networks is a lot easier. This clock has been a passion project for years and I hope years to come.
 
+Thanks to some fantastic help from **ajplotkin**, we’ve added a brand-new alerts feature! When enabled, your main clock will automatically scale down to display active alerts directly underneath it. 
+
+You can now toggle the following US-based alerts on or off:
+* **FAA Airport Alerts:** Stay updated on ground stops, departure delays, and more for major US airports.
+* **NWS Weather Alerts:** Get real-time weather warnings for your local area.
+* **ISS Pass-by Countdown:** Receive a live countdown when the International Space Station is just minutes away from passing over your location. (Works anywhere)
+
+All alerts are fully customizable and will seamlessly sync to your secondary screen if you use one.
+
 *   **New Web Configuration Page:** No more digging through raw files. You can now easily fill out and update all your settings directly from a clean, user-friendly webpage. At the bottom, it also tells you the system stats and the current API usage for each service. REMEMBER your local webpage is going to be http://hostname.local:8080 where hostname is the name of the PI (not your username). If you pull this version **BEFORE** you do, make a copy of your current config file. Afterwords use the old one to fill out the infomration in the new one.  
 *   **Smart Multi-Clock Sync:** If you run multiple clocks in the same house, they now work as a team. One clock acts as the **MASTER** to fetch weather data, and then seamlessly passes it to the other clocks. This saves system resources and ensures you only need a single weather API key, just like it does with the overhead flights!
 *   **More informative Loading Pulse:** The little light that blinks in the top right corner will now tell you that pinged OpenSky (white) and if it finds a callsign it will blink a different color depending what service it used to find the route (yellow=AirLabs, green=FR24, and cyan=FlightAware). If you have a Master/Slave setup, the Slave will blink green if it's connected to the Master and red if it isn't. This way you can tell at a glance if it is working and what service is being used.
@@ -278,6 +287,12 @@ https://github.com/user-attachments/assets/1944d063-83e5-4118-aad3-f6a9678fa22f
 
 
 How the display looks while it is tracking a flight
+
+<img width="4080" height="3072" alt="PXL_20260610_194346394" src="https://github.com/user-attachments/assets/d20eb124-a8ba-4fb0-9311-bf2d497b4fb8" />
+<img width="4080" height="3072" alt="PXL_20260610_184341409" src="https://github.com/user-attachments/assets/e2e34031-fb3a-4c24-bfb3-678e41ddaff4" />
+
+Showing a weather alert and an airport alert. If there are multiple alerts it cycles between them every 4 seconds.
+
 
 ---
 
