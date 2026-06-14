@@ -3,75 +3,114 @@
 <head>
     <title>Flight Tracker Web</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
-        h1 { margin-bottom: 10px; }
-        a { display: block; margin: 10px 0; font-size: 20px; color: #0066cc; }
-        .track-box {
-            margin: 24px 0;
-            padding: 18px 20px;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            max-width: 460px;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            padding: 20px;
+            background: #0d0d0b;
+            color: #ffb000;
+            min-height: 100vh;
         }
-        .track-box h2 { margin: 0 0 12px 0; font-size: 18px; }
-        #current-tracked { color: #555; font-size: 15px; margin-bottom: 12px; }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 4px);
+            pointer-events: none;
+            z-index: 100;
+        }
+        h1 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 28px;
+            margin-bottom: 6px;
+            color: #ffd54f;
+            text-shadow: 0 0 10px rgba(255,180,0,0.3);
+        }
+        a { display: block; margin: 8px 0; font-size: 16px; color: #ffb000; text-decoration: none; }
+        a:hover { text-decoration: underline; color: #ffd54f; }
+        .nav { margin-bottom: 16px; font-size: 14px; }
+        .nav a { display: inline; margin-right: 16px; }
+        .track-box {
+            margin: 20px 0;
+            padding: 16px 18px;
+            background: #111;
+            border: 1px solid #333;
+            max-width: 480px;
+        }
+        .track-box h2 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 20px;
+            margin: 0 0 12px 0;
+            color: #ffb000;
+        }
+        #current-tracked { color: #806000; font-size: 14px; margin-bottom: 12px; }
         .track-row { display: flex; gap: 8px; align-items: center; }
         .track-row input {
-            font-size: 18px;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            font-size: 16px;
             padding: 6px 10px;
             width: 160px;
             text-transform: uppercase;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            color: #ffb000;
         }
+        .track-row input:focus { outline: none; border-color: #ffb000; }
         .track-row button {
-            font-size: 15px;
-            padding: 7px 14px;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
+            padding: 6px 14px;
             cursor: pointer;
-            border: none;
-            border-radius: 4px;
-            background: #0066cc;
-            color: white;
+            border: 1px solid #ffb000;
+            background: #ffb000;
+            color: #000;
+            font-weight: bold;
         }
+        .track-row button:hover { background: #ffc030; }
         .track-row button.clear {
-            background: #888;
+            background: #1a1a1a;
+            color: #ffb000;
         }
+        .track-row button.clear:hover { background: #2a2000; }
         .track-row button:disabled {
-            background: #aaa;
+            opacity: 0.4;
             cursor: wait;
         }
         #track-status {
             margin-top: 12px;
-            font-size: 14px;
+            font-size: 13px;
             min-height: 18px;
             padding: 8px 10px;
-            border-radius: 4px;
             display: none;
+            border: 1px solid #333;
         }
         #track-status.found {
-            background: #e6f4ea;
-            border: 1px solid #a8d5b5;
-            color: #2d6a4f;
+            background: #0a1a0a;
+            border-color: #4caf50;
+            color: #69f0ae;
             display: block;
         }
         #track-status.not-found {
-            background: #fff3e0;
-            border: 1px solid #ffcc80;
-            color: #7f4f00;
+            background: #1a1200;
+            border-color: #664400;
+            color: #ffb000;
             display: block;
         }
         #track-status.error {
-            background: #fdecea;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
+            background: #1a0a0a;
+            border-color: #ff4444;
+            color: #ff6b6b;
             display: block;
         }
         #track-status.saved {
-            background: #e8f0fe;
-            border: 1px solid #90b4f7;
-            color: #1a3c87;
+            background: #0a0a1a;
+            border-color: #4a86e8;
+            color: #90b4f7;
             display: block;
         }
         .confirm-row {
@@ -80,21 +119,33 @@
             gap: 8px;
         }
         .confirm-row button {
-            font-size: 14px;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 16px;
             padding: 6px 14px;
             cursor: pointer;
-            border: none;
-            border-radius: 4px;
+            border: 1px solid #ffb000;
         }
-        .confirm-row .btn-save { background: #e07000; color: white; }
-        .confirm-row .btn-cancel { background: #ccc; color: #333; }
-        hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
-        .note { font-size: 13px; color: #888; margin-top: 10px; }
+        .confirm-row .btn-save { background: #ffb000; color: #000; }
+        .confirm-row .btn-cancel { background: #1a1a1a; color: #ffb000; }
+        hr { border: none; border-top: 1px solid #333; margin: 20px 0; }
+        .note { font-size: 12px; color: #555; margin-top: 10px; }
+        .links { margin-top: 16px; }
+        .links a { font-size: 14px; margin: 6px 0; }
     </style>
 </head>
 <body>
-    <h1>Flight Tracker Dashboard</h1>
-    <div id="location-label" style="color:#666; font-size:15px; margin-bottom:14px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <h1>FLIGHT TRACKER</h1>
+        <div style="font-family:'VT323','Courier New',monospace;font-size:24px;color:#ffd54f" id="live-clock"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        <div id="location-label" style="color:#806000;font-size:14px"></div>
+        <div id="weather-label" style="color:#806000;font-size:13px"></div>
+    </div>
+    <div class="nav">
+        <a href="/stats">Stats</a>
+        <a href="/config">Config</a>
+    </div>
 
     <div class="track-box">
         <h2>Track a Flight</h2>
@@ -125,15 +176,15 @@
 
     <hr>
 
-    <a href="/stats">Flight Statistics</a>
-    <a href="/closest">Closest Flight (Map)</a>
-    <a href="/closest/json">Closest Flight (Logs)</a>
-    <br>
-    <a href="/farthest">Farthest Flights (Map)</a>
-    <a href="/farthest/json">Farthest Flights (Logs)</a>
-    <a href="/counter">Flight Counter (JSON)</a>
-    <br>
-    <a href="/config">Configuration</a>
+    <div class="links">
+        <a href="/stats">Flight Statistics</a>
+        <a href="/closest">Closest Flight (Map)</a>
+        <a href="/closest/json">Closest Flight (Logs)</a>
+        <a href="/farthest">Farthest Flights (Map)</a>
+        <a href="/farthest/json">Farthest Flights (Logs)</a>
+        <a href="/counter">Flight Counter (JSON)</a>
+        <a href="/config">Configuration</a>
+    </div>
 
     <script>
         let pendingCallsign = "";
@@ -280,6 +331,25 @@
             btn.textContent = "Search";
         }
 
+        function tickClock() {
+            const now = new Date();
+            const h = now.getHours().toString().padStart(2, '0');
+            const m = now.getMinutes().toString().padStart(2, '0');
+            const s = now.getSeconds().toString().padStart(2, '0');
+            document.getElementById('live-clock').textContent = `${h}:${m}:${s}`;
+        }
+
+        async function loadWeather() {
+            try {
+                const res = await fetch('/api/system');
+                const data = await res.json();
+                const parts = [];
+                if (data.cpu_temp) parts.push(`CPU ${data.cpu_temp}`);
+                if (data.load_avg) parts.push(`Load ${data.load_avg.split('/')[0].trim()}`);
+                if (parts.length) document.getElementById('weather-label').textContent = parts.join(' | ');
+            } catch (e) {}
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("callsign-input").addEventListener("keydown", e => {
                 if (e.key === "Enter") lookupAndTrack();
@@ -289,6 +359,9 @@
             });
             loadCurrent();
             loadLocation();
+            tickClock();
+            setInterval(tickClock, 1000);
+            loadWeather();
         });
     </script>
 </body>

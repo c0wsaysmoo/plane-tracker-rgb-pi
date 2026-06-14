@@ -168,11 +168,17 @@ class ClockScene(object):
         if wind:
             items.append((wind["text"], _ALERT_COLOURS.get(wind["color"], colours.WHITE)))
 
-        # NWS alerts
+        # NWS alerts (if enabled)
         try:
-            nws = get_active_alerts()
-        except Exception:
-            nws = []
+            from config import NWS_ALERTS_ENABLED
+        except ImportError:
+            NWS_ALERTS_ENABLED = True
+        nws = []
+        if NWS_ALERTS_ENABLED:
+            try:
+                nws = get_active_alerts()
+            except Exception:
+                nws = []
         for a in nws:
             color = _ALERT_COLOURS.get(a.get("color", "grey"), colours.GREY)
             items.append((a["text"], color))
@@ -186,11 +192,17 @@ class ClockScene(object):
             color = _ALERT_COLOURS.get(a.get("color", "grey"), colours.GREY)
             items.append((a["text"], color))
 
-        # ISS overhead pass
+        # ISS overhead pass (if enabled)
         try:
-            iss = get_iss_alert()
-        except Exception:
-            iss = None
+            from config import ISS_ALERTS_ENABLED
+        except ImportError:
+            ISS_ALERTS_ENABLED = True
+        iss = None
+        if ISS_ALERTS_ENABLED:
+            try:
+                iss = get_iss_alert()
+            except Exception:
+                iss = None
         if iss:
             items.append((iss["text"], _ALERT_COLOURS.get(iss["color"], colours.WHITE)))
 

@@ -403,12 +403,17 @@ def log_flight_count(callsign, entry=None):
             "hour": now.hour,
             "origin": entry.get("origin", ""),
             "dest": entry.get("destination", ""),
+            "aircraft": entry.get("aircraft_type", ""),
         })
         log[today]["count"] = len(log[today]["flights"])
         log[today]["last_seen"] = now_str
 
-        # Prune entries older than 90 days
-        cutoff = str((now - timedelta(days=90)).date())
+        # Prune entries older than configured retention period
+        try:
+            from config import STATS_LOG_DAYS
+        except (ImportError, NameError):
+            STATS_LOG_DAYS = 90
+        cutoff = str((now - timedelta(days=STATS_LOG_DAYS)).date())
         old_keys = [k for k in log if k < cutoff and k != today]
         for k in old_keys:
             del log[k]
@@ -681,6 +686,13 @@ class Overhead:
             flights = self._api.get_flights(bounds=ZONE_DEFAULT)
             stats["zone_raw"] = len(flights)
             flights = [f for f in flights if MIN_ALTITUDE < f.altitude < MAX_ALTITUDE]
+            # Filter out blocked callsigns
+            try:
+                from config import BLOCKED_CALLSIGNS
+                if BLOCKED_CALLSIGNS:
+                    flights = [f for f in flights if f.callsign.upper() not in BLOCKED_CALLSIGNS]
+            except (ImportError, NameError):
+                pass
             stats["zone_filtered"] = len(flights)
             flights.sort(key=lambda f: distance_from_flight_to_home(f))
             flights = flights[:MAX_FLIGHT_LOOKUP]

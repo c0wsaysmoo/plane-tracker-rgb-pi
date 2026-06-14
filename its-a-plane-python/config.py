@@ -72,6 +72,7 @@ def _apply():
     global LED_RGB_SEQUENCE, TIDE_STATION, WATER_TEMP_STATION, AIRPORT_STATUS_LIST
     global MIN_ALTITUDE, JOURNEY_CODE_SELECTED, JOURNEY_BLANK_FILLER, SPEED_UNITS
     global EMAIL, MAX_FARTHEST, MAX_CLOSEST
+    global NWS_ALERTS_ENABLED, ISS_ALERTS_ENABLED, BLOCKED_CALLSIGNS, STATS_LOG_DAYS
 
     # --- API Keys ---
     FR24_API_KEY = _get("FR24_API_KEY")
@@ -125,6 +126,17 @@ def _apply():
     EMAIL = _get("EMAIL")
     MAX_FARTHEST = int(_get("MAX_FARTHEST", "3"))
     MAX_CLOSEST = int(_get("MAX_CLOSEST", "3"))
+
+    # --- Alert toggles ---
+    NWS_ALERTS_ENABLED = _bool(_get("NWS_ALERTS_ENABLED", "True"))
+    ISS_ALERTS_ENABLED = _bool(_get("ISS_ALERTS_ENABLED", "True"))
+
+    # --- Blocked callsigns (comma-separated, e.g. "N12345,N67890") ---
+    _raw_blocked = _get("BLOCKED_CALLSIGNS", "")
+    BLOCKED_CALLSIGNS = [c.strip().upper() for c in _raw_blocked.split(",") if c.strip()]
+
+    # --- Stats retention ---
+    STATS_LOG_DAYS = int(_get("STATS_LOG_DAYS", "90"))
 
 
 def reload():
