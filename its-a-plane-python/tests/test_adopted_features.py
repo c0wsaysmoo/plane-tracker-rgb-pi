@@ -258,6 +258,15 @@ class TestFlightCounter:
         assert data[today]["flights"][0]["origin"] == "EWR"
         assert data[today]["flights"][0]["dest"] == "LAX"
 
+    def test_aircraft_type_logged(self):
+        """Aircraft type from entry['plane'] stored as 'aircraft' in counter."""
+        self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX", "plane": "B738"})
+        import json
+        with open(self.counter_file) as f:
+            data = json.load(f)
+        today = str(__import__("datetime").datetime.now().date())
+        assert data[today]["flights"][0]["aircraft"] == "B738"
+
     def test_deduplication(self):
         """Same callsign counted only once per day."""
         self.oh.log_flight_count("UAL123", {"origin": "EWR", "destination": "LAX"})
