@@ -3,30 +3,82 @@
 <head>
     <title>Daily Stats</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f5f5f5; max-width: 900px; margin: 0 auto; }
-        a.back { font-size: 14px; color: #0066cc; text-decoration: none; margin-right: 16px; }
-        h1 { margin-bottom: 5px; }
-        .subtitle { color: #666; font-size: 15px; margin-bottom: 14px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            padding: 20px;
+            background: #0d0d0b;
+            color: #ffb000;
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 4px);
+            pointer-events: none;
+            z-index: 100;
+        }
+        h1 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 28px;
+            margin-bottom: 5px;
+            color: #ffd54f;
+            text-shadow: 0 0 10px rgba(255,180,0,0.3);
+        }
+        h3 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
+            color: #ffb000;
+        }
+        .subtitle { color: #806000; font-size: 14px; margin-bottom: 14px; }
+        .nav { margin-bottom: 16px; font-size: 14px; }
+        .nav a { color: #ffb000; text-decoration: none; margin-right: 16px; }
+        .nav a:hover { text-decoration: underline; color: #ffd54f; }
         .cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
-        .card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
-        .card .label { font-size: 12px; color: #888; text-transform: uppercase; }
-        .card .value { font-size: 22px; font-weight: bold; margin-top: 2px; }
-        .card .sub { font-size: 12px; color: #666; }
+        .card {
+            background: #111;
+            border: 1px solid #333;
+            border-top: 2px solid #ffb000;
+            padding: 12px 16px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .card .label { font-size: 11px; color: #806000; text-transform: uppercase; }
+        .card .value {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 26px;
+            color: #ffd54f;
+            margin-top: 2px;
+        }
+        .card .sub { font-size: 11px; color: #555; }
         .chart-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
-        .chart-box { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 14px; flex: 1; min-width: 280px; }
-        .chart-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; }
+        .chart-box {
+            background: #111;
+            border: 1px solid #333;
+            padding: 14px;
+            flex: 1;
+            min-width: 280px;
+        }
+        .chart-box h3 { margin: 0 0 10px 0; font-size: 16px; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
-        th { color: #888; font-size: 11px; text-transform: uppercase; }
+        th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #222; font-size: 13px; }
+        th { color: #806000; font-size: 11px; text-transform: uppercase; }
         .scroll-table { max-height: 300px; overflow-y: auto; }
     </style>
 </head>
 <body>
-    <div>
-        <a class="back" href="/stats">← Stats</a>
-        <a class="back" href="/">← Dashboard</a>
+    <div class="nav">
+        <a href="/stats">← Stats</a>
+        <a href="/">← Dashboard</a>
     </div>
     <h1 id="page-title">—</h1>
     <div class="subtitle" id="page-sub"></div>
@@ -40,22 +92,22 @@
 
     <div class="chart-row">
         <div class="chart-box" style="flex:2;">
-            <h3>Flights by Hour</h3>
+            <h3>▸ Flights by Hour</h3>
             <canvas id="hourChart"></canvas>
         </div>
     </div>
 
     <div class="chart-row">
         <div class="chart-box">
-            <h3>Airline Breakdown</h3>
+            <h3>▸ Airlines</h3>
             <canvas id="airlineChart"></canvas>
         </div>
         <div class="chart-box">
-            <h3>Local vs Flyover</h3>
+            <h3>▸ Traffic Type</h3>
             <canvas id="localChart"></canvas>
         </div>
         <div class="chart-box">
-            <h3>All Flights</h3>
+            <h3>▸ All Flights</h3>
             <div class="scroll-table">
                 <table>
                     <thead><tr><th>#</th><th>Callsign</th><th>Route</th><th>Time</th></tr></thead>
@@ -68,6 +120,15 @@
     <script>
         const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
         const DOWS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const doughnutOpt = { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { color: '#ffb000', font: { size: 11 } } } } };
+        const chartOpt = {
+            responsive: true, maintainAspectRatio: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: 'rgba(255,176,0,0.1)' }, ticks: { color: '#806000', font: { size: 10 } } },
+                y: { grid: { color: 'rgba(255,176,0,0.1)' }, ticks: { color: '#806000' }, beginAtZero: true }
+            }
+        };
         const date = window.location.pathname.split('/').pop();
 
         async function loadDay() {
@@ -115,26 +176,29 @@
             });
             const sorted = Object.entries(airlines).sort((a,b) => b[1] - a[1]).slice(0, 12);
 
-            // Local vs flyover
-            let local = 0, flyover = 0, unknown = 0;
+            // 4-way traffic split
+            let departing = 0, arriving = 0, flyover = 0, unknown = 0;
             flights.forEach(f => {
                 const o = (f.origin || '').toUpperCase();
                 const d = (f.dest || '').toUpperCase();
                 if (!o && !d) unknown++;
-                else if (o === airportCode || d === airportCode) local++;
+                else if (o === airportCode) departing++;
+                else if (d === airportCode) arriving++;
                 else flyover++;
             });
 
-            // Hourly chart
-            const chartOpt = {
-                responsive: true, maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } } },
-                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
-                }
-            };
+            // Resolve airline names
+            let airlineNames = {};
+            try {
+                const res = await fetch('/api/airlines', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({codes: sorted.map(s => s[0])})
+                });
+                airlineNames = await res.json();
+            } catch (e) {}
 
+            // Hourly chart
             new Chart(document.getElementById('hourChart'), {
                 type: 'bar',
                 data: {
@@ -149,22 +213,28 @@
                 options: chartOpt
             });
 
+            const airlineLabels = sorted.map(s => airlineNames[s[0]] ? `${s[0]} (${airlineNames[s[0]]})` : s[0]);
             new Chart(document.getElementById('airlineChart'), {
                 type: 'doughnut',
                 data: {
-                    labels: sorted.map(s => s[0]),
+                    labels: airlineLabels,
                     datasets: [{ data: sorted.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
                 },
-                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+                options: doughnutOpt
             });
 
             new Chart(document.getElementById('localChart'), {
                 type: 'doughnut',
                 data: {
-                    labels: ['Local', 'Flyover', 'Unknown'],
-                    datasets: [{ data: [local, flyover, unknown], backgroundColor: ['#69f0ae99','#ffb30099','#cccccc99'], borderColor: ['#69f0ae','#ffb300','#ccc'], borderWidth: 1 }]
+                    labels: ['Departing', 'Arriving', 'Flyover', 'Unknown'],
+                    datasets: [{
+                        data: [departing, arriving, flyover, unknown],
+                        backgroundColor: ['#69f0ae99','#3498db99','#ffb30099','#55555599'],
+                        borderColor: ['#69f0ae','#3498db','#ffb300','#555'],
+                        borderWidth: 1
+                    }]
                 },
-                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+                options: doughnutOpt
             });
 
             // Flights table
