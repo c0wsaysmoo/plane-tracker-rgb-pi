@@ -286,6 +286,11 @@ class ClockScene(object):
                 graphics.DrawText(self.canvas, ALERT_FONT, ALERT_POSITION[0],
                                   ALERT_POSITION[1], colours.BLACK, self._last_alert_text)
 
+        # Clear date zone before drawing a long alert — DrawText only sets
+        # foreground pixels, so old date pixels leak through the glyph gaps
+        if (mode_changed or alert_text_changed) and alert_text and len(alert_text) > 9:
+            self.draw_square(36, 6, 64, 12, colours.BLACK)
+
         # Draw clock
         if alert_now_active:
             graphics.DrawText(self.canvas, CLOCK_SMALL_FONT,
@@ -305,5 +310,6 @@ class ClockScene(object):
         self._last_time = current_time
         self._alert_active = alert_now_active
         self._last_alert_text = alert_text
-        self._alert_overflow = bool(alert_text and len(alert_text) > 9)
+        # Pass alert length (not bool) so date.py can clear only past the alert end
+        self._alert_overflow = len(alert_text) if (alert_text and len(alert_text) > 9) else 0
         self._redraw_time = False

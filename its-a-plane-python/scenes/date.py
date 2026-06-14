@@ -107,11 +107,16 @@ class DateScene(object):
             self._redraw_date = True
             return
 
-        # Suppress date when alert text overflows into date area
-        if getattr(self, '_alert_overflow', False):
+        # Suppress date when alert text overflows into date area.
+        # _alert_overflow is the alert char count (0 = no overflow).
+        # Clear only date pixels PAST the alert end to avoid wiping alert text.
+        overflow_chars = getattr(self, '_alert_overflow', 0)
+        if overflow_chars > 0:
             if self._last_display_text:
-                graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0],
-                                  DATE_POSITION[1], colours.BLACK, self._last_display_text)
+                alert_end_x = overflow_chars * 4
+                clear_start = max(alert_end_x, DATE_POSITION[0])
+                if clear_start < 64:
+                    self.draw_square(clear_start, 6, 64, 12, colours.BLACK)
                 self._last_display_text = None
             self._redraw_date = True
             return
