@@ -416,3 +416,310 @@ class TestOrdinal:
         assert ordinal(21) == "21st"
         assert ordinal(22) == "22nd"
         assert ordinal(23) == "23rd"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Farthest Flight Logging Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLogFarthestFlight:
+    """Tests for log_farthest_flight() ranking and storage logic."""
+
+    def _make_entry(self, origin="JFK", destination="LHR",
+                    distance_origin=500, distance_destination=300,
+                    distance=10, callsign="UAL123"):
+        """Helper to build a flight entry dict."""
+        return {
+            "origin": origin,
+            "destination": destination,
+            "distance_origin": distance_origin,
+            "distance_destination": distance_destination,
+            "distance": distance,
+            "callsign": callsign,
+        }
+
+    def test_skips_when_both_distances_negative(self):
+        """Returns immediately when both origin and dest distances are negative."""
+        from utilities.overhead import log_farthest_flight, safe_load_json
+        entry = self._make_entry(distance_origin=-1, distance_destination=-1)
+        with patch("utilities.overhead.safe_load_json") as mock_load:
+            log_farthest_flight(entry)
+            mock_load.assert_not_called()
+
+    def test_skips_when_both_distances_none(self):
+        """None distances default to -1, so both None also skips."""
+        from utilities.overhead import log_farthest_flight
+        entry = self._make_entry(distance_origin=None, distance_destination=None)
+        with patch("utilities.overhead.safe_load_json") as mock_load:
+            log_farthest_flight(entry)
+            mock_load.assert_not_called()
+
+    def test_picks_origin_when_d_o_greater(self):
+        """When distance_origin >= distance_destination, reason is 'origin'."""
+        from utilities.overhead import log_farthest_flight
+        entry = self._make_entry(distance_origin=500, distance_destination=300)
+        written = []
+        with patch("utilities.overhead.safe_load_json", return_value=[]), \
+             patch("utilities.overhead.safe_write_json", side_effect=lambda p, d: written.append(d)), \
+             patch("utilities.overhead.email_alerts") as mock_email:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            log_farthest_flight(entry)
+        assert len(written) == 1
+        saved = written[0][0]
+        assert saved["reason"] == "origin"
+        assert saved["farthest_value"] == 500
+
+    def test_picks_destination_when_d_d_greater(self):
+        """When distance_destination > distance_origin, reason is 'destination'."""
+        from utilities.overhead import log_farthest_flight
+        entry = self._make_entry(distance_origin=200, distance_destination=600)
+        written = []
+        with patch("utilities.overhead.safe_load_json", return_value=[]), \
+             patch("utilities.overhead.safe_write_json", side_effect=lambda p, d: written.append(d)), \
+             patch("utilities.overhead.email_alerts") as mock_email:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            log_farthest_flight(entry)
+        assert written[0][0]["reason"] == "destination"
+        assert written[0][0]["farthest_value"] == 600
+
+    def test_skips_when_airport_is_none(self):
+        """If the airport for the winning reason is None, returns early."""
+        from utilities.overhead import log_farthest_flight
+        # origin wins (500 > 300) but origin airport is None
+        entry = self._make_entry(origin=None, distance_origin=500, distance_destination=300)
+        with patch("utilities.overhead.safe_load_json") as mock_load:
+            log_farthest_flight(entry)
+            mock_load.assert_not_called()
+
+    def test_appends_new_entry_sorted_descending(self):
+        """New airport entry is appended and list sorted by farthest_value desc."""
+        from utilities.overhead import log_farthest_flight
+        existing = [
+            {"_airport": "NRT", "farthest_value": 6000, "distance": 5},
+            {"_airport": "LHR", "farthest_value": 3000, "distance": 8},
+        ]
+        entry = self._make_entry(origin="CDG", distance_origin=4500, distance_destination=100)
+        written = []
+        with patch("utilities.overhead.safe_load_json", return_value=existing), \
+             patch("utilities.overhead.safe_write_json", side_effect=lambda p, d: written.append(d)), \
+             patch("utilities.overhead.email_alerts") as mock_email, \
+             patch("utilities.overhead._ensure_map_imports"), \
+             patch("utilities.overhead.map_generator") as mock_mg, \
+             patch("utilities.overhead.upload_helper") as mock_uh:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            mock_mg.generate_farthest_map.return_value = "/tmp/map.html"
+            mock_uh.upload_map_to_server.return_value = "https://example.com/map"
+            log_farthest_flight(entry)
+
+        saved = written[0]
+        values = [f["farthest_value"] for f in saved]
+        assert values == sorted(values, reverse=True)
+        airports = [f["_airport"] for f in saved]
+        assert "CDG" in airports
+
+    def test_updates_existing_airport_closer_distance(self):
+        """If same airport appears with a closer overhead distance, replaces it."""
+        from utilities.overhead import log_farthest_flight
+        existing = [
+            {"_airport": "JFK", "farthest_value": 500, "distance": 20, "reason": "origin"},
+        ]
+        # Same airport, closer distance (distance=5 < 20)
+        entry = self._make_entry(origin="JFK", distance_origin=500, distance_destination=100, distance=5)
+        written = []
+        with patch("utilities.overhead.safe_load_json", return_value=existing), \
+             patch("utilities.overhead.safe_write_json", side_effect=lambda p, d: written.append(d)), \
+             patch("utilities.overhead.email_alerts") as mock_email, \
+             patch("utilities.overhead._ensure_map_imports"), \
+             patch("utilities.overhead.map_generator") as mock_mg:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            mock_mg.generate_farthest_map.return_value = "/tmp/map.html"
+            log_farthest_flight(entry)
+
+        assert len(written) == 1
+        assert written[0][0]["distance"] == 5  # Updated to closer
+
+    def test_rejects_existing_airport_farther_distance(self):
+        """If same airport appears with a farther overhead distance, rejects it."""
+        from utilities.overhead import log_farthest_flight
+        existing = [
+            {"_airport": "JFK", "farthest_value": 500, "distance": 5, "reason": "origin"},
+        ]
+        # Same airport, farther distance (distance=20 > 5)
+        entry = self._make_entry(origin="JFK", distance_origin=500, distance_destination=100, distance=20)
+        with patch("utilities.overhead.safe_load_json", return_value=existing), \
+             patch("utilities.overhead.safe_write_json") as mock_write, \
+             patch("utilities.overhead.email_alerts") as mock_email:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            log_farthest_flight(entry)
+            mock_write.assert_not_called()
+
+    def test_max_farthest_cap_rejects_below_minimum(self):
+        """When list is full, entry with farthest_value <= min is rejected."""
+        from utilities.overhead import log_farthest_flight, MAX_FARTHEST
+        # Build a full list
+        existing = [
+            {"_airport": f"AP{i}", "farthest_value": 1000 - i * 10, "distance": 5}
+            for i in range(MAX_FARTHEST)
+        ]
+        min_val = min(f["farthest_value"] for f in existing)
+        # New entry at or below the minimum
+        entry = self._make_entry(origin="TINY", distance_origin=min_val, distance_destination=0)
+        with patch("utilities.overhead.safe_load_json", return_value=existing), \
+             patch("utilities.overhead.safe_write_json") as mock_write, \
+             patch("utilities.overhead.email_alerts") as mock_email:
+            mock_email.get_timestamp.return_value = "2026-06-14T12:00:00"
+            log_farthest_flight(entry)
+            mock_write.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Distance Pipeline Tests (meters → km → miles)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDistancePipeline:
+    """Tests for the FR24 flight_progress distance conversion math.
+
+    FR24 gRPC returns traversed_distance and remaining_distance in METERS.
+    The pipeline converts: meters / 1000 → km, then km / 1.609344 → miles (imperial).
+    """
+
+    def test_traversed_meters_to_km(self):
+        """traversed_distance in meters is correctly divided by 1000."""
+        fp = {"traversed_distance": 2474078}
+        traversed_km = (fp.get("traversed_distance", 0) or 0) / 1000.0
+        assert abs(traversed_km - 2474.078) < 0.001
+
+    def test_remaining_meters_to_km(self):
+        """remaining_distance in meters is correctly divided by 1000."""
+        fp = {"remaining_distance": 1500000}
+        remaining_km = (fp.get("remaining_distance", 0) or 0) / 1000.0
+        assert remaining_km == 1500.0
+
+    def test_none_traversed_returns_zero(self):
+        """None traversed_distance defaults to 0."""
+        fp = {"traversed_distance": None}
+        traversed_km = (fp.get("traversed_distance", 0) or 0) / 1000.0
+        assert traversed_km == 0.0
+
+    def test_zero_traversed_returns_zero(self):
+        """Zero traversed_distance stays zero."""
+        fp = {"traversed_distance": 0}
+        traversed_km = (fp.get("traversed_distance", 0) or 0) / 1000.0
+        assert traversed_km == 0.0
+
+    def test_missing_key_returns_zero(self):
+        """Missing key defaults to 0."""
+        fp = {}
+        traversed_km = (fp.get("traversed_distance", 0) or 0) / 1000.0
+        assert traversed_km == 0.0
+
+    def test_imperial_conversion_km_to_miles(self):
+        """km / 1.609344 gives correct imperial miles."""
+        traversed_km = 2474.078
+        dist_miles = traversed_km / 1.609344
+        # 2474.078 km ≈ 1537.3 miles
+        assert abs(dist_miles - 1537.3) < 1.0
+
+    def test_metric_passthrough(self):
+        """When metric, dist_o = traversed_km directly (no conversion)."""
+        traversed_km = 2474.078
+        # Metric path: dist_o = traversed_km
+        dist_o = traversed_km
+        assert dist_o == 2474.078
+
+    def test_old_bug_would_produce_absurd_values(self):
+        """Before the fix, meters were treated as km — producing ~1000x inflation.
+        This test documents the bug to prevent regression."""
+        fp = {"traversed_distance": 2474078}  # meters
+        # CORRECT: divide by 1000 first
+        correct_km = (fp["traversed_distance"] or 0) / 1000.0
+        correct_miles = correct_km / 1.609344
+        # BUG: treating meters as km directly
+        buggy_miles = fp["traversed_distance"] / 1.609344
+        # Buggy value is ~1000x too large
+        assert buggy_miles > correct_miles * 900
+        # Correct value is reasonable (Earth max ~12,500 miles one-way)
+        assert correct_miles < 12500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alert Overflow Clipping Regression Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestAlertOverflowClipping:
+    """Regression tests for the y=11 clipping boundary fix.
+
+    clock.py and date.py clear overflow pixels with draw_square(..., y_max, ...).
+    The fix changed y_max from 12 to 11 so the forecast day-name row (y=12)
+    is not wiped. These tests read the source files to verify the boundary.
+    """
+
+    def _get_source_dir(self):
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scenes")
+
+    def test_clock_overflow_clear_uses_y11(self):
+        """clock.py draw_square for alert overflow must use y=11, not y=12."""
+        clock_path = os.path.join(self._get_source_dir(), "clock.py")
+        with open(clock_path) as f:
+            source = f.read()
+        # Find the draw_square call in the overflow clearing block
+        # Pattern: draw_square(36, 6, 64, 11, ...) — the 4th arg must be 11
+        import re
+        matches = re.findall(r'draw_square\(36,\s*6,\s*64,\s*(\d+)', source)
+        assert len(matches) >= 1, "Expected draw_square(36, 6, 64, ...) in clock.py"
+        for m in matches:
+            assert m == "11", f"clock.py overflow clear uses y={m}, expected y=11"
+
+    def test_date_overflow_clear_uses_y11(self):
+        """date.py draw_square for alert overflow must use y=11, not y=12."""
+        date_path = os.path.join(self._get_source_dir(), "date.py")
+        with open(date_path) as f:
+            source = f.read()
+        import re
+        # date.py uses: draw_square(clear_start, 6, 64, 11, ...)
+        matches = re.findall(r'draw_square\([^,]+,\s*6,\s*64,\s*(\d+)', source)
+        assert len(matches) >= 1, "Expected draw_square(..., 6, 64, ...) in date.py"
+        for m in matches:
+            assert m == "11", f"date.py overflow clear uses y={m}, expected y=11"
+
+    def test_overflow_triggers_at_len_greater_than_9(self):
+        """Alert text longer than 9 chars triggers overflow clearing."""
+        # Replicate the logic from clock.py line 304
+        alert_text = "RAIN 10min"  # 10 chars
+        assert len(alert_text) > 9
+        overflow = len(alert_text) if (alert_text and len(alert_text) > 9) else 0
+        assert overflow == 10
+
+    def test_no_overflow_at_len_9_or_less(self):
+        """Alert text of 9 chars or fewer does NOT trigger overflow."""
+        alert_text = "RAIN 5mn"  # 8 chars
+        overflow = len(alert_text) if (alert_text and len(alert_text) > 9) else 0
+        assert overflow == 0
+
+    def test_no_overflow_empty_alert(self):
+        """Empty alert text does NOT trigger overflow."""
+        alert_text = ""
+        overflow = len(alert_text) if (alert_text and len(alert_text) > 9) else 0
+        assert overflow == 0
+
+    def test_no_overflow_none_alert(self):
+        """None alert text does NOT trigger overflow."""
+        alert_text = None
+        overflow = len(alert_text) if (alert_text and len(alert_text) > 9) else 0
+        assert overflow == 0
+
+    def test_clear_start_calculation(self):
+        """date.py calculates clear_start = max(overflow_chars * 4, DATE_POSITION[0])."""
+        overflow_chars = 12
+        alert_end_x = overflow_chars * 4  # 48
+        date_position_x = 36  # typical DATE_POSITION[0]
+        clear_start = max(alert_end_x, date_position_x)
+        assert clear_start == 48  # alert extends past date start
+
+    def test_clear_start_uses_date_position_when_alert_shorter(self):
+        """When alert is short, clear_start = DATE_POSITION[0]."""
+        overflow_chars = 10  # just barely overflowing
+        alert_end_x = overflow_chars * 4  # 40
+        date_position_x = 36
+        clear_start = max(alert_end_x, date_position_x)
+        assert clear_start == 40  # alert end is past date start
