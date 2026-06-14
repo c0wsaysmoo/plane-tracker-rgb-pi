@@ -3,65 +3,142 @@
 <head>
     <title>Flight Statistics</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f5f5f5; max-width: 900px; margin: 0 auto; }
-        h1 { margin-bottom: 5px; }
-        #location-label { color: #666; font-size: 15px; margin-bottom: 14px; }
-        a.back { font-size: 14px; color: #0066cc; text-decoration: none; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            padding: 20px;
+            background: #0d0d0b;
+            color: #ffb000;
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 4px);
+            pointer-events: none;
+            z-index: 100;
+        }
+        h1 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 28px;
+            margin-bottom: 5px;
+            color: #ffd54f;
+            text-shadow: 0 0 10px rgba(255,180,0,0.3);
+        }
+        h3 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
+            color: #ffb000;
+            margin: 16px 0 8px 0;
+        }
+        #location-label { color: #806000; font-size: 14px; margin-bottom: 14px; }
+        .nav { margin-bottom: 16px; font-size: 14px; }
+        .nav a { color: #ffb000; text-decoration: none; margin-right: 16px; }
+        .nav a:hover { text-decoration: underline; color: #ffd54f; }
         .cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
-        .card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
-        .card .label { font-size: 12px; color: #888; text-transform: uppercase; }
-        .card .value { font-size: 22px; font-weight: bold; margin-top: 2px; }
-        .card .sub { font-size: 12px; color: #666; }
+        .card {
+            background: #111;
+            border: 1px solid #333;
+            border-top: 2px solid #ffb000;
+            padding: 12px 16px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .card .label { font-size: 11px; color: #806000; text-transform: uppercase; }
+        .card .value {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 26px;
+            color: #ffd54f;
+            margin-top: 2px;
+        }
+        .card .sub { font-size: 11px; color: #555; }
         .chart-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
-        .chart-box { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 14px; flex: 1; min-width: 280px; }
+        .chart-box {
+            background: #111;
+            border: 1px solid #333;
+            padding: 14px;
+            flex: 1;
+            min-width: 280px;
+        }
         .chart-full { width: 100%; }
-        .chart-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; }
+        .chart-box h3 { margin: 0 0 10px 0; font-size: 16px; }
+        #route-map { height: 400px; width: 100%; background: #111; border: 1px solid #333; margin: 16px 0; }
         table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
-        th { color: #888; font-size: 12px; text-transform: uppercase; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #222; font-size: 13px; }
+        th { color: #806000; font-size: 11px; text-transform: uppercase; }
         tr.clickable { cursor: pointer; }
-        tr.clickable:hover { background: #f0f0f0; }
+        tr.clickable:hover { background: rgba(255,176,0,0.05); }
         .bar-cell { display: flex; align-items: center; gap: 8px; }
-        .bar-fill { height: 14px; background: #ffb300; border-radius: 2px; }
+        .bar-fill { height: 14px; background: #ffb000; border-radius: 0; }
     </style>
 </head>
 <body>
-    <a class="back" href="/">← Dashboard</a>
-    <h1>Flight Statistics</h1>
+    <h1>FLIGHT STATISTICS</h1>
     <div id="location-label"></div>
+    <div class="nav">
+        <a href="/">← Dashboard</a>
+        <a href="/config">Config</a>
+    </div>
 
     <div class="cards">
+        <div class="card"><div class="label">Total Flights</div><div class="value" id="total">—</div><div class="sub" id="total-sub"></div></div>
         <div class="card"><div class="label">Daily Average</div><div class="value" id="avg">—</div></div>
         <div class="card"><div class="label">Busiest Day</div><div class="value" id="busiest-val">—</div><div class="sub" id="busiest-sub"></div></div>
         <div class="card"><div class="label">Peak Hour</div><div class="value" id="peak-hour">—</div></div>
-        <div class="card"><div class="label">Peak Day of Week</div><div class="value" id="peak-dow">—</div></div>
+        <div class="card"><div class="label">Peak Day</div><div class="value" id="peak-dow">—</div></div>
     </div>
 
     <div class="chart-row">
         <div class="chart-box chart-full">
-            <h3>Average Flights by Hour</h3>
+            <h3>▸ Average Flights by Hour</h3>
             <canvas id="hourChart"></canvas>
         </div>
     </div>
 
     <div class="chart-row">
         <div class="chart-box">
-            <h3>Average Flights by Day of Week</h3>
+            <h3>▸ Day of Week</h3>
             <canvas id="dowChart"></canvas>
         </div>
         <div class="chart-box">
-            <h3>Airline Breakdown (Top 12)</h3>
+            <h3>▸ Airlines (Top 12)</h3>
             <canvas id="airlineChart"></canvas>
-        </div>
-        <div class="chart-box">
-            <h3>Local vs Flyover</h3>
-            <canvas id="localChart"></canvas>
         </div>
     </div>
 
-    <h3>Daily Flight Log</h3>
+    <div class="chart-row">
+        <div class="chart-box">
+            <h3>▸ Traffic Type</h3>
+            <canvas id="localChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <h3>▸ Aircraft Types (Top 12)</h3>
+            <canvas id="aircraftChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-box chart-full">
+            <h3>▸ Top Routes (Top 15)</h3>
+            <div style="height:400px"><canvas id="routeChart"></canvas></div>
+        </div>
+    </div>
+
+    <h3>▸ Route Map</h3>
+    <div id="route-map"></div>
+
+    <h3>▸ Daily Flight Log</h3>
     <table>
         <thead><tr><th>Date</th><th>Flights</th><th></th><th>First</th><th>Last</th></tr></thead>
         <tbody id="log-body"></tbody>
@@ -70,6 +147,15 @@
     <script>
         const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
         const DOWS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const doughnutOpt = { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { color: '#ffb000', font: { size: 11 } } } } };
+        const chartOpt = {
+            responsive: true, maintainAspectRatio: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: 'rgba(255,176,0,0.1)' }, ticks: { color: '#806000', font: { size: 10 } } },
+                y: { grid: { color: 'rgba(255,176,0,0.1)' }, ticks: { color: '#806000' }, beginAtZero: true }
+            }
+        };
 
         let airportCode = '';
 
@@ -89,6 +175,8 @@
             // Stats cards
             const totalFlights = summary.reduce((s,d) => s + d.count, 0);
             const totalDays = summary.length;
+            document.getElementById('total').textContent = totalFlights.toLocaleString();
+            document.getElementById('total-sub').textContent = `${totalDays} days`;
             document.getElementById('avg').textContent = (totalFlights / totalDays).toFixed(1);
 
             const busiest = summary.reduce((a,b) => a.count > b.count ? a : b);
@@ -114,38 +202,58 @@
             const peakDow = avgByDow.indexOf(Math.max(...avgByDow));
             document.getElementById('peak-dow').textContent = DOWS[peakDow];
 
-            // Airline breakdown from full data
+            // Collect all flights for breakdown analysis
             const airlines = {};
+            const aircraft = {};
+            const routes = {};
+            const routeAirports = new Set();
+            let departing = 0, arriving = 0, flyover = 0, unknown = 0;
+
             for (const day of Object.values(full)) {
                 for (const f of (day.flights || [])) {
+                    // Airline prefix
                     const p = f.callsign.replace(/[0-9]/g,'').slice(0,3);
                     if (p) airlines[p] = (airlines[p] || 0) + 1;
-                }
-            }
-            const sorted = Object.entries(airlines).sort((a,b) => b[1] - a[1]).slice(0, 12);
 
-            // Local vs flyover
-            let local = 0, flyover = 0, unknown = 0;
-            for (const day of Object.values(full)) {
-                for (const f of (day.flights || [])) {
+                    // Aircraft type
+                    const ac = (f.aircraft || '').toUpperCase();
+                    if (ac) aircraft[ac] = (aircraft[ac] || 0) + 1;
+
+                    // 4-way traffic split
                     const o = (f.origin || '').toUpperCase();
                     const d = (f.dest || '').toUpperCase();
                     if (!o && !d) unknown++;
-                    else if (o === airportCode || d === airportCode) local++;
+                    else if (o === airportCode) departing++;
+                    else if (d === airportCode) arriving++;
                     else flyover++;
+
+                    // Routes
+                    if (o && d) {
+                        const route = `${o}→${d}`;
+                        routes[route] = (routes[route] || 0) + 1;
+                        routeAirports.add(o);
+                        routeAirports.add(d);
+                    }
                 }
             }
 
-            // Charts
-            const chartOpt = {
-                responsive: true, maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } } },
-                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
-                }
-            };
+            const sortedAirlines = Object.entries(airlines).sort((a,b) => b[1] - a[1]).slice(0, 12);
+            const sortedAircraft = Object.entries(aircraft).sort((a,b) => b[1] - a[1]).slice(0, 12);
+            const sortedRoutes = Object.entries(routes).sort((a,b) => b[1] - a[1]).slice(0, 15);
 
+            // Resolve airline names for tooltips
+            const airlineCodes = sortedAirlines.map(s => s[0]);
+            let airlineNames = {};
+            try {
+                const res = await fetch('/api/airlines', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({codes: airlineCodes})
+                });
+                airlineNames = await res.json();
+            } catch (e) {}
+
+            // Charts
             new Chart(document.getElementById('hourChart'), {
                 type: 'bar',
                 data: {
@@ -164,23 +272,63 @@
                 options: chartOpt
             });
 
+            // Airline doughnut with name tooltips
+            const airlineLabels = sortedAirlines.map(s => airlineNames[s[0]] ? `${s[0]} (${airlineNames[s[0]]})` : s[0]);
             new Chart(document.getElementById('airlineChart'), {
                 type: 'doughnut',
                 data: {
-                    labels: sorted.map(s => s[0]),
-                    datasets: [{ data: sorted.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
+                    labels: airlineLabels,
+                    datasets: [{ data: sortedAirlines.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
                 },
-                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+                options: doughnutOpt
             });
 
+            // 4-way traffic split
             new Chart(document.getElementById('localChart'), {
                 type: 'doughnut',
                 data: {
-                    labels: ['Local', 'Flyover', 'Unknown'],
-                    datasets: [{ data: [local, flyover, unknown], backgroundColor: ['#69f0ae99','#ffb30099','#cccccc99'], borderColor: ['#69f0ae','#ffb300','#ccc'], borderWidth: 1 }]
+                    labels: ['Departing', 'Arriving', 'Flyover', 'Unknown'],
+                    datasets: [{
+                        data: [departing, arriving, flyover, unknown],
+                        backgroundColor: ['#69f0ae99','#3498db99','#ffb30099','#55555599'],
+                        borderColor: ['#69f0ae','#3498db','#ffb300','#555'],
+                        borderWidth: 1
+                    }]
                 },
-                options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+                options: doughnutOpt
             });
+
+            // Aircraft types doughnut
+            new Chart(document.getElementById('aircraftChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: sortedAircraft.map(s => s[0]),
+                    datasets: [{ data: sortedAircraft.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
+                },
+                options: doughnutOpt
+            });
+
+            // Top routes horizontal bar
+            new Chart(document.getElementById('routeChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedRoutes.map(s => s[0]),
+                    datasets: [{ data: sortedRoutes.map(s => s[1]), backgroundColor: 'rgba(255,179,0,0.3)', borderColor: '#ffb300', borderWidth: 1 }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(255,176,0,0.1)' }, ticks: { color: '#806000' }, beginAtZero: true },
+                        y: { grid: { display: false }, ticks: { color: '#ffb000', font: { size: 11 } } }
+                    }
+                }
+            });
+
+            // Route map with Leaflet
+            buildRouteMap(sortedRoutes, routeAirports);
 
             // Daily log table
             const maxCount = Math.max(...summary.map(d => d.count));
@@ -207,6 +355,94 @@
                 });
                 tbody.appendChild(tr);
             }
+        }
+
+        async function buildRouteMap(topRoutes, airportSet) {
+            // Resolve airport coordinates
+            let coords = {};
+            try {
+                const res = await fetch('/api/airport-coords', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({codes: Array.from(airportSet)})
+                });
+                coords = await res.json();
+            } catch (e) { return; }
+
+            const map = L.map('route-map', { zoomControl: true }).setView([40, -40], 3);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                maxZoom: 18,
+            }).addTo(map);
+
+            // Find max route count for color scaling
+            const maxRouteCount = topRoutes.length ? topRoutes[0][1] : 1;
+            const allPoints = [];
+
+            for (const [route, count] of topRoutes) {
+                const [origin, dest] = route.split('→');
+                const oCoords = coords[origin];
+                const dCoords = coords[dest];
+                if (!oCoords || !dCoords) continue;
+
+                allPoints.push([oCoords.lat, oCoords.lon]);
+                allPoints.push([dCoords.lat, dCoords.lon]);
+
+                // Color: green (low) -> amber (mid) -> red (high)
+                const intensity = Math.min(1, count / maxRouteCount);
+                const r = Math.round(105 + 150 * intensity);
+                const g = Math.round(240 - 60 * intensity);
+                const b = Math.round(174 - 174 * intensity);
+                const color = `rgb(${r}, ${g}, ${b})`;
+
+                // Great circle approximation using intermediate points
+                const points = greatCirclePoints(oCoords.lat, oCoords.lon, dCoords.lat, dCoords.lon, 50);
+                L.polyline(points, {
+                    color: color,
+                    weight: 1 + intensity * 3,
+                    opacity: 0.4 + intensity * 0.4,
+                }).addTo(map).bindPopup(`${route}: ${count} flights`);
+
+                // Airport dots
+                L.circleMarker([oCoords.lat, oCoords.lon], {radius: 3, color: '#ffb000', fillColor: '#ffb000', fillOpacity: 0.8, weight: 1})
+                    .addTo(map).bindTooltip(origin);
+                L.circleMarker([dCoords.lat, dCoords.lon], {radius: 3, color: '#ffb000', fillColor: '#ffb000', fillOpacity: 0.8, weight: 1})
+                    .addTo(map).bindTooltip(dest);
+            }
+
+            // Auto-zoom to show all routes
+            if (allPoints.length) {
+                map.fitBounds(allPoints, {padding: [30, 30]});
+            }
+        }
+
+        function greatCirclePoints(lat1, lon1, lat2, lon2, n) {
+            // Generate intermediate points along a great circle with antimeridian handling
+            const toRad = d => d * Math.PI / 180;
+            const toDeg = r => r * 180 / Math.PI;
+            const rawPoints = [];
+            const φ1 = toRad(lat1), λ1 = toRad(lon1);
+            const φ2 = toRad(lat2), λ2 = toRad(lon2);
+            const d = 2 * Math.asin(Math.sqrt(
+                Math.pow(Math.sin((φ1-φ2)/2), 2) +
+                Math.cos(φ1) * Math.cos(φ2) * Math.pow(Math.sin((λ1-λ2)/2), 2)
+            ));
+            if (d < 1e-10) return [[lat1, lon1], [lat2, lon2]];
+            for (let i = 0; i <= n; i++) {
+                const f = i / n;
+                const A = Math.sin((1-f)*d) / Math.sin(d);
+                const B = Math.sin(f*d) / Math.sin(d);
+                const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
+                const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
+                const z = A * Math.sin(φ1) + B * Math.sin(φ2);
+                rawPoints.push([toDeg(Math.atan2(z, Math.sqrt(x*x + y*y))), toDeg(Math.atan2(y, x))]);
+            }
+            // Unwrap antimeridian crossings — keep longitude continuous
+            for (let i = 1; i < rawPoints.length; i++) {
+                while (rawPoints[i][1] - rawPoints[i-1][1] > 180) rawPoints[i][1] -= 360;
+                while (rawPoints[i][1] - rawPoints[i-1][1] < -180) rawPoints[i][1] += 360;
+            }
+            return rawPoints;
         }
 
         document.addEventListener('DOMContentLoaded', loadAll);

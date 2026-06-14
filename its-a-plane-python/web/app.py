@@ -252,6 +252,48 @@ def airport_code():
     return jsonify(result)
 
 
+@app.post("/api/airlines")
+def api_airlines():
+    """Batch-resolve ICAO airline prefixes to names.
+
+    POST JSON: {"codes": ["UAL", "AAL", "DAL"]}
+    Returns: {"UAL": "United Airlines", "AAL": "American Airlines", ...}
+    """
+    try:
+        from utilities.airlines import get_airline_name
+    except ImportError:
+        return jsonify({})
+    data = request.get_json(force=True) or {}
+    codes = data.get("codes", [])
+    result = {}
+    for code in codes[:100]:  # cap at 100
+        name = get_airline_name(code)
+        if name:
+            result[code] = name
+    return jsonify(result)
+
+
+@app.post("/api/airport-coords")
+def api_airport_coords():
+    """Batch-resolve airport codes to coordinates.
+
+    POST JSON: {"codes": ["JFK", "LAX", "CDG"]}
+    Returns: {"JFK": {"lat": 40.64, "lon": -73.78}, ...}
+    """
+    try:
+        from utilities.airports import get_airport_coords
+    except ImportError:
+        return jsonify({})
+    data = request.get_json(force=True) or {}
+    codes = data.get("codes", [])
+    result = {}
+    for code in codes[:200]:  # cap at 200
+        coords = get_airport_coords(code)
+        if coords:
+            result[code] = coords
+    return jsonify(result)
+
+
 # Flight counter and stats (concept from c0wsaysmoo/plane-tracker-rgb-pi)
 from utilities.overhead import COUNTER_FILE
 
@@ -332,15 +374,20 @@ def api_config_get():
         "HOME_LAT", "HOME_LON",
         "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
         "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION", "TIDE_STATION",
-        "AIRPORT_STATUS_LIST",
+        "WATER_TEMP_STATION", "AIRPORT_STATUS_LIST",
         "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
         "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN", "LED_RGB_SEQUENCE",
-        "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
-        "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
-        "MAX_CLOSEST", "MAX_FARTHEST",
+        "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END", "HAT_PWM_ENABLED",
+        "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS", "BLOCKED_CALLSIGNS",
+        "NWS_ALERTS_ENABLED", "ISS_ALERTS_ENABLED",
+        "MAX_CLOSEST", "MAX_FARTHEST", "STATS_LOG_DAYS",
         "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY", "OWM_API_KEY",
         "EMAIL",
     ]:
+        # Return resolved booleans for checkbox fields
+        if key in {"NIGHT_BRIGHTNESS", "HAT_PWM_ENABLED", "NWS_ALERTS_ENABLED", "ISS_ALERTS_ENABLED"}:
+            result[key] = getattr(cfg, key, False)
+            continue
         val = cfg._get(key)
         if key in SECRET_KEYS and val:
             # Mask: show first 4 and last 4 chars
@@ -369,12 +416,13 @@ _VALID_CONFIG_KEYS = {
     "HOME_LAT", "HOME_LON",
     "ZONE_TL_LAT", "ZONE_TL_LON", "ZONE_BR_LAT", "ZONE_BR_LON",
     "JOURNEY_CODE_SELECTED", "TEMPERATURE_LOCATION", "TIDE_STATION",
-    "AIRPORT_STATUS_LIST",
+    "WATER_TEMP_STATION", "AIRPORT_STATUS_LIST",
     "DISTANCE_UNITS", "SPEED_UNITS", "TEMPERATURE_UNITS", "CLOCK_FORMAT",
     "BRIGHTNESS", "BRIGHTNESS_NIGHT", "GPIO_SLOWDOWN", "LED_RGB_SEQUENCE",
-    "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END",
-    "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS",
-    "MAX_CLOSEST", "MAX_FARTHEST",
+    "NIGHT_BRIGHTNESS", "NIGHT_START", "NIGHT_END", "HAT_PWM_ENABLED",
+    "MIN_ALTITUDE", "JOURNEY_BLANK_FILLER", "FORECAST_DAYS", "BLOCKED_CALLSIGNS",
+    "NWS_ALERTS_ENABLED", "ISS_ALERTS_ENABLED",
+    "MAX_CLOSEST", "MAX_FARTHEST", "STATS_LOG_DAYS",
     "FR24_API_KEY", "TOMORROW_API_KEY", "AIRLABS_API_KEY", "NPS_API_KEY", "OWM_API_KEY",
     "EMAIL",
 }
@@ -469,7 +517,56 @@ def api_system():
     except Exception:
         info["cpu_temp"] = "N/A"
 
+    # Load average
+    try:
+        load1, load5, load15 = os.getloadavg()
+        info["load_avg"] = f"{load1:.2f} / {load5:.2f} / {load15:.2f}"
+    except Exception:
+        info["load_avg"] = "N/A"
+
+    # Service uptime
+    try:
+        service = os.environ.get("SERVICE_NAME", "flight-tracker")
+        result = subprocess.run(
+            ["systemctl", "show", service, "--property=ActiveEnterTimestamp"],
+            capture_output=True, text=True, timeout=5
+        )
+        ts_line = result.stdout.strip()  # ActiveEnterTimestamp=Sat 2026-06-14 00:15:32 EDT
+        if "=" in ts_line:
+            ts_str = ts_line.split("=", 1)[1].strip()
+            if ts_str:
+                from datetime import datetime as _dt
+                # Parse systemctl timestamp
+                start = subprocess.run(
+                    ["date", "-d", ts_str, "+%s"],
+                    capture_output=True, text=True, timeout=5
+                )
+                start_epoch = float(start.stdout.strip())
+                svc_secs = _time.time() - start_epoch
+                days = int(svc_secs // 86400)
+                hours = int((svc_secs % 86400) // 3600)
+                mins = int((svc_secs % 3600) // 60)
+                if days > 0:
+                    info["service_uptime"] = f"{days}d {hours}h {mins}m"
+                elif hours > 0:
+                    info["service_uptime"] = f"{hours}h {mins}m"
+                else:
+                    info["service_uptime"] = f"{mins}m"
+    except Exception:
+        info["service_uptime"] = "N/A"
+
     return jsonify(info)
+
+
+@app.post("/api/restart")
+def api_restart():
+    """Restart the flight-tracker service via systemctl."""
+    service = os.environ.get("SERVICE_NAME", "flight-tracker")
+    try:
+        subprocess.Popen(["sudo", "systemctl", "restart", service])
+        return jsonify({"status": "restarting", "service": service})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ---- WiFi Management (concept from c0wsaysmoo/plane-tracker-rgb-pi) ----
