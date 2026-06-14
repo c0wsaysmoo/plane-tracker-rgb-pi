@@ -31,51 +31,6 @@ except (ModuleNotFoundError, NameError, ImportError):
 if TEMPERATURE_UNITS not in ("metric", "imperial"):
     TEMPERATURE_UNITS = "metric"
 
-# ─── Persistent File Cache (shared — both master and slave use this) ─────────
-_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
-os.makedirs(_CACHE_DIR, exist_ok=True)
-_TEMP_CACHE_FILE     = os.path.join(_CACHE_DIR, "temperature.json")
-_FORECAST_CACHE_FILE = os.path.join(_CACHE_DIR, "forecast.json")
-_CACHE_TTL           = 7200  # 2 hours — use file cache if API fails within this window
-
-# ─── Invalidate caches if units have changed ──────────────────────────────────
-def _invalidate_on_units_change():
-    for path in (_TEMP_CACHE_FILE, _FORECAST_CACHE_FILE):
-        try:
-            with open(path, "r") as f:
-                obj = json.load(f)
-            if obj.get("units") != TEMPERATURE_UNITS:
-                logging.info(f"[Weather] Units changed, deleting stale cache: {path}")
-                os.remove(path)
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
-
-_invalidate_on_units_change()
-
-def _load_file_cache(path, units=None):
-    """Load cached data from file. Returns (data, timestamp) or (None, 0).
-    If `units` is provided and doesn't match what's stored, treats cache as a miss
-    so a units change (metric <-> imperial) always triggers a fresh API call."""
-    try:
-        with open(path, "r") as f:
-            obj = json.load(f)
-        if units is not None and obj.get("units") != units:
-            logging.info(f"Cache units mismatch ({obj.get('units')!r} -> {units!r}), invalidating {path}")
-            return None, 0
-        return obj.get("data"), obj.get("ts", 0)
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
-        return None, 0
-
-def _save_file_cache(path, data, units=None):
-    """Save data + timestamp (+ units) to file cache (atomic via rename)."""
-    try:
-        tmp = path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump({"data": data, "ts": time.time(), "units": units}, f)
-        os.replace(tmp, path)  # atomic on POSIX
-    except (PermissionError, OSError) as e:
-        logging.warning(f"Cannot write cache {path}: {e}")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SLAVE MODE — poll weather data from the master Pi
@@ -85,12 +40,9 @@ if MASTER_TRACKER:
     from requests.exceptions import RequestException
 
     def _url(path):
-        host = MASTER_TRACKER.strip().rstrip("/")
+        host = MASTER_TRACKER.rstrip("/")
         if not host.startswith("http"):
-            if ":" not in host:
-                host = f"http://{host}.local:8080"
-            else:
-                host = f"http://{host}"
+            host = f"http://{host}.local:8080"
         return f"{host}{path}"
 
     def grab_temperature_and_humidity():
@@ -105,17 +57,9 @@ if MASTER_TRACKER:
             if temperature is None or humidity is None:
                 logging.warning("[Slave/Weather] Master returned incomplete temp/humidity data")
                 return None, None, None
-            _save_file_cache(_TEMP_CACHE_FILE, [temperature, humidity, weather_code], units=TEMPERATURE_UNITS)
             return temperature, humidity, weather_code
         except RequestException as e:
             logging.error(f"[Slave/Weather] Cannot reach master for weather: {e}")
-            cached, ts = _load_file_cache(_TEMP_CACHE_FILE, units=TEMPERATURE_UNITS)
-            if cached and (time.time() - ts) < _CACHE_TTL:
-                logging.info("[Slave/Weather] Using cached temperature data")
-                vals = tuple(cached) if isinstance(cached, list) else cached
-                if len(vals) == 2:
-                    return vals[0], vals[1], None
-                return vals
             return None, None, None
 
     def grab_forecast(tag="unknown"):
@@ -128,14 +72,9 @@ if MASTER_TRACKER:
             if not isinstance(forecast, list):
                 logging.warning(f"[Slave/Weather:{tag}] Master returned non-list forecast")
                 return []
-            _save_file_cache(_FORECAST_CACHE_FILE, forecast, units=TEMPERATURE_UNITS)
             return forecast
         except RequestException as e:
             logging.error(f"[Slave/Weather:{tag}] Cannot reach master for forecast: {e}")
-            cached, ts = _load_file_cache(_FORECAST_CACHE_FILE, units=TEMPERATURE_UNITS)
-            if cached and (time.time() - ts) < _CACHE_TTL:
-                logging.info(f"[Slave/Weather:{tag}] Using cached forecast data")
-                return cached
             return []
 
     print(f"[Weather] Slave mode — polling master at {_url('')}")
@@ -157,10 +96,82 @@ else:
     except (ModuleNotFoundError, NameError, ImportError):
         TOMORROW_API_KEY = None
 
-    try:
-        from config import TEMPERATURE_LOCATION
-    except (ImportError, NameError):
-        TEMPERATURE_LOCATION = ""
+    from config import TEMPERATURE_LOCATION
+
+    # ─── Persistent File Cache ────────────────────────────────────────────────
+    _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+    _TEMP_CACHE_FILE     = os.path.join(_CACHE_DIR, "temperature.json")
+    _FORECAST_CACHE_FILE = os.path.join(_CACHE_DIR, "forecast.json")
+    _CACHE_TTL           = 7200  # 2 hours — use file cache if API fails within this window
+
+    # ─── Day/Night helpers ────────────────────────────────────────────────────
+    def _is_daytime():
+        """Return True if current local time is between today's sunrise and sunset."""
+        try:
+            cached, _ = _load_file_cache(_FORECAST_CACHE_FILE)
+            if cached and isinstance(cached, list):
+                today = datetime.now().date().isoformat()
+                for interval in cached:
+                    if interval.get("startTime", "").startswith(today):
+                        values = interval.get("values", {})
+                        sunrise_str = values.get("sunriseTime")
+                        sunset_str  = values.get("sunsetTime")
+                        if sunrise_str and sunset_str:
+                            def _parse(s):
+                                return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
+                            return _parse(sunrise_str) <= datetime.now() <= _parse(sunset_str)
+        except Exception:
+            pass
+        h = datetime.now().hour
+        return 6 <= h < 20
+
+    def _to_day_night_code(code):
+        """Convert a 4-digit base weatherCode to the 5-digit day/night variant."""
+        if code is None:
+            return None
+        code = int(code)
+        if code < 10000:
+            return code * 10 + (0 if _is_daytime() else 1)
+        return code
+
+    # ─── Invalidate caches if units have changed ──────────────────────────────
+    def _invalidate_on_units_change():
+        for path in (_TEMP_CACHE_FILE, _FORECAST_CACHE_FILE):
+            try:
+                with open(path, "r") as f:
+                    obj = json.load(f)
+                if obj.get("units") != TEMPERATURE_UNITS:
+                    logging.info(f"[Weather] Units changed, deleting stale cache: {path}")
+                    os.remove(path)
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+
+    _invalidate_on_units_change()
+
+    def _load_file_cache(path, units=None):
+        """Load cached data from file. Returns (data, timestamp) or (None, 0).
+        If `units` is provided and doesn't match what's stored, treats cache as a miss
+        so a units change (metric ↔ imperial) always triggers a fresh API call."""
+        try:
+            with open(path, "r") as f:
+                obj = json.load(f)
+            if units is not None and obj.get("units") != units:
+                logging.info(f"Cache units mismatch ({obj.get('units')!r} → {units!r}), invalidating {path}")
+                return None, 0
+            return obj.get("data"), obj.get("ts", 0)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            return None, 0
+
+    def _save_file_cache(path, data, units=None):
+        """Save data + timestamp (+ units) to file cache (atomic via rename)."""
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"data": data, "ts": time.time(), "units": units}, f)
+            os.replace(tmp, path)  # atomic on POSIX
+        except (PermissionError, OSError) as e:
+            logging.warning(f"Cannot write cache {path}: {e}")
 
     def is_dns_error(exc: Exception) -> bool:
         cause = exc
@@ -222,7 +233,7 @@ else:
             data         = request.json().get("data", {}).get("values", {})
             temperature  = data.get("temperature")
             humidity     = data.get("humidity")
-            weather_code = data.get("weatherCode")
+            weather_code = _to_day_night_code(data.get("weatherCode"))
 
             if temperature is None or humidity is None:
                 logging.error("Incomplete data from API")
