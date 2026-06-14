@@ -276,7 +276,8 @@ The email
 
 <img width="1433" height="1862" alt="day" src="https://github.com/user-attachments/assets/5b513583-1b76-411f-8f5f-316a2ad11bbc" />
 <img width="1429" height="2319" alt="main" src="https://github.com/user-attachments/assets/f66e705c-f9d4-43c6-a0b8-70ee8b198782" />
-<img width="1438" height="677" alt="index" src="https://github.com/user-attachments/assets/89825447-1160-4f72-9ef0-c5bc7cfc25a6" />
+<img width="2553" height="704" alt="Screenshot 2026-06-14 085757" src="https://github.com/user-attachments/assets/ac85c1b3-cfd7-4d9f-a38e-bc6d1db9af0f" />
+
 
 The local webpage to track flights or to look at your maps/logs/stats. You can look at the overall stats or click on the dates at the bottom to look at stats for individual days
 
