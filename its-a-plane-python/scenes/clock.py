@@ -270,8 +270,11 @@ class ClockScene(object):
         needs_redraw = getattr(self, "_redraw_time", False)
 
         if mode_changed or needs_redraw:
-            # Clear entire left region on mode switch or scene re-entry
-            self.draw_square(0, 0, 40, 12, colours.BLACK)
+            # Clear clock area (top-left) and full bottom row
+            # Bottom row must extend to x=64 to clear stale date pixels
+            # when alert text overflows into that area
+            self.draw_square(0, 0, 35, 5, colours.BLACK)
+            self.draw_square(0, 6, 64, 12, colours.BLACK)
         elif time_changed:
             # Just clear old clock text
             if self._last_time:
@@ -301,9 +304,15 @@ class ClockScene(object):
             graphics.DrawText(self.canvas, ALERT_FONT,
                               ALERT_POSITION[0], ALERT_POSITION[1],
                               alert_color, alert_text)
+            # When alert overflows into date area, clear stale date pixels
+            # past the end of the alert text
+            alert_end_x = len(alert_text) * 4
+            if alert_end_x < 64 and len(alert_text) > 9:
+                self.draw_square(alert_end_x, 6, 64, 12, colours.BLACK)
 
         self._last_time = current_time
         self._alert_active = alert_now_active
         self._last_alert_text = alert_text
-        self._alert_overflow = bool(alert_text and len(alert_text) > 9)
+        # Suppress date if ANY alert would overflow into date area (prevents flicker)
+        self._alert_overflow = any(len(t) > 9 for t, _ in alert_items) if alert_items else False
         self._redraw_time = False
