@@ -227,10 +227,10 @@
                     else if (d === airportCode) arriving++;
                     else flyover++;
 
-                    // Routes
+                    // Routes (bidirectional — merge A→B and B→A)
                     if (o && d) {
-                        const route = `${o}→${d}`;
-                        routes[route] = (routes[route] || 0) + 1;
+                        const key = [o, d].sort().join('↔');
+                        routes[key] = (routes[key] || 0) + 1;
                         routeAirports.add(o);
                         routeAirports.add(d);
                     }
@@ -239,7 +239,9 @@
 
             const sortedAirlines = Object.entries(airlines).sort((a,b) => b[1] - a[1]).slice(0, 12);
             const sortedAircraft = Object.entries(aircraft).sort((a,b) => b[1] - a[1]).slice(0, 12);
-            const sortedRoutes = Object.entries(routes).sort((a,b) => b[1] - a[1]).slice(0, 15);
+            const allRoutesSorted = Object.entries(routes).sort((a,b) => b[1] - a[1]);
+            const sortedRoutes = allRoutesSorted.slice(0, 15);
+            const mapRoutes = allRoutesSorted.slice(0, 50);
 
             // Resolve airline names and aircraft type names for tooltips
             const airlineCodes = sortedAirlines.map(s => s[0]);
@@ -329,8 +331,8 @@
                 }
             });
 
-            // Route map with Leaflet
-            buildRouteMap(sortedRoutes, routeAirports);
+            // Route map with Leaflet (show more routes than the chart)
+            buildRouteMap(mapRoutes, routeAirports);
 
             // Daily log table
             const maxCount = Math.max(...summary.map(d => d.count));
@@ -382,7 +384,7 @@
             const allPoints = [];
 
             for (const [route, count] of topRoutes) {
-                const [origin, dest] = route.split('→');
+                const [origin, dest] = route.split('↔');
                 const oCoords = coords[origin];
                 const dCoords = coords[dest];
                 if (!oCoords || !dCoords) continue;
