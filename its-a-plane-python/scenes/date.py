@@ -116,7 +116,7 @@ class DateScene(object):
                 alert_end_x = overflow_chars * 4
                 clear_start = max(alert_end_x, DATE_POSITION[0])
                 if clear_start < 64:
-                    self.draw_square(clear_start, 6, 64, 12, colours.BLACK)
+                    self.draw_square(clear_start, 6, 64, 11, colours.BLACK)
                 self._last_display_text = None
             self._redraw_date = True
             return

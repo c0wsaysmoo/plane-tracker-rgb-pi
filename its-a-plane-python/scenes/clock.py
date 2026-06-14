@@ -299,9 +299,10 @@ class ClockScene(object):
                                   ALERT_POSITION[1], colours.BLACK, self._last_alert_text)
 
         # Clear date zone before drawing a long alert — DrawText only sets
-        # foreground pixels, so old date pixels leak through the glyph gaps
+        # foreground pixels, so old date pixels leak through the glyph gaps.
+        # y=6-11 only (y=12 is the top row of forecast day names below).
         if (mode_changed or alert_text_changed) and alert_text and len(alert_text) > 9:
-            self.draw_square(36, 6, 64, 12, colours.BLACK)
+            self.draw_square(36, 6, 64, 11, colours.BLACK)
 
         # Draw clock
         if alert_now_active:
