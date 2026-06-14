@@ -135,7 +135,8 @@ async function loadData() {
   const homeCoords = cfg.config?.location?.location_home || [];
   const homeLat = homeCoords[0] ?? null;
   const homeLon = homeCoords[1] ?? null;
-  return {summary:s, full:f, airportCode:a.code, distUnits, homeLat, homeLon};
+  const zone = cfg.config?.location?.zone_home || null;
+  return {summary:s, full:f, airportCode:a.code, distUnits, homeLat, homeLon, zone};
 }
 
 function haversineDist(lat1, lon1, lat2, lon2, units) {
@@ -228,7 +229,7 @@ function aircraftBreakdown(full) {
 }
 
 async function render() {
-  const {summary,full,airportCode,distUnits,homeLat,homeLon} = await loadData();
+  const {summary,full,airportCode,distUnits,homeLat,homeLon,zone} = await loadData();
   if (!summary.length) {
     document.getElementById('content').innerHTML='<div class="loading">No data yet — flights will appear here once logged.</div>';
     return;
@@ -355,7 +356,7 @@ async function render() {
         tooltip:{callbacks:{label:ctx=>{const n=AIRCRAFT_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}      }}});
   }
 
-  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon);
+  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
 }
 
 // ── Route Heat Map ────────────────────────────────────────────────────────────
@@ -405,7 +406,7 @@ function heatColor(t) {
 }
 
 let _routeMap = null;
-async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon) {
+async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, zone) {
   // Sort descending to tally all routes, but draw ascending so hot routes paint on top
   const entries = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,300);
   if (!entries.length) return;
@@ -472,6 +473,12 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon) {
     L.circleMarker([homeLat, homeLon], {
       radius: 6, fillColor: '#ff3d00', fillOpacity: 0.95, color: '#ff9800', weight: 1.5
     }).bindTooltip('Home', { permanent: false, className: 'route-tip' }).addTo(map);
+  }
+
+  if (zone && zone.tl_y && zone.tl_x && zone.br_y && zone.br_x) {
+    L.rectangle([[zone.tl_y, zone.tl_x], [zone.br_y, zone.br_x]], {
+      color: '#69f0ae', weight: 1.5, fill: false, dashArray: '4 4', opacity: 0.7
+    }).bindTooltip('Watch zone', { permanent: false, className: 'route-tip' }).addTo(map);
   }
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
