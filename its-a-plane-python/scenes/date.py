@@ -107,6 +107,15 @@ class DateScene(object):
             self._redraw_date = True
             return
 
+        # Suppress date when alert text overflows into date area
+        if getattr(self, '_alert_overflow', False):
+            if self._last_display_text:
+                graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0],
+                                  DATE_POSITION[1], colours.BLACK, self._last_display_text)
+                self._last_display_text = None
+            self._redraw_date = True
+            return
+
         now = datetime.now()
         current_date = now.strftime("%b %d")
 
