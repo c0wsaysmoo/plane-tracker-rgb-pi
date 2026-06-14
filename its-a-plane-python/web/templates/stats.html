@@ -241,16 +241,17 @@
             const sortedAircraft = Object.entries(aircraft).sort((a,b) => b[1] - a[1]).slice(0, 12);
             const sortedRoutes = Object.entries(routes).sort((a,b) => b[1] - a[1]).slice(0, 15);
 
-            // Resolve airline names for tooltips
+            // Resolve airline names and aircraft type names for tooltips
             const airlineCodes = sortedAirlines.map(s => s[0]);
             let airlineNames = {};
+            let aircraftNames = {};
             try {
-                const res = await fetch('/api/airlines', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({codes: airlineCodes})
-                });
-                airlineNames = await res.json();
+                const [alRes, acRes] = await Promise.all([
+                    fetch('/api/airlines', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({codes: airlineCodes}) }),
+                    fetch('/api/aircraft-types')
+                ]);
+                airlineNames = await alRes.json();
+                aircraftNames = await acRes.json();
             } catch (e) {}
 
             // Charts
@@ -298,11 +299,12 @@
                 options: doughnutOpt
             });
 
-            // Aircraft types doughnut
+            // Aircraft types doughnut with resolved names
+            const aircraftLabels = sortedAircraft.map(s => aircraftNames[s[0]] ? `${aircraftNames[s[0]]} (${s[0]})` : s[0]);
             new Chart(document.getElementById('aircraftChart'), {
                 type: 'doughnut',
                 data: {
-                    labels: sortedAircraft.map(s => s[0]),
+                    labels: aircraftLabels,
                     datasets: [{ data: sortedAircraft.map(s => s[1]), backgroundColor: COLOURS.map(c => c + '99'), borderColor: COLOURS, borderWidth: 1 }]
                 },
                 options: doughnutOpt

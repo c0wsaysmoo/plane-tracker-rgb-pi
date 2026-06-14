@@ -294,6 +294,25 @@ def api_airport_coords():
     return jsonify(result)
 
 
+@app.get("/api/aircraft-types")
+def api_aircraft_types():
+    """Return aircraft type code -> name mapping (from aircraft_types.json)."""
+    path = os.path.join(BASE_DIR, "aircraft_types.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # Build flat lookup: both primary code and short_codes -> name
+        result = {}
+        for code, info in data.items():
+            name = info.get("name", code)
+            result[code] = name
+            for sc in info.get("short_codes", []):
+                result[sc] = name
+        return jsonify(result)
+    except Exception:
+        return jsonify({})
+
+
 # Flight counter and stats (concept from c0wsaysmoo/plane-tracker-rgb-pi)
 from utilities.overhead import COUNTER_FILE
 
