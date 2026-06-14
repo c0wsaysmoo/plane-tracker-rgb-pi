@@ -313,6 +313,5 @@ class ClockScene(object):
         self._last_time = current_time
         self._alert_active = alert_now_active
         self._last_alert_text = alert_text
-        # Suppress date if ANY alert would overflow into date area (prevents flicker)
-        self._alert_overflow = any(len(t) > 9 for t, _ in alert_items) if alert_items else False
+        self._alert_overflow = bool(alert_text and len(alert_text) > 9)
         self._redraw_time = False
