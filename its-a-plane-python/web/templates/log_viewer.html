@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }} — Flight Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.08); --amber-bright: #ffd54f;
+    --green: #69f0ae; --red: #ff3d00; --orange: #ff9800;
+    --row-border: rgba(255,179,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  .board-header {
+    background: var(--amber);
+    color: var(--bg);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .board-title {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--amber-dim);
+    background: rgba(255,179,0,0.03);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .back {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    letter-spacing: 2px;
+    background: var(--bg);
+    color: var(--amber);
+    padding: 2px 12px;
+    text-decoration: none;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  #status-text {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 1px;
+    color: var(--amber-dim);
+  }
+
+  .filter-wrap {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--amber-dim);
+  }
+
+  #filter-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 2px 6px;
+    outline: none;
+    width: 200px;
+    letter-spacing: 1px;
+  }
+
+  #filter-input::placeholder { color: var(--amber-dim); }
+  #filter-input:focus { border-color: var(--amber); }
+
+  #log-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 16px;
+  }
+
+  /* ── Shared table ── */
+  table { width: 100%; border-collapse: collapse; font-family: 'VT323', monospace; font-size: 18px; }
+
+  thead th {
+    text-align: left;
+    padding: 6px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--amber-dim);
+    border-bottom: 2px solid var(--amber-dim);
+    white-space: nowrap;
+  }
+
+  tbody tr { border-bottom: 1px solid var(--row-border); }
+  tbody tr:hover td { background: var(--amber-glow); }
+  td { padding: 7px 10px; vertical-align: top; letter-spacing: 1px; }
+
+  .cs  { color: var(--amber-bright); font-size: 20px; }
+  .dim { color: var(--amber-dim); }
+  .hi  { color: var(--amber); }
+  .grn { color: var(--green); }
+  .org { color: var(--orange); }
+  .red { color: var(--red); }
+
+  /* ── Plain-text log ── */
+  .log-line {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--row-border);
+    color: var(--amber);
+  }
+
+  .log-line.warn  { color: var(--orange); }
+  .log-line.error { color: var(--red); }
+
+  /* ── Counter accordion ── */
+  .day-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-bottom: 1px solid var(--amber-dim);
+    cursor: pointer;
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 2px;
+    user-select: none;
+  }
+
+  .day-header:hover { background: var(--amber-glow); }
+  .day-header .toggle { color: var(--amber-dim); font-size: 14px; margin-left: auto; }
+  .day-flights { display: none; padding-bottom: 8px; }
+  .day-flights.open { display: block; }
+
+  .empty-state {
+    color: var(--amber-dim);
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 3px;
+    text-align: center;
+    margin-top: 60px;
+  }
+
+  .error-state {
+    color: var(--red);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    letter-spacing: 2px;
+    text-align: center;
+    margin-top: 60px;
+    padding: 0 20px;
+  }
+</style>
+</head>
+<body data-mode="{{ mode }}" data-url="{{ data_url }}">
+
+<div class="board-header">
+  <span style="font-size:26px">✈</span>
+  <div class="board-title">{{ title }}</div>
+  <a class="back" href="/">← BOARD</a>
+</div>
+
+<div class="toolbar">
+  <span id="status-text">Loading...</span>
+  <div class="filter-wrap">
+    <span class="filter-label">Filter</span>
+    <input id="filter-input" type="text" placeholder="keyword..." oninput="applyFilter()">
+  </div>
+</div>
+
+<div id="log-container"></div>
+
+<script>
+(function() {
+  var MODE     = document.body.getAttribute('data-mode');
+  var DATA_URL = document.body.getAttribute('data-url');
+  var rawData  = null;
+  var filterText = '';
+
+  function setStatus(t) {
+    var el = document.getElementById('status-text');
+    if (el) el.textContent = t;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function fmtNum(v, unit) {
+    if (v === null || v === undefined || v === '') return '<span class="dim">—</span>';
+    var n = parseFloat(v);
+    if (isNaN(n)) return esc(v);
+    var s = Math.round(n).toLocaleString();
+    return unit ? s + '<span class="dim"> ' + unit + '</span>' : s;
+  }
+
+  function fmtDist(v) {
+    if (v === null || v === undefined || v === '') return '<span class="dim">—</span>';
+    var n = parseFloat(v);
+    if (isNaN(n)) return esc(v);
+    return n.toFixed(3) + '<span class="dim"> mi</span>';
+  }
+
+  // ── Flights mode (closest / farthest) ──────────────────────────────────────
+  function renderFlights(data, filter) {
+    var arr = Array.isArray(data) ? data : Object.values(data);
+    var rows = filter ? arr.filter(function(f) {
+      return JSON.stringify(f).toLowerCase().indexOf(filter) !== -1;
+    }) : arr;
+
+    if (!rows.length) return '<div class="empty-state">NO RECORDS</div>';
+
+    var isFarthest = rows.some(function(r) { return r.farthest_value !== undefined; });
+    var distLabel  = isFarthest ? 'Farthest Dist' : 'Distance';
+
+    var html = '<table><thead><tr>'
+      + '<th>Callsign</th><th>Route</th><th>Aircraft</th><th>Airline</th>'
+      + '<th>' + esc(distLabel) + '</th><th>Alt</th><th>Speed</th><th>Dir</th><th>Timestamp</th>'
+      + '</tr></thead><tbody>';
+
+    for (var i = 0; i < rows.length; i++) {
+      var f = rows[i];
+      var dist = isFarthest ? f.farthest_value : f.distance;
+      html += '<tr>'
+        + '<td class="cs">' + esc(f.callsign || '—') + '</td>'
+        + '<td class="hi">' + esc(f.origin || '?') + ' <span class="dim">→</span> ' + esc(f.destination || '?') + '</td>'
+        + '<td class="dim">' + esc(f.plane || '—') + '</td>'
+        + '<td class="dim">' + esc(f.airline || '—') + '</td>'
+        + '<td>' + fmtDist(dist) + '</td>'
+        + '<td>' + fmtNum(f.altitude, 'ft') + '</td>'
+        + '<td>' + fmtNum(f.ground_speed, 'kts') + '</td>'
+        + '<td class="dim">' + esc(f.direction || '—') + '</td>'
+        + '<td class="dim" style="font-size:14px">' + esc(f.timestamp || '—') + '</td>'
+        + '</tr>';
+    }
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  // ── Counter mode ────────────────────────────────────────────────────────────
+  function renderCounter(data, filter) {
+    var entries = Object.entries(data).sort(function(a, b) {
+      return b[0] < a[0] ? -1 : b[0] > a[0] ? 1 : 0;
+    });
+    if (!entries.length) return '<div class="empty-state">NO RECORDS</div>';
+
+    var html = '';
+    for (var i = 0; i < entries.length; i++) {
+      var date = entries[i][0];
+      var day  = entries[i][1];
+      var flights = (day.flights || []);
+      if (filter) {
+        flights = flights.filter(function(f) {
+          return JSON.stringify(f).toLowerCase().indexOf(filter) !== -1;
+        });
+        if (!flights.length && date.indexOf(filter) === -1) continue;
+      }
+
+      var id = 'day' + date.replace(/\D/g, '');
+      var count = filter ? flights.length : (day.count || flights.length);
+      var timeRange = (day.first_seen || '') + (day.last_seen ? ' → ' + day.last_seen : '');
+
+      html += '<div class="day-header" onclick="toggleDay(\'' + id + '\')">'
+        + '<span class="grn">' + esc(date) + '</span>'
+        + '<span class="dim">—</span>'
+        + '<span>' + count + ' flights</span>'
+        + (timeRange ? '<span class="dim" style="font-size:13px">' + esc(timeRange) + '</span>' : '')
+        + '<span class="toggle" id="tog-' + id + '">▼</span>'
+        + '</div>'
+        + '<div class="day-flights' + (filter ? ' open' : '') + '" id="' + id + '">'
+        + '<table><thead><tr><th>Callsign</th><th>Time</th><th>Route</th><th>Aircraft</th></tr></thead><tbody>';
+
+      if (flights.length) {
+        for (var j = 0; j < flights.length; j++) {
+          var f = flights[j];
+          html += '<tr>'
+            + '<td class="cs">' + esc(f.callsign || '—') + '</td>'
+            + '<td class="dim">' + esc(f.time || (f.hour !== undefined ? f.hour + ':00' : '—')) + '</td>'
+            + '<td class="dim">' + esc(f.origin || '—') + ' → ' + esc(f.dest || '—') + '</td>'
+            + '<td class="dim">' + esc(f.aircraft || '—') + '</td>'
+            + '</tr>';
+        }
+      } else {
+        html += '<tr><td colspan="4" class="dim" style="padding:8px 10px">No flights recorded</td></tr>';
+      }
+
+      html += '</tbody></table></div>';
+    }
+    return html || '<div class="empty-state">NO RECORDS</div>';
+  }
+
+  // ── API calls mode (plain text) ─────────────────────────────────────────────
+  function renderApiCalls(text, filter) {
+    var lines = text.split('\n');
+    var visible = filter ? lines.filter(function(l) {
+      return l.toLowerCase().indexOf(filter) !== -1;
+    }) : lines;
+    visible = visible.filter(function(l) { return l.trim(); });
+    if (!visible.length) return '<div class="empty-state">NO RECORDS</div>';
+
+    var html = '';
+    for (var i = 0; i < visible.length; i++) {
+      var l = visible[i];
+      var cls = /error|fail|exception/i.test(l) ? ' error' : /warn/i.test(l) ? ' warn' : '';
+      html += '<div class="log-line' + cls + '">' + esc(l) + '</div>';
+    }
+    return html;
+  }
+
+  function applyFilter() {
+    filterText = (document.getElementById('filter-input').value || '').toLowerCase().trim();
+    render();
+  }
+
+  function render() {
+    if (rawData === null) return;
+    var c = document.getElementById('log-container');
+    if (!c) return;
+    try {
+      if (MODE === 'flights')       c.innerHTML = renderFlights(rawData, filterText);
+      else if (MODE === 'counter')  c.innerHTML = renderCounter(rawData, filterText);
+      else                          c.innerHTML = renderApiCalls(rawData, filterText);
+    } catch(e) {
+      c.innerHTML = '<div class="error-state">RENDER ERROR: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  function toggleDay(id) {
+    var el  = document.getElementById(id);
+    var tog = document.getElementById('tog-' + id);
+    if (!el) return;
+    var open = el.classList.toggle('open');
+    if (tog) tog.textContent = open ? '▲' : '▼';
+  }
+  window.toggleDay = toggleDay;
+  window.applyFilter = applyFilter;
+
+  function load() {
+    setStatus('Loading...');
+    fetch(DATA_URL)
+      .then(function(res) {
+        if (!res.ok) {
+          return res.text().then(function(body) {
+            throw new Error('HTTP ' + res.status + ' from ' + DATA_URL);
+          });
+        }
+        if (MODE === 'apicalls') {
+          return res.text().then(function(text) {
+            rawData = text;
+            var count = text.split('\n').filter(function(l) { return l.trim(); }).length;
+            setStatus(count + ' entries');
+            render();
+          });
+        } else {
+          return res.json().then(function(data) {
+            rawData = data;
+            var count = Array.isArray(data) ? data.length : Object.keys(data).length;
+            setStatus(count + (MODE === 'counter' ? ' days' : ' records'));
+            render();
+          });
+        }
+      })
+      .catch(function(e) {
+        setStatus('Error loading data');
+        var c = document.getElementById('log-container');
+        if (c) c.innerHTML = '<div class="error-state">FAILED TO LOAD: ' + esc(e.message) + '<br><span class="dim" style="font-size:14px">URL: ' + esc(DATA_URL) + '</span></div>';
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
