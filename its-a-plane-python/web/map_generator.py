@@ -64,9 +64,9 @@ def generate_closest_map(entries, filename="closest.html"):
             <b>From:</b> {entry.get('origin','')}<br>
             <b>To:</b> {entry.get('destination','')}<br>
             <b>Plane:</b> {entry.get('plane','')}<br>
-            <b>Distance to Home:</b> {dist_home:.2f} {unit_label}<br>
-            <b>Distance Origin:</b> {dist_origin:.2f} {unit_label}<br>
-            <b>Distance Destination:</b> {dist_dest:.2f} {unit_label}
+            <b>Distance to Home:</b> {dist_home:.4f} {unit_label}<br>
+            <b>Distance Origin:</b> {dist_origin:.4f} {unit_label}<br>
+            <b>Distance Destination:</b> {dist_dest:.4f} {unit_label}
         </div>
         """
         folium.Marker(plane_loc, popup=popup_text, icon=folium.Icon(color=color)).add_to(m)
@@ -120,9 +120,9 @@ def generate_farthest_map(entries, filename="farthest.html"):
             <b>From:</b> {entry.get('origin','')}<br>
             <b>To:</b> {entry.get('destination','')}<br>
             <b>Plane:</b> {entry.get('plane','')}<br>
-            <b>Distance to Home:</b> {dist_home:.2f} {unit_label}<br>
-            <b>Distance Origin:</b> {dist_origin:.2f} {unit_label}<br>
-            <b>Distance Destination:</b> {dist_dest:.2f} {unit_label}
+            <b>Distance to Home:</b> {dist_home:.4f} {unit_label}<br>
+            <b>Distance Origin:</b> {dist_origin:.4f} {unit_label}<br>
+            <b>Distance Destination:</b> {dist_dest:.4f} {unit_label}
         </div>
         """
 
