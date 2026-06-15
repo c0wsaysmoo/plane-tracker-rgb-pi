@@ -486,7 +486,7 @@ def airport_code():
             import requests as _req
             r = _req.get(
                 "https://nominatim.openstreetmap.org/reverse",
-                params={"lat": lat, "lon": lon, "format": "json", "zoom": 15},
+                params={"lat": lat, "lon": lon, "format": "json", "zoom": 13},
                 headers={"User-Agent": "plane-tracker-rgb-pi/1.0"},
                 timeout=5,
             )
@@ -863,6 +863,28 @@ def wifi_connect():
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.get("/logs")
+def logs_page():
+    return render_template("logs.html")
+
+@app.get("/api/logs")
+def api_logs():
+    """Return recent journalctl lines for the its-a-plane service."""
+    since = request.args.get("since", "")
+    n     = request.args.get("n", "500")
+    try:
+        cmd = ["journalctl", "-u", "its-a-plane.service", "--no-pager", "-o", "short-iso"]
+        if since:
+            cmd += ["--since", since]
+        else:
+            cmd += ["-n", n]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        lines = result.stdout.splitlines()
+        return jsonify({"lines": lines, "error": None})
+    except Exception as e:
+        return jsonify({"lines": [], "error": str(e)})
 
 
 if __name__ == "__main__":
