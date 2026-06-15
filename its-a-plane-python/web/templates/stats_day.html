@@ -200,7 +200,7 @@ async function render() {
   const flights = day.flights || [];
   const byHour  = new Array(24).fill(0);
   flights.forEach(f=>byHour[f.hour]++);
-  const peakHour = byHour.indexOf(Math.max(...byHour));
+  const maxHourVal = Math.max(...byHour); const peakHours = new Set(byHour.map((v,i)=>v===maxHourVal?i:-1).filter(i=>i>=0)); const peakHour = [...peakHours][0];
   const airlines = airlineBreakdown(flights);
   const airports = routeBreakdown(flights);
   const aircraft = aircraftBreakdown(flights);
@@ -216,7 +216,7 @@ async function render() {
   document.getElementById('content').innerHTML=`
     <div class="stats-row">
       <div class="stat-card"><div class="stat-label">Total Flights</div><div class="stat-value">${day.count}</div><div class="stat-sub">unique callsigns</div></div>
-      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${peakHour}:00</div><div class="stat-sub">${byHour[peakHour]} flights</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${[...peakHours].map(h=>h+':00').join(', ')}</div><div class="stat-sub">${byHour[peakHour]} flights</div></div>
       <div class="stat-card"><div class="stat-label">Unique Routes</div><div class="stat-value">${totalUniqueRoutes}</div><div class="stat-sub">unique routes</div></div>
       <div class="stat-card"><div class="stat-label">First Seen</div><div class="stat-value" style="font-size:24px">${day.first_seen}</div><div class="stat-sub">${flights[0]?.callsign||''}</div></div>
       <div class="stat-card"><div class="stat-label">Last Seen</div><div class="stat-value" style="font-size:24px">${day.last_seen}</div><div class="stat-sub">${flights[flights.length-1]?.callsign||''}</div></div>
@@ -272,8 +272,8 @@ async function render() {
   new Chart(document.getElementById('hourChart').getContext('2d'),{
     type:'bar',
     data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:byHour,
-      backgroundColor:byHour.map((_,i)=>i===peakHour?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),
-      borderColor:byHour.map((_,i)=>i===peakHour?'#ff6b35':'#ffb300'),
+      backgroundColor:byHour.map((_,i)=>peakHours.has(i)?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),
+      borderColor:byHour.map((_,i)=>peakHours.has(i)?'#ff6b35':'#ffb300'),
       borderWidth:1,borderRadius:2}]},options:CHART_OPT});
 
   new Chart(document.getElementById('airlineChart').getContext('2d'),{

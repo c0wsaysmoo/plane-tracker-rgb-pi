@@ -244,9 +244,9 @@ async function render() {
   const avgPerDay=(totalFlights/totalDays).toFixed(1);
   const maxDay=summary.reduce((a,b)=>b.count>a.count?b:a);
   const hourAvg=avgByHour(summary);
-  const peakHour=hourAvg.indexOf(Math.max(...hourAvg));
+  const maxHourVal=Math.max(...hourAvg);const peakHours=new Set(hourAvg.map((v,i)=>v===maxHourVal?i:-1).filter(i=>i>=0));const peakHour=[...peakHours][0];
   const dowAvg=avgByDow(summary);
-  const peakDowIdx=dowAvg.indexOf(Math.max(...dowAvg));
+  const maxDowVal=Math.max(...dowAvg);const peakDowIdxs=new Set(dowAvg.map((v,i)=>v===maxDowVal?i:-1).filter(i=>i>=0));const peakDowIdx=[...peakDowIdxs][0];
   const airlines=airlineBreakdown(full);
   const airports=routeBreakdown(full);
   const aircraft=aircraftBreakdown(full);
@@ -259,8 +259,8 @@ async function render() {
     <div class="stats-row">
       <div class="stat-card"><div class="stat-label">Daily Average</div><div class="stat-value">${avgPerDay}</div><div class="stat-sub">flights/day over ${totalDays} days</div></div>
       <div class="stat-card"><div class="stat-label">Busiest Day</div><div class="stat-value">${maxDay.count}</div><div class="stat-sub">${maxDay.date}</div></div>
-      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${peakHour}:00</div><div class="stat-sub">${hourAvg[peakHour].toFixed(1)} avg flights</div></div>
-      <div class="stat-card"><div class="stat-label">Peak Day</div><div class="stat-value">${DAYS[peakDowIdx]}</div><div class="stat-sub">${dowAvg[peakDowIdx].toFixed(1)} avg flights</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${[...peakHours].map(h=>h+':00').join(', ')}</div><div class="stat-sub">${hourAvg[peakHour].toFixed(1)} avg flights</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Day</div><div class="stat-value">${[...peakDowIdxs].map(i=>DAYS[i]).join(', ')}</div><div class="stat-sub">${dowAvg[peakDowIdx].toFixed(1)} avg flights</div></div>
       <div class="stat-card"><div class="stat-label">Unique Routes</div><div class="stat-value">${totalUniqueRoutes}</div><div class="stat-sub">unique routes</div></div>
     </div>
 
@@ -319,10 +319,10 @@ async function render() {
   });
 
   new Chart(document.getElementById('hourChart').getContext('2d'),{
-    type:'bar',data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:hourAvg,backgroundColor:hourAvg.map((_,i)=>i===peakHour?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),borderColor:hourAvg.map((_,i)=>i===peakHour?'#ff6b35':'#ffb300'),borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+    type:'bar',data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:hourAvg,backgroundColor:hourAvg.map((_,i)=>peakHours.has(i)?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),borderColor:hourAvg.map((_,i)=>peakHours.has(i)?'#ff6b35':'#ffb300'),borderWidth:1,borderRadius:2}]},options:CHART_OPT});
 
   new Chart(document.getElementById('dowChart').getContext('2d'),{
-    type:'bar',data:{labels:DAYS,datasets:[{data:dowAvg,backgroundColor:dowAvg.map((_,i)=>i===peakDowIdx?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),borderColor:dowAvg.map((_,i)=>i===peakDowIdx?'#ff6b35':'#ffb300'),borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+    type:'bar',data:{labels:DAYS,datasets:[{data:dowAvg,backgroundColor:dowAvg.map((_,i)=>peakDowIdxs.has(i)?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),borderColor:dowAvg.map((_,i)=>peakDowIdxs.has(i)?'#ff6b35':'#ffb300'),borderWidth:1,borderRadius:2}]},options:CHART_OPT});
 
   new Chart(document.getElementById('airlineChart').getContext('2d'),{
     type:'doughnut',
