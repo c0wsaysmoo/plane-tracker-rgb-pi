@@ -177,6 +177,85 @@
   .day-flights { display: none; padding-bottom: 8px; }
   .day-flights.open { display: block; }
 
+  /* ── Detail modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--bg);
+    border: 1px solid var(--amber-dim);
+    border-top: 3px solid var(--amber);
+    max-width: 680px;
+    width: 100%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--amber-dim);
+    flex-shrink: 0;
+  }
+
+  .modal-title {
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    letter-spacing: 3px;
+    color: var(--amber-bright);
+  }
+
+  .modal-close {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    color: var(--amber-dim);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    padding: 1px 10px;
+    cursor: pointer;
+    letter-spacing: 2px;
+  }
+
+  .modal-close:hover { border-color: var(--amber); color: var(--amber); }
+
+  .modal-body {
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 4px 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--row-border);
+  }
+
+  .detail-key  { color: var(--amber-dim); }
+  .detail-val  { color: var(--amber); word-break: break-all; }
+  .detail-val.hi  { color: var(--amber-bright); }
+  .detail-val.grn { color: var(--green); }
+  .detail-val.dim { color: var(--amber-dim); }
+
+  tbody tr { cursor: pointer; }
+
   .empty-state {
     color: var(--amber-dim);
     font-family: 'VT323', monospace;
@@ -214,6 +293,16 @@
 </div>
 
 <div id="log-container"></div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">FLIGHT DETAILS</div>
+      <button class="modal-close" onclick="closeModalDirect()">✕ CLOSE</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -261,6 +350,8 @@
     var isFarthest = rows.some(function(r) { return r.farthest_value !== undefined; });
     var distLabel  = isFarthest ? 'Farthest Dist' : 'Distance';
 
+    window._flightRows = rows;
+
     var html = '<table><thead><tr>'
       + '<th>Callsign</th><th>Route</th><th>Aircraft</th><th>Airline</th>'
       + '<th>' + esc(distLabel) + '</th><th>Alt</th><th>Speed</th><th>Dir</th><th>Timestamp</th>'
@@ -269,7 +360,7 @@
     for (var i = 0; i < rows.length; i++) {
       var f = rows[i];
       var dist = isFarthest ? f.farthest_value : f.distance;
-      html += '<tr>'
+      html += '<tr onclick="openModal(window._flightRows[' + i + '])" title="Click for full details">'
         + '<td class="cs">' + esc(f.callsign || '—') + '</td>'
         + '<td class="hi">' + esc(f.origin || '?') + ' <span class="dim">→</span> ' + esc(f.destination || '?') + '</td>'
         + '<td class="dim">' + esc(f.plane || '—') + '</td>'
@@ -374,6 +465,71 @@
     }
   }
 
+  function openModal(f) {
+    document.getElementById('modal-title').textContent = (f.callsign || 'FLIGHT') + ' — DETAILS';
+    var SKIP = { trail: true };
+    var TIME_FIELDS = {
+      time_scheduled_departure: true, time_scheduled_arrival: true,
+      time_real_departure: true,      time_estimated_arrival: true
+    };
+
+    var html = '';
+    var keys = Object.keys(f);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (SKIP[k]) continue;
+      var v = f[k];
+      var valClass = 'detail-val';
+      var display;
+
+      if (v === null || v === undefined || v === '') {
+        display = '—';
+        valClass += ' dim';
+      } else if (TIME_FIELDS[k] && typeof v === 'number') {
+        var d = new Date(v * 1000);
+        display = esc(d.toLocaleString([], {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        }));
+        valClass += ' dim';
+      } else if (k === 'callsign') {
+        display = esc(v);
+        valClass += ' hi';
+      } else if (k === 'farthest_value' || k === 'distance' || k === 'distance_origin' || k === 'distance_destination') {
+        display = esc(parseFloat(v).toFixed(3) + ' mi');
+      } else {
+        display = esc(String(v));
+      }
+
+      html += '<div class="detail-row">'
+        + '<div class="detail-key">' + esc(k) + '</div>'
+        + '<div class="' + valClass + '">' + display + '</div>'
+        + '</div>';
+    }
+
+    // trail summary
+    var trail = f.trail || [];
+    html += '<div class="detail-row">'
+      + '<div class="detail-key">trail</div>'
+      + '<div class="detail-val dim">' + trail.length + ' points</div>'
+      + '</div>';
+
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+
+  function closeModal(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModalDirect();
+  }
+
+  function closeModalDirect() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+
+  window.openModal      = openModal;
+  window.closeModal     = closeModal;
+  window.closeModalDirect = closeModalDirect;
+
   function toggleDay(id) {
     var el  = document.getElementById(id);
     var tog = document.getElementById('tog-' + id);
@@ -415,6 +571,10 @@
         if (c) c.innerHTML = '<div class="error-state">FAILED TO LOAD: ' + esc(e.message) + '<br><span class="dim" style="font-size:14px">URL: ' + esc(DATA_URL) + '</span></div>';
       });
   }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModalDirect();
+  });
 
   load();
 })();
