@@ -94,8 +94,8 @@ if __name__ == "__main__":
     # Ensure config files exist before anything else loads
     _ensure_config()
 
-    # Build path to web/app.py
-    app_path = os.path.join(base_dir, "web", "app.py")
+    # Build path to web/apppublic.py
+    app_path = os.path.join(base_dir, "web", "apppublic.py")
 
     # Start Flask server in background
     subprocess.Popen(["python3", app_path])
