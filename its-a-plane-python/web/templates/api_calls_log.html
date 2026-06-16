@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Call Log — Flight Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.08); --amber-bright: #ffd54f;
+    --green: #69f0ae; --red: #ff3d00; --orange: #ff9800;
+    --blue: #40c4ff; --purple: #ce93d8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── Header ── */
+  .board-header {
+    background: var(--amber);
+    color: var(--bg);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .board-title {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .back {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    letter-spacing: 2px;
+    background: var(--bg);
+    color: var(--amber);
+    padding: 2px 12px;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--amber-dim);
+    background: rgba(255,179,0,0.03);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .toolbar-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--amber-dim);
+  }
+  #filter-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 2px 6px;
+    outline: none;
+    width: 180px;
+    letter-spacing: 1px;
+  }
+  #filter-input::placeholder { color: var(--amber-dim); }
+  #filter-input:focus { border-color: var(--amber); }
+
+  .pill {
+    font-family: 'VT323', monospace;
+    font-size: 17px;
+    letter-spacing: 2px;
+    padding: 1px 10px;
+    border: 1px solid var(--amber-dim);
+    cursor: pointer;
+    background: transparent;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+  .pill:hover { color: var(--amber); border-color: var(--amber); }
+  .pill.active { background: var(--amber-dim); color: var(--amber); border-color: var(--amber); }
+
+  #status-text {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 1px;
+    color: var(--amber-dim);
+    margin-left: auto;
+  }
+
+  /* ── Main content ── */
+  #main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px 32px;
+  }
+
+  /* ── Monthly divider ── */
+  .month-header {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+    padding: 18px 0 6px;
+    border-bottom: 1px solid var(--amber-dim);
+    margin-bottom: 10px;
+  }
+
+  /* ── Day block ── */
+  .day-block {
+    margin-bottom: 4px;
+    border: 1px solid rgba(255,179,0,0.12);
+  }
+
+  .day-header {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 6px 10px;
+    cursor: pointer;
+    background: rgba(255,179,0,0.04);
+    user-select: none;
+    flex-wrap: wrap;
+    gap: 0 16px;
+  }
+  .day-header:hover { background: rgba(255,179,0,0.08); }
+
+  .day-date {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: var(--amber-bright);
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+
+  .day-count {
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--amber-dim);
+    min-width: 70px;
+    flex-shrink: 0;
+  }
+
+  /* source badges */
+  .src-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+  }
+  .badge {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    letter-spacing: 1px;
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .badge.fr24u  { color: var(--green); }
+  .badge.fs     { color: var(--blue); }
+  .badge.al     { color: var(--amber); }
+  .badge.fa     { color: var(--orange); }
+  .badge.none   { color: var(--amber-dim); }
+  .badge.other  { color: var(--purple); }
+
+  /* cost/counter strip */
+  .day-counters {
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--amber-dim);
+    white-space: nowrap;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .day-counters span { margin-left: 10px; }
+  .day-counters .fa-cost { color: var(--orange); }
+  .day-counters .al-used { color: var(--amber); }
+  .day-counters .fr-used { color: var(--green); }
+  .day-counters .fs-used { color: var(--blue); }
+
+  .chevron {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    color: var(--amber-dim);
+    margin-left: 10px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .day-block.open .chevron { transform: rotate(90deg); }
+
+  /* ── Log lines table ── */
+  .day-lines {
+    display: none;
+    border-top: 1px solid rgba(255,179,0,0.12);
+    max-height: 480px;
+    overflow-y: auto;
+  }
+  .day-block.open .day-lines { display: block; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: #111108;
+    color: var(--amber-dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--amber-dim);
+  }
+  td {
+    padding: 2px 8px;
+    border-bottom: 1px solid rgba(255,179,0,0.04);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(255,179,0,0.04); }
+
+  .col-time    { color: var(--amber-dim); white-space: nowrap; width: 80px; }
+  .col-src     { white-space: nowrap; width: 160px; }
+  .col-call    { white-space: nowrap; width: 100px; color: var(--amber-bright); }
+  .col-route   { white-space: nowrap; width: 100px; }
+  .col-counts  { color: var(--amber-dim); font-size: 11px; }
+
+  /* source colours for table rows */
+  tr.src-fr24u  td.col-src { color: var(--green); }
+  tr.src-fs     td.col-src { color: var(--blue); }
+  tr.src-al     td.col-src { color: var(--amber); }
+  tr.src-fa     td.col-src { color: var(--orange); }
+  tr.src-none   td.col-src { color: var(--amber-dim); opacity: .6; }
+  tr.src-other  td.col-src { color: var(--purple); }
+
+  tr.src-none   td { opacity: .7; }
+
+  .route-arrow { color: var(--amber-dim); }
+
+  .empty-state {
+    color: var(--amber-dim);
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 3px;
+    text-align: center;
+    margin-top: 60px;
+  }
+
+  /* expand-all toggle */
+  #toggle-all {
+    font-family: 'VT323', monospace;
+    font-size: 17px;
+    letter-spacing: 2px;
+    padding: 1px 10px;
+    border: 1px solid var(--amber-dim);
+    cursor: pointer;
+    background: transparent;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+  #toggle-all:hover { color: var(--amber); border-color: var(--amber); }
+</style>
+</head>
+<body>
+
+<div class="board-header">
+  <span style="font-size:26px">✈</span>
+  <div class="board-title">API Call Log</div>
+  <div class="header-right">
+    <a class="back" href="/">← BOARD</a>
+  </div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Filter</span>
+  <input id="filter-input" type="text" placeholder="callsign / source / route…" oninput="applyFilter()">
+
+  <button class="pill active" id="btn-all"    onclick="setSourceFilter('all')">All</button>
+  <button class="pill"        id="btn-fr24u"  onclick="setSourceFilter('fr24u')">FR24</button>
+  <button class="pill"        id="btn-fs"     onclick="setSourceFilter('fs')">FlightStats</button>
+  <button class="pill"        id="btn-al"     onclick="setSourceFilter('al')">AirLabs</button>
+  <button class="pill"        id="btn-fa"     onclick="setSourceFilter('fa')">FlightAware</button>
+  <button class="pill"        id="btn-none"   onclick="setSourceFilter('none')">None</button>
+
+  <button id="toggle-all" onclick="toggleAll()">Expand All</button>
+
+  <span id="status-text">Loading…</span>
+</div>
+
+<div id="main"><div class="empty-state">LOADING…</div></div>
+
+<script>
+// ── Parse log ──────────────────────────────────────────────────────────────
+function srcClass(src) {
+  const s = src.toLowerCase();
+  if (s.startsWith('fr24unofficial') || s.startsWith('fr24(')) return 'fr24u';
+  if (s.startsWith('flightstats'))  return 'fs';
+  if (s.startsWith('airlabs'))      return 'al';
+  if (s.startsWith('flightaware'))  return 'fa';
+  if (s === 'none')                 return 'none';
+  return 'other';
+}
+
+function srcLabel(src) {
+  // Shorten for badge display
+  return src.replace('Unofficial','').replace('FlightAware','FA').replace('FlightStats','FS').replace('AirLabs','AL');
+}
+
+function parseLine(raw) {
+  // Format A (old): 2026-05-08 19:44:46  AirLabs               ENY9865     ORD→LAN       [AL:504 FA:$0.485 FR:388]
+  // Format B (new): 2026-05-10 10:00:00  FlightStats                SWA245      MDW→MSP       [FS:125 AL:8 FA:$0.025]
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+(\S+)\s+(\S+)\s+\[([^\]]+)\]/);
+  if (!m) return null;
+  const [, date, time, src, callsign, route, counts] = m;
+  const sc = srcClass(src);
+
+  // Parse counters — handle both bracket formats
+  const counters = {};
+  for (const part of counts.split(' ')) {
+    const kv = part.match(/^(FS|AL|FA|FR):(\$?[\d.]+)$/);
+    if (kv) counters[kv[1]] = kv[2];
+  }
+
+  return { date, time, src, callsign, route, counts, sc, counters, raw };
+}
+
+// Group lines by date
+function groupByDay(lines) {
+  const days = {};
+  for (const l of lines) {
+    if (!days[l.date]) days[l.date] = [];
+    days[l.date].push(l);
+  }
+  return days;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+let allParsed = [];
+let filterText = '';
+let srcFilter  = 'all';
+let allExpanded = false;
+
+function setSourceFilter(f) {
+  srcFilter = f;
+  ['all','fr24u','fs','al','fa','none'].forEach(id => {
+    document.getElementById('btn-' + id)?.classList.toggle('active', id === f);
+  });
+  render();
+}
+
+function applyFilter() {
+  filterText = document.getElementById('filter-input').value.toLowerCase();
+  render();
+}
+
+function toggleAll() {
+  allExpanded = !allExpanded;
+  document.getElementById('toggle-all').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+  document.querySelectorAll('.day-block').forEach(b => b.classList.toggle('open', allExpanded));
+}
+
+function toggleDay(el) {
+  el.closest('.day-block').classList.toggle('open');
+}
+
+function buildBadges(srcCounts) {
+  const order = ['fr24u','fs','al','fa','none','other'];
+  const labels = { fr24u:'FR24U', fs:'FS', al:'AL', fa:'FA', none:'NONE', other:'OTHER' };
+  return order
+    .filter(k => srcCounts[k])
+    .map(k => `<span class="badge ${k}">${labels[k]}×${srcCounts[k]}</span>`)
+    .join('');
+}
+
+function fmtRoute(route) {
+  if (!route || route === '?→?') return '<span style="color:var(--amber-dim)">?→?</span>';
+  return route.replace('→', '<span class="route-arrow">→</span>');
+}
+
+function render() {
+  const main = document.getElementById('main');
+
+  const filtered = allParsed.filter(l => {
+    if (srcFilter !== 'all' && l.sc !== srcFilter) return false;
+    if (filterText && !l.raw.toLowerCase().includes(filterText)) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    main.innerHTML = '<div class="empty-state">NO RESULTS</div>';
+    return;
+  }
+
+  const days = groupByDay(filtered);
+  const sortedDates = Object.keys(days).sort().reverse();
+
+  // Group dates by month
+  const months = {};
+  for (const d of sortedDates) {
+    const mon = d.slice(0, 7); // "2026-05"
+    if (!months[mon]) months[mon] = [];
+    months[mon].push(d);
+  }
+
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  let html = '';
+  for (const mon of Object.keys(months).sort().reverse()) {
+    const [yr, mo] = mon.split('-');
+    html += `<div class="month-header">${monthNames[+mo - 1]} ${yr}</div>`;
+
+    for (const date of months[mon]) {
+      const lines = days[date];
+
+      // Per-source tallies
+      const srcCounts = {};
+      for (const l of lines) srcCounts[l.sc] = (srcCounts[l.sc] || 0) + 1;
+
+      // End-of-day counter values (last line has highest cumulative counts)
+      const last = lines[lines.length - 1].counters;
+
+      const dayLabel = formatDayLabel(date);
+
+      // Build counters strip
+      let counterHtml = '';
+      if (last.FA) counterHtml += `<span class="fa-cost">FA $${last.FA.replace('$','')}</span>`;
+      if (last.AL) counterHtml += `<span class="al-used">AL ${last.AL}</span>`;
+      if (last.FR) counterHtml += `<span class="fr-used">FR ${last.FR}</span>`;
+      if (last.FS) counterHtml += `<span class="fs-used">FS ${last.FS}</span>`;
+
+      // Build rows
+      const rows = lines.map(l => {
+        const [orig, dest] = l.route.split('→');
+        const routeHtml = (orig && dest)
+          ? `${escHtml(orig)}<span class="route-arrow">→</span>${escHtml(dest)}`
+          : `<span style="color:var(--amber-dim)">?→?</span>`;
+        return `<tr class="src-${l.sc}">
+          <td class="col-time">${escHtml(l.time)}</td>
+          <td class="col-src">${escHtml(l.src)}</td>
+          <td class="col-call">${escHtml(l.callsign)}</td>
+          <td class="col-route">${routeHtml}</td>
+          <td class="col-counts">${escHtml(l.counts)}</td>
+        </tr>`;
+      }).join('');
+
+      html += `
+<div class="day-block">
+  <div class="day-header" onclick="toggleDay(this)">
+    <span class="day-date">${dayLabel}</span>
+    <span class="day-count">${lines.length} calls</span>
+    <span class="src-badges">${buildBadges(srcCounts)}</span>
+    <span class="day-counters">${counterHtml}</span>
+    <span class="chevron">▶</span>
+  </div>
+  <div class="day-lines">
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Source</th><th>Callsign</th><th>Route</th><th>Counters</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+</div>`;
+    }
+  }
+
+  main.innerHTML = html;
+}
+
+function formatDayLabel(dateStr) {
+  // "2026-05-08" → "Thu May 08"
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const mons = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${days[dt.getDay()]} ${mons[m-1]} ${String(d).padStart(2,'0')}`;
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function load() {
+  const status = document.getElementById('status-text');
+  try {
+    const res = await fetch('/api_calls/log/json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const lines = text.split('\n');
+    allParsed = lines.map(parseLine).filter(Boolean);
+    status.textContent = `${allParsed.length} calls`;
+    render();
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    document.getElementById('main').innerHTML =
+      `<div class="empty-state">FAILED TO LOAD LOG<br><small style="font-size:14px;letter-spacing:1px">${escHtml(e.message)}</small></div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
