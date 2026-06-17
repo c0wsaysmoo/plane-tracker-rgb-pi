@@ -106,12 +106,24 @@ IATA_TO_ICAO = {
     "AY": "FIN", "AC": "ACA",
 }
 
-# US mainline → regional operator ICAO prefixes
+# Mainline → regional operator ICAO prefixes
 # Regional carriers fly under mainline flight numbers but use their own ICAO callsigns
 REGIONAL_OPERATORS = {
+    # US mainline
     "AAL": ["RPA", "ENY", "JIA", "PDT"],  # Republic, Envoy, PSA, Piedmont
     "UAL": ["RPA", "SKW", "GJS"],          # Republic, SkyWest, GoJet
     "DAL": ["EDV", "RPA", "SKW", "GJS"],   # Endeavor, Republic, SkyWest, GoJet
+    # European mainline
+    "BAW": ["CFE", "SHT"],                 # BA CityFlyer, BA Shuttle
+    "DLH": ["CLH", "DLA"],                 # Lufthansa CityLine, Air Dolomiti
+    "AFR": ["HOP"],                         # HOP! (Air France regional)
+    "KLM": ["KLC"],                         # KLM Cityhopper
+    "IBE": ["IBS", "ANE"],                 # Iberia Express, Air Nostrum
+    "SAS": ["SKF"],                         # SAS Link
+    "FIN": ["FCM"],                         # Norra (Nordic Regional Airlines)
+    "EIN": ["EAI"],                         # Emerald Airlines (Aer Lingus Regional)
+    # Canadian
+    "ACA": ["JZA", "PVL"],                 # Jazz Aviation, PAL Airlines
 }
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
