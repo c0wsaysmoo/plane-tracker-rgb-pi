@@ -106,6 +106,14 @@ IATA_TO_ICAO = {
     "AY": "FIN", "AC": "ACA",
 }
 
+# US mainline → regional operator ICAO prefixes
+# Regional carriers fly under mainline flight numbers but use their own ICAO callsigns
+REGIONAL_OPERATORS = {
+    "AAL": ["RPA", "ENY", "JIA", "PDT"],  # Republic, Envoy, PSA, Piedmont
+    "UAL": ["RPA", "SKW", "GJS"],          # Republic, SkyWest, GoJet
+    "DAL": ["EDV", "RPA", "SKW", "GJS"],   # Endeavor, Republic, SkyWest, GoJet
+}
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 # Writable data directory — outside home dir to avoid systemd ProtectHome issues
@@ -552,10 +560,12 @@ class Overhead:
         self._tracked_was_live = False       # was the flight live last poll?
         self._tracked_miss_count = 0         # consecutive polls with no result
         self._TRACKED_MISS_THRESHOLD = 3     # fallback miss threshold (no ETA)
+        self._MAX_TRACKED_HOURS = 36         # hard staleness cap for tracked flights
         self._tracked_last_callsign = ""     # last callsign we polled for
         self._tracked_last_eta = None        # last known estimated arrival (unix ts)
         self._tracked_last_data = None       # last known good tracked data
         self._tracked_schedule_cache = {}    # callsign -> AirLabs schedule result (or None)
+        self._tracked_alt_callsign = ""     # operating carrier callsign found via regional lookup
         self._first_flight_logged = False    # log first flight details as JSON
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
@@ -916,8 +926,39 @@ class Overhead:
                     self._tracked_last_eta = None
                     self._tracked_last_data = None
                     self._tracked_schedule_cache.clear()
+                    self._tracked_alt_callsign = ""
+                    # Persist set_ts for staleness detection across restarts
+                    try:
+                        with open(TRACKED_FILE, "r", encoding="utf-8") as f:
+                            tf = json.load(f)
+                        if "set_ts" not in tf:
+                            tf["set_ts"] = int(time())
+                            with open(TRACKED_FILE, "w", encoding="utf-8") as f:
+                                json.dump(tf, f)
+                            os.chmod(TRACKED_FILE, 0o666)
+                    except Exception:
+                        pass
 
-                tracked_data = self._grab_tracked(tracked_callsign, zone_flights=flights)
+                # Hard staleness guard — if tracked >36h, auto-wipe
+                try:
+                    with open(TRACKED_FILE, "r", encoding="utf-8") as f:
+                        tf_data = json.load(f)
+                    set_ts = tf_data.get("set_ts", 0)
+                    if set_ts and (time() - set_ts) > self._MAX_TRACKED_HOURS * 3600:
+                        logger.info(
+                            f"Tracked flight {tracked_callsign} has been tracked "
+                            f"for >{self._MAX_TRACKED_HOURS}h — auto-wiping"
+                        )
+                        self._do_auto_wipe()
+                        tracked_callsign = ""
+                except Exception:
+                    pass
+
+                if not tracked_callsign:
+                    # Wiped by staleness guard — skip grab
+                    pass
+                else:
+                    tracked_data = self._grab_tracked(tracked_callsign, zone_flights=flights)
 
                 if tracked_data:
                     # Flight found — reset miss counter, store latest ETA and data
@@ -989,6 +1030,65 @@ class Overhead:
                             sched = get_flight_schedule(tracked_callsign)
                             if sched:
                                 self._tracked_schedule_cache[tracked_callsign] = sched
+
+                        # Expiry check: if cached arrival time has passed, re-fetch
+                        # AirLabs for delay/actual info before deciding to wipe
+                        if sched:
+                            sched_arr = sched.get("arr_time_utc")
+                            if sched_arr:
+                                try:
+                                    arr_ts = datetime.strptime(
+                                        sched_arr, "%Y-%m-%d %H:%M"
+                                    ).replace(tzinfo=timezone.utc).timestamp()
+                                    if time() > arr_ts + 3600:
+                                        # 1h past cached arrival — re-fetch for delay info
+                                        from utilities.airlabs import get_flight_schedule
+                                        fresh = get_flight_schedule(tracked_callsign)
+                                        if fresh:
+                                            # Pick best available arrival time (actual > estimated > scheduled)
+                                            # Use `or ""` to handle None values from AirLabs JSON nulls
+                                            best_arr = (
+                                                (fresh.get("arr_actual_utc") or "")
+                                                or (fresh.get("arr_estimated_utc") or "")
+                                                or (fresh.get("arr_time_utc") or "")
+                                            )
+                                            if best_arr:
+                                                fresh["arr_time_utc"] = best_arr
+                                                arr_ts = datetime.strptime(
+                                                    best_arr, "%Y-%m-%d %H:%M"
+                                                ).replace(tzinfo=timezone.utc).timestamp()
+                                            # If best_arr is empty, arr_ts retains the value
+                                            # from the original cached schedule above — correct
+                                            self._tracked_schedule_cache[tracked_callsign] = fresh
+                                            sched = fresh
+                                        # arr_ts falls through from the original parse if
+                                        # fresh is None or has no arrival times
+                                        if time() > arr_ts + 7200:
+                                            logger.info(
+                                                f"Tracked flight {tracked_callsign} arrival "
+                                                f"passed >2h ago (never went live) — auto-wiping"
+                                            )
+                                            self._do_auto_wipe()
+                                            sched = None
+                                except (ValueError, TypeError):
+                                    pass
+
+                        # Track miss count for NOT TRACKABLE status
+                        # Only flag NOT TRACKABLE after scheduled departure has passed
+                        # (avoids false flag for flights set hours before departure)
+                        self._tracked_miss_count += 1
+                        _dep_passed = False
+                        if sched:
+                            dep_utc = sched.get("dep_time_utc")
+                            if dep_utc:
+                                try:
+                                    dep_ts = datetime.strptime(
+                                        dep_utc, "%Y-%m-%d %H:%M"
+                                    ).replace(tzinfo=timezone.utc).timestamp()
+                                    _dep_passed = time() > dep_ts + 1800  # 30 min after dep
+                                except (ValueError, TypeError):
+                                    pass
+
                         if sched:
                             # Convert callsign to ICAO for logo lookup (UA353 → UAL353)
                             sched_cs = tracked_callsign
@@ -1002,6 +1102,7 @@ class Overhead:
                                 "airline_name": "",
                                 "is_live": False,
                                 "is_scheduled": True,
+                                "not_trackable": _dep_passed and self._tracked_miss_count > 20,
                                 "origin": sched.get("origin", ""),
                                 "destination": sched.get("destination", ""),
                                 "dep_time": sched.get("dep_time", ""),
@@ -1030,6 +1131,8 @@ class Overhead:
             if tracked_data:
                 if tracked_data.get("is_live"):
                     stats["tracked_status"] = "LIVE"
+                elif tracked_data.get("not_trackable"):
+                    stats["tracked_status"] = "NOT TRACKABLE"
                 elif tracked_data.get("is_scheduled"):
                     stats["tracked_status"] = "SCHEDULED"
                 else:
@@ -1077,7 +1180,7 @@ class Overhead:
         """Wipe tracked_flight.json and reset all tracking state."""
         try:
             with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-                json.dump({"callsign": ""}, f)
+                json.dump({"callsign": "", "set_ts": 0}, f)
             try:
                 os.chmod(TRACKED_FILE, 0o666)
             except OSError:
@@ -1091,6 +1194,7 @@ class Overhead:
         self._tracked_last_data = None
         self._tracked_schedule_cache.clear()
         self._tracked_last_callsign = ""
+        self._tracked_alt_callsign = ""
 
     def _grab_tracked(self, flight_input, zone_flights=None):
         flight_input = flight_input.strip().upper()
@@ -1112,6 +1216,41 @@ class Overhead:
             # Strategy 1: server-side callsign filter (searches FR24's full worldwide feed)
             if not match:
                 match = self._api.find_by_callsign(flight_input)
+
+            # Strategy 2: try cached alt callsign from previous regional lookup
+            if not match and self._tracked_alt_callsign:
+                match = self._api.find_by_callsign(self._tracked_alt_callsign)
+
+            # Strategy 3: try operating carrier callsign from AirLabs schedule
+            op_callsign = ""
+            if not match:
+                sched = self._tracked_schedule_cache.get(flight_input)
+                if not sched:
+                    # Cache may be keyed by IATA (AA4462) while flight_input is ICAO (AAL4462)
+                    # Cache is cleared on callsign change, so at most 1 entry exists
+                    for k in self._tracked_schedule_cache:
+                        sched = self._tracked_schedule_cache[k]
+                        break
+                op_callsign = sched.get("flight_icao", "") if sched else ""
+                if op_callsign and op_callsign.upper() != flight_input:
+                    op_callsign = op_callsign.upper()
+                    match = self._api.find_by_callsign(op_callsign)
+                    if match:
+                        self._tracked_alt_callsign = op_callsign
+                        logger.info(f"Found tracked flight via operating carrier: {op_callsign}")
+
+            # Strategy 4 (fallback): try common US regional operator ICAO prefixes
+            if not match and not op_callsign:
+                icao_prefix = flight_input.rstrip("0123456789")
+                flight_num = flight_input[len(icao_prefix):]
+                if icao_prefix in REGIONAL_OPERATORS:
+                    for alt_prefix in REGIONAL_OPERATORS[icao_prefix]:
+                        alt_callsign = alt_prefix + flight_num
+                        match = self._api.find_by_callsign(alt_callsign)
+                        if match:
+                            self._tracked_alt_callsign = alt_callsign
+                            logger.info(f"Found tracked flight via regional fallback: {alt_callsign}")
+                            break
 
             if not match:
                 return None
