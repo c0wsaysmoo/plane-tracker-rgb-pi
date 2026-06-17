@@ -103,27 +103,35 @@ IATA_TO_ICAO = {
     "AA": "AAL", "UA": "UAL", "DL": "DAL", "AS": "ASA", "WN": "SWA",
     "B6": "JBU", "NK": "NKS", "F9": "FFT", "LH": "DLH", "BA": "BAW",
     "AF": "AFR", "KL": "KLM", "IB": "IBE", "SK": "SAS", "EI": "EIN",
-    "AY": "FIN", "AC": "ACA",
+    "AY": "FIN", "AC": "ACA", "JL": "JAL", "NH": "ANA", "QF": "QFA",
 }
 
 # Mainline → regional operator ICAO prefixes
 # Regional carriers fly under mainline flight numbers but use their own ICAO callsigns
+# Updated 2026-06-16; AirLabs flight_icao (Strategy 3) handles all carriers globally —
+# this static map is a fallback when AirLabs doesn't return flight_icao.
 REGIONAL_OPERATORS = {
     # US mainline
-    "AAL": ["RPA", "ENY", "JIA", "PDT"],  # Republic, Envoy, PSA, Piedmont
-    "UAL": ["RPA", "SKW", "GJS"],          # Republic, SkyWest, GoJet
-    "DAL": ["EDV", "RPA", "SKW", "GJS"],   # Endeavor, Republic, SkyWest, GoJet
+    "AAL": ["ENY", "JIA", "PDT", "RPA", "SKW"],  # Envoy, PSA, Piedmont, Republic, SkyWest
+    "UAL": ["RPA", "SKW", "GJS"],                  # Republic, SkyWest, GoJet
+    "DAL": ["EDV", "RPA", "SKW"],                  # Endeavor, Republic, SkyWest
+    "ASA": ["QXE", "SKW"],                          # Horizon Air, SkyWest
     # European mainline
-    "BAW": ["CFE", "SHT"],                 # BA CityFlyer, BA Shuttle
-    "DLH": ["CLH", "DLA"],                 # Lufthansa CityLine, Air Dolomiti
+    "BAW": ["CFE", "SHT"],                 # BA CityFlyer, BA Shuttle (domestic UK callsign)
+    "DLH": ["LHX", "DLA"],                 # Lufthansa City Airlines, Air Dolomiti
     "AFR": ["HOP"],                         # HOP! (Air France regional)
     "KLM": ["KLC"],                         # KLM Cityhopper
     "IBE": ["IBS", "ANE"],                 # Iberia Express, Air Nostrum
-    "SAS": ["SKF"],                         # SAS Link
+    "SAS": ["SZS", "SVS"],                 # SAS Connect, SAS Link
     "FIN": ["FCM"],                         # Norra (Nordic Regional Airlines)
     "EIN": ["EAI"],                         # Emerald Airlines (Aer Lingus Regional)
     # Canadian
     "ACA": ["JZA", "PVL"],                 # Jazz Aviation, PAL Airlines
+    # Japanese
+    "JAL": ["JLJ", "JAC", "JTA", "NTH", "RAC"],  # J-Air, JAC, JTA, Hokkaido, Ryukyu
+    "ANA": ["AKX"],                         # ANA Wings
+    # Australian
+    "QFA": ["QLK", "SSQ", "NWK", "NJS"],  # QantasLink, Sunstate, Network, NJS
 }
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
