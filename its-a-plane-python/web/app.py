@@ -68,19 +68,51 @@ def lookup_flight(callsign):
             from utilities.airlabs import get_flight_schedule
             sched = get_flight_schedule(original_callsign)
             if sched:
-                return {
-                    "found": True,
-                    "scheduled": True,
-                    "callsign": callsign,
-                    "number": sched.get("flight_number", callsign),
-                    "airline": "",
-                    "origin": sched.get("origin", "???"),
-                    "destination": sched.get("destination", "???"),
-                    "dep_time": sched.get("dep_time", ""),
-                    "status": sched.get("status", ""),
-                    "summary": f"Scheduled: {sched.get('flight_number', callsign)} {sched.get('origin', '?')}→{sched.get('destination', '?')} Dep {sched.get('dep_time', '?')}",
-                }
-            return {"found": False}
+                # Try operating carrier callsign from AirLabs
+                op_callsign = (sched.get("flight_icao") or "").upper()
+                if op_callsign and op_callsign != callsign:
+                    match = api.find_by_callsign(op_callsign)
+
+                # Try regional operator callsigns as fallback
+                if not match:
+                    from utilities.overhead import REGIONAL_OPERATORS
+                    icao_prefix = callsign.rstrip("0123456789")
+                    flight_num = callsign[len(icao_prefix):]
+                    if icao_prefix in REGIONAL_OPERATORS:
+                        for alt_prefix in REGIONAL_OPERATORS[icao_prefix]:
+                            match = api.find_by_callsign(alt_prefix + flight_num)
+                            if match:
+                                break
+
+                if match:
+                    # Found via operating carrier — fall through to details below
+                    pass
+                else:
+                    # Schedule only — flight may not be trackable if it uses a
+                    # different callsign (e.g., regional operator)
+                    trackable = not bool(REGIONAL_OPERATORS.get(
+                        callsign.rstrip("0123456789"), []))
+                    result = {
+                        "found": True,
+                        "scheduled": True,
+                        "trackable": trackable,
+                        "callsign": callsign,
+                        "number": sched.get("flight_number", callsign),
+                        "airline": "",
+                        "origin": sched.get("origin", "???"),
+                        "destination": sched.get("destination", "???"),
+                        "dep_time": sched.get("dep_time", ""),
+                        "status": sched.get("status", ""),
+                        "summary": f"Scheduled: {sched.get('flight_number', callsign)} {sched.get('origin', '?')}→{sched.get('destination', '?')} Dep {sched.get('dep_time', '?')}",
+                    }
+                    if not trackable:
+                        result["warning"] = (
+                            "This flight may use a regional operator callsign — "
+                            "live tracking will be attempted but may not work"
+                        )
+                    return result
+            if not match:
+                return {"found": False}
 
         # Get full details for airline name and route
         details = api.get_flight_details(match)
@@ -162,7 +194,7 @@ def tracked_set():
     callsign = data.get("callsign", "").strip().upper()[:10]
     try:
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-            json.dump({"callsign": callsign}, f)
+            json.dump({"callsign": callsign, "set_ts": int(_time.time()) if callsign else 0}, f)
         try:
             os.chmod(TRACKED_FILE, 0o666)
         except OSError:

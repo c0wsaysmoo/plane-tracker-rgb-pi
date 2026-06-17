@@ -122,9 +122,13 @@ def get_flight_schedule(callsign):
             "dep_time_utc": best.get("dep_time_utc", ""),
             "arr_time": best.get("arr_time", ""),
             "arr_time_utc": best.get("arr_time_utc", ""),
+            "arr_estimated_utc": best.get("arr_estimated_utc", ""),
+            "arr_actual_utc": best.get("arr_actual_utc", ""),
             "status": best.get("status", ""),
             "airline_iata": best.get("airline_iata", ""),
+            "airline_icao": best.get("airline_icao", ""),
             "flight_number": best.get("flight_iata", callsign),
+            "flight_icao": best.get("flight_icao", ""),
             "duration": best.get("duration"),
         }
         logger.info(f"AirLabs: Found {result['flight_number']} {result['origin']}→{result['destination']} status={result['status']}")
