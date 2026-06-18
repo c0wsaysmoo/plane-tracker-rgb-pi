@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -30,6 +31,7 @@ _POLL_INTERVAL = 300  # 5 minutes
 # In-memory cache
 _cached_data = None
 _cached_ts = 0.0
+_lock = threading.Lock()
 
 
 def _parse_minutes(text):
@@ -182,24 +184,25 @@ def _refresh():
     """Refresh data if poll interval has elapsed."""
     global _cached_data, _cached_ts
 
-    now = time.time()
-    if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
+    with _lock:
+        now = time.time()
+        if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
+            return _cached_data
+
+        if _cached_data is None:
+            disk, disk_ts = _load_cache()
+            if disk is not None:
+                _cached_data = disk
+                _cached_ts = disk_ts
+                logger.info("[AirportStatus] Loaded from disk cache")
+
+        if (now - _cached_ts) >= _POLL_INTERVAL:
+            data = _fetch()
+            if data is not None:
+                _cached_data = data
+                _cached_ts = now
+
         return _cached_data
-
-    if _cached_data is None:
-        disk, disk_ts = _load_cache()
-        if disk is not None:
-            _cached_data = disk
-            _cached_ts = disk_ts
-            logger.info("[AirportStatus] Loaded from disk cache")
-
-    if (now - _cached_ts) >= _POLL_INTERVAL:
-        data = _fetch()
-        if data is not None:
-            _cached_data = data
-            _cached_ts = now
-
-    return _cached_data
 
 
 def get_airport_alerts():
