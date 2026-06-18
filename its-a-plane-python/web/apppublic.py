@@ -372,11 +372,19 @@ def weather_json():
             forecast_data = obj.get("data", [])
     except Exception:
         forecast_data = []
+    moon_phase = None
+    try:
+        with open(os.path.join(_cache_dir, "moonphase.json"), "r") as f:
+            obj = json.load(f)
+            moon_phase = obj.get("data")
+    except Exception:
+        pass
     return jsonify({
         "temperature": temp_data,
         "humidity":    humidity_data,
         "weatherCode": weather_code_data,
         "forecast":    forecast_data,
+        "moonPhase":   moon_phase,
     })
 
 @app.get("/clock/json")
@@ -384,14 +392,12 @@ def clock_json():
     """Serve astronomy data and pre-computed clock alerts to slave Pis."""
     result = {"sunrise": "", "sunset": "", "moonrise": "", "moonset": "", "illumination": "NA", "alerts": []}
     try:
-        with open(os.path.join(BASE_DIR, ".cache", "astronomy.json"), "r") as f:
+        with open(os.path.join(BASE_DIR, ".cache", "suntimes.json"), "r") as f:
             obj = json.load(f)
+        data = obj.get("data", obj)
         result.update({
-            "sunrise":      obj.get("sunrise", ""),
-            "sunset":       obj.get("sunset", ""),
-            "moonrise":     obj.get("moonrise", ""),
-            "moonset":      obj.get("moonset", ""),
-            "illumination": obj.get("illumination", "NA"),
+            "sunrise": data.get("sunrise", ""),
+            "sunset":  data.get("sunset", ""),
         })
     except Exception:
         pass
@@ -444,6 +450,33 @@ def airport_status_json():
         return jsonify(get_airport_alerts())
     except Exception:
         return jsonify([])
+
+@app.get("/display")
+def display_page():
+    from flask import make_response
+    resp = make_response(render_template("display.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+@app.get("/logos/<path:filename>")
+def serve_logo(filename):
+    """Serve airline logo PNGs from ~/logos/."""
+    import io
+    from PIL import Image
+    logo_path = os.path.expanduser(f"~/logos/{filename}")
+    if not os.path.isfile(logo_path):
+        return ("Not found", 404)
+    try:
+        img = Image.open(logo_path).convert("RGBA")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        from flask import Response
+        return Response(buf.read(), mimetype="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        return (str(e), 500)
 
 @app.get("/icons/<path:filename>")
 def serve_icon(filename):
