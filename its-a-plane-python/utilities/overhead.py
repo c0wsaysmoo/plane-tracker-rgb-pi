@@ -104,6 +104,9 @@ IATA_TO_ICAO = {
     "B6": "JBU", "NK": "NKS", "F9": "FFT", "LH": "DLH", "BA": "BAW",
     "AF": "AFR", "KL": "KLM", "IB": "IBE", "SK": "SAS", "EI": "EIN",
     "AY": "FIN", "AC": "ACA", "JL": "JAL", "NH": "ANA", "QF": "QFA",
+    # Regional operators (for cs_airline_iata → ICAO prefix in route-based search)
+    "YX": "RPA", "MQ": "ENY", "OH": "JIA", "PT": "PDT", "OO": "SKW",
+    "9E": "EDV", "G7": "GJS", "QX": "QXE",
 }
 
 # Mainline → regional operator ICAO prefixes
@@ -1241,36 +1244,59 @@ class Overhead:
             if not match and self._tracked_alt_callsign:
                 match = self._api.find_by_callsign(self._tracked_alt_callsign)
 
-            # Strategy 3: try operating carrier callsign from AirLabs schedule
-            op_callsign = ""
+            # Strategy 3: route-based search for regional/codeshare flights
+            # Marketing flight numbers (AA4617) don't map to operating callsigns
+            # (RPA4394) — the only reliable approach is searching by route and
+            # filtering by operating carrier prefix and departure time.
             if not match:
                 sched = self._tracked_schedule_cache.get(flight_input)
                 if not sched:
-                    # Cache may be keyed by IATA (AA4462) while flight_input is ICAO (AAL4462)
-                    # Cache is cleared on callsign change, so at most 1 entry exists
                     for k in self._tracked_schedule_cache:
                         sched = self._tracked_schedule_cache[k]
                         break
-                op_callsign = sched.get("flight_icao", "") if sched else ""
-                if op_callsign and op_callsign.upper() != flight_input:
-                    op_callsign = op_callsign.upper()
-                    match = self._api.find_by_callsign(op_callsign)
-                    if match:
-                        self._tracked_alt_callsign = op_callsign
-                        logger.info(f"Found tracked flight via operating carrier: {op_callsign}")
-
-            # Strategy 4 (fallback): try common US regional operator ICAO prefixes
-            if not match and not op_callsign:
-                icao_prefix = flight_input.rstrip("0123456789")
-                flight_num = flight_input[len(icao_prefix):]
-                if icao_prefix in REGIONAL_OPERATORS:
-                    for alt_prefix in REGIONAL_OPERATORS[icao_prefix]:
-                        alt_callsign = alt_prefix + flight_num
-                        match = self._api.find_by_callsign(alt_callsign)
-                        if match:
-                            self._tracked_alt_callsign = alt_callsign
-                            logger.info(f"Found tracked flight via regional fallback: {alt_callsign}")
-                            break
+                if sched:
+                    origin = sched.get("origin", "")
+                    dest = sched.get("destination", "")
+                    cs_airline = sched.get("cs_airline_iata", "")  # e.g., YX (Republic)
+                    # Convert operating carrier IATA to ICAO prefix for callsign matching
+                    cs_icao = IATA_TO_ICAO.get(cs_airline, "")
+                    if origin and dest and (cs_icao or cs_airline):
+                        route_flights = self._api.find_by_route(origin, dest)
+                        if route_flights:
+                            # Filter to operating carrier prefix
+                            prefix = cs_icao or cs_airline
+                            candidates = [
+                                f for f in route_flights
+                                if (f.callsign or "").upper().startswith(prefix)
+                            ]
+                            if not candidates:
+                                # Fallback: try all known regional prefixes
+                                icao_pfx = flight_input.rstrip("0123456789")
+                                reg_prefixes = REGIONAL_OPERATORS.get(icao_pfx, [])
+                                candidates = [
+                                    f for f in route_flights
+                                    if any((f.callsign or "").upper().startswith(rp)
+                                           for rp in reg_prefixes)
+                                ]
+                            if len(candidates) == 1:
+                                match = candidates[0]
+                            elif len(candidates) > 1:
+                                # Multiple matches — pick closest to scheduled departure
+                                dep_ts = sched.get("dep_time_ts")
+                                if dep_ts:
+                                    # Pick flight with latest departure (most recently departed)
+                                    candidates.sort(
+                                        key=lambda f: abs(
+                                            (getattr(f, 'time', None) or 0) - dep_ts
+                                        )
+                                    )
+                                match = candidates[0]
+                            if match:
+                                self._tracked_alt_callsign = (match.callsign or "").upper()
+                                logger.info(
+                                    f"Found tracked flight via route search "
+                                    f"{origin}→{dest}: {match.callsign}"
+                                )
 
             if not match:
                 return None
