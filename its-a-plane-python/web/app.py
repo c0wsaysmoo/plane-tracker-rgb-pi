@@ -42,6 +42,44 @@ def load_json(path, default):
         return default
 
 
+def _build_cached_route(sched):
+    """Build cached_route dict from AirLabs schedule data.
+    Concept from c0wsaysmoo/plane-tracker-rgb-pi."""
+    from utilities.overhead import _airport_coords
+    origin = sched.get("origin", "")
+    dest = sched.get("destination", "")
+    o_coords = _airport_coords(origin)
+    d_coords = _airport_coords(dest)
+    # Compute arrival timestamp from dep + duration if available
+    dep_ts = sched.get("dep_time_ts")
+    duration = sched.get("duration")
+    arr_ts = (dep_ts + duration * 60) if dep_ts and duration else None
+    # Try to get airline name from local DB
+    airline_name = ""
+    try:
+        from utilities.overhead import _airline_name_lookup
+        airline_icao = sched.get("airline_icao", "")
+        if airline_icao:
+            airline_name = _airline_name_lookup(airline_icao) or ""
+    except (ImportError, Exception):
+        pass
+    return {
+        "origin": origin,
+        "destination": dest,
+        "origin_lat": o_coords.get("lat"),
+        "origin_lon": o_coords.get("lon"),
+        "dest_lat": d_coords.get("lat"),
+        "dest_lon": d_coords.get("lon"),
+        "airline_name": airline_name,
+        "aircraft_type": "",
+        "time_scheduled_departure": dep_ts,
+        "time_scheduled_arrival": arr_ts,
+        "cs_airline_iata": sched.get("cs_airline_iata", ""),
+        "dep_time": sched.get("dep_time", ""),
+        "arr_time": sched.get("arr_time", ""),
+    }
+
+
 def lookup_flight(callsign):
     """
     Try to find a live flight by callsign or flight number.
@@ -65,7 +103,7 @@ def lookup_flight(callsign):
 
         if not match:
             # Not airborne — try AirLabs for scheduled flight (use original IATA format)
-            from utilities.airlabs import get_flight_schedule
+            from utilities.airlabs import get_flight_schedule, get_flight_legs
             sched = get_flight_schedule(original_callsign)
             if sched:
                 # Try operating carrier callsign from AirLabs
@@ -88,10 +126,34 @@ def lookup_flight(callsign):
                     # Found via operating carrier — fall through to details below
                     pass
                 else:
-                    # Schedule only — flight may not be trackable if it uses a
-                    # different callsign (e.g., regional operator)
+                    # Check for multiple legs (e.g., AA100 does JFK→LHR then LHR→JFK)
+                    # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+                    legs = get_flight_legs(original_callsign)
+                    if len(legs) > 1:
+                        results = []
+                        for leg in legs:
+                            cr = _build_cached_route(leg)
+                            results.append({
+                                "callsign": callsign,
+                                "origin": leg.get("origin", ""),
+                                "destination": leg.get("destination", ""),
+                                "dep_time": leg.get("dep_time", ""),
+                                "status": leg.get("status", ""),
+                                "scheduled_departure": leg.get("dep_time_ts"),
+                                "cached_route": cr,
+                            })
+                        return {
+                            "found": True,
+                            "multiple": True,
+                            "callsign": callsign,
+                            "flights": results,
+                            "summary": f"{len(results)} legs found for {original_callsign} — select one",
+                        }
+
+                    # Single leg — schedule only, may not be trackable
                     trackable = not bool(REGIONAL_OPERATORS.get(
                         callsign.rstrip("0123456789"), []))
+                    cr = _build_cached_route(sched)
                     result = {
                         "found": True,
                         "scheduled": True,
@@ -103,6 +165,8 @@ def lookup_flight(callsign):
                         "destination": sched.get("destination", "???"),
                         "dep_time": sched.get("dep_time", ""),
                         "status": sched.get("status", ""),
+                        "scheduled_departure": sched.get("dep_time_ts"),
+                        "cached_route": cr,
                         "summary": f"Scheduled: {sched.get('flight_number', callsign)} {sched.get('origin', '?')}→{sched.get('destination', '?')} Dep {sched.get('dep_time', '?')}",
                     }
                     if not trackable:
@@ -123,6 +187,27 @@ def lookup_flight(callsign):
         destination = match.destination_airport_iata or "???"
         number = match.number or callsign
 
+        # Build cached route from live FR24 data
+        from utilities.overhead import _airport_coords
+        fp = details.get("flight_progress") or {} if details else {}
+        time_info = details.get("time") or {} if details else {}
+        sched = (time_info.get("scheduled") or {})
+        real = (time_info.get("real") or {})
+        est = (time_info.get("estimated") or {})
+        o_coords = _airport_coords(origin)
+        d_coords = _airport_coords(destination)
+        cr = {
+            "origin": origin, "destination": destination,
+            "origin_lat": o_coords.get("lat"), "origin_lon": o_coords.get("lon"),
+            "dest_lat": d_coords.get("lat"), "dest_lon": d_coords.get("lon"),
+            "airline_name": airline, "aircraft_type": match.aircraft_code or "",
+            "time_scheduled_departure": sched.get("departure"),
+            "time_scheduled_arrival": sched.get("arrival"),
+            "time_real_departure": real.get("departure"),
+            "time_estimated_arrival": est.get("arrival"),
+            "cs_airline_iata": "",
+        }
+
         return {
             "found": True,
             "callsign": match.callsign,
@@ -130,6 +215,8 @@ def lookup_flight(callsign):
             "airline": airline,
             "origin": origin,
             "destination": destination,
+            "scheduled_departure": sched.get("departure"),
+            "cached_route": cr,
             "summary": f"{airline} {number} {origin}→{destination}",
         }
 
@@ -192,9 +279,16 @@ def tracked_set():
     if not data:
         return jsonify({"message": "Invalid request"}), 400
     callsign = data.get("callsign", "").strip().upper()[:10]
+    cached_route = data.get("cached_route")        # dict from lookup, or None
+    sched_dep = data.get("scheduled_departure")     # unix timestamp, or None
     try:
+        payload = {"callsign": callsign, "set_ts": int(_time.time()) if callsign else 0}
+        if cached_route:
+            payload["cached_route"] = cached_route
+        if sched_dep:
+            payload["scheduled_departure"] = sched_dep
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:
-            json.dump({"callsign": callsign, "set_ts": int(_time.time()) if callsign else 0}, f)
+            json.dump(payload, f)
         try:
             os.chmod(TRACKED_FILE, 0o666)
         except OSError:

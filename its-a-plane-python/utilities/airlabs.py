@@ -143,5 +143,85 @@ def get_flight_schedule(callsign):
         return None
     except Exception as e:
         logger.warning(f"AirLabs: Error looking up {callsign}: {e}")
-        _cache[callsign] = (None, time())
-        return None
+
+
+def get_flight_legs(callsign):
+    """Return all upcoming legs for a flight number (for multi-leg picker).
+    Uses get_flight_schedule to fetch data (single API call), then re-parses
+    the raw response for multiple legs. Returns list of schedule dicts."""
+    callsign = callsign.strip().upper()
+    if not callsign or not AIRLABS_API_KEY:
+        return []
+
+    # Check module cache first
+    now_ts = time()
+    cached = _cache.get(callsign)
+    if cached and (now_ts - cached[1]) < _CACHE_TTL:
+        # Cache only has the single best leg; need raw response for multi-leg
+        pass
+
+    params = {"api_key": AIRLABS_API_KEY}
+    if len(callsign) >= 4 and callsign[:3].isalpha() and callsign[3:].isdigit():
+        params["flight_icao"] = callsign
+    else:
+        params["flight_iata"] = callsign
+
+    try:
+        r = requests.get(f"{_API_BASE}/schedules", params=params, timeout=(5, 15))
+        r.raise_for_status()
+        schedules = r.json().get("response", [])
+        now = time()
+        upcoming = [
+            s for s in schedules
+            if s.get("dep_time_ts") and s["dep_time_ts"] > now - 3600
+        ]
+        if not upcoming:
+            upcoming = schedules
+        upcoming.sort(key=lambda s: s.get("dep_time_ts", 0))
+        legs = []
+        for s in upcoming:
+            legs.append({
+                "origin": s.get("dep_iata", ""),
+                "destination": s.get("arr_iata", ""),
+                "dep_time": s.get("dep_time", ""),
+                "dep_time_utc": s.get("dep_time_utc", ""),
+                "dep_time_ts": s.get("dep_time_ts"),
+                "arr_time": s.get("arr_time", ""),
+                "arr_time_utc": s.get("arr_time_utc", ""),
+                "status": s.get("status", ""),
+                "airline_iata": s.get("airline_iata", ""),
+                "flight_number": s.get("flight_iata", callsign),
+                "cs_airline_iata": s.get("cs_airline_iata", ""),
+                "duration": s.get("duration"),
+            })
+        # Also update module cache with best leg for get_flight_schedule
+        if legs:
+            _cache[callsign] = (_build_result(upcoming[0], callsign), time())
+        return legs
+    except Exception as e:
+        logger.warning(f"AirLabs: Error in get_flight_legs: {e}")
+        # Fall back to single-leg from get_flight_schedule
+        result = get_flight_schedule(callsign)
+        return [result] if result else []
+
+
+def _build_result(best, callsign):
+    """Build a schedule result dict from a raw AirLabs schedule entry."""
+    return {
+        "origin": best.get("dep_iata", ""),
+        "destination": best.get("arr_iata", ""),
+        "dep_time": best.get("dep_time", ""),
+        "dep_time_utc": best.get("dep_time_utc", ""),
+        "arr_time": best.get("arr_time", ""),
+        "arr_time_utc": best.get("arr_time_utc", ""),
+        "arr_estimated_utc": best.get("arr_estimated_utc", ""),
+        "arr_actual_utc": best.get("arr_actual_utc", ""),
+        "status": best.get("status", ""),
+        "airline_iata": best.get("airline_iata", ""),
+        "airline_icao": best.get("airline_icao", ""),
+        "flight_number": best.get("flight_iata", callsign),
+        "flight_icao": best.get("flight_icao", ""),
+        "cs_airline_iata": best.get("cs_airline_iata", ""),
+        "dep_time_ts": best.get("dep_time_ts"),
+        "duration": best.get("duration"),
+    }

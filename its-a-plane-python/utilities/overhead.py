@@ -453,13 +453,20 @@ def log_flight_count(callsign, entry=None):
 
 
 def load_tracked_callsign():
-    """Read the tracked callsign from tracked_flight.json."""
+    """Read tracked flight data from tracked_flight.json.
+
+    Returns (callsign, scheduled_departure, cached_route) tuple.
+    Concept: cached_route and scheduled_departure from c0wsaysmoo/plane-tracker-rgb-pi.
+    """
     try:
         with open(TRACKED_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get("callsign", "").strip().upper()
+        cs = data.get("callsign", "").strip().upper()
+        dep = data.get("scheduled_departure")   # Unix timestamp or None
+        route = data.get("cached_route")         # dict saved at search time, or None
+        return cs, dep, route
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError):
-        return ""
+        return "", None, None
 
 
 # Logging Closest Flights
@@ -589,6 +596,7 @@ class Overhead:
         self._tracked_last_data = None       # last known good tracked data
         self._tracked_schedule_cache = {}    # callsign -> AirLabs schedule result (or None)
         self._tracked_alt_callsign = ""     # operating carrier callsign found via regional lookup
+        self._tracked_route_cached = None   # cached route dict (from search time or first-airborne)
         self._first_flight_logged = False    # log first flight details as JSON
         self._cycle_count = 0               # total grab_data cycles
         self._total_flights_seen = 0        # lifetime flight count
@@ -937,7 +945,7 @@ class Overhead:
                             logger.warning(f"Failed to get details for {f.callsign}: {e}")
 
             # --- STEP 2: Tracked flight (always check; display shows it when clock is up) ---
-            tracked_callsign = load_tracked_callsign()
+            tracked_callsign, scheduled_dep, cached_route = load_tracked_callsign()
             if tracked_callsign:
                 stats["tracked_callsign"] = tracked_callsign
 
@@ -950,6 +958,7 @@ class Overhead:
                     self._tracked_last_data = None
                     self._tracked_schedule_cache.clear()
                     self._tracked_alt_callsign = ""
+                    self._tracked_route_cached = cached_route
                     # Persist set_ts for staleness detection across restarts
                     try:
                         with open(TRACKED_FILE, "r", encoding="utf-8") as f:
@@ -981,14 +990,134 @@ class Overhead:
                     # Wiped by staleness guard — skip grab
                     pass
                 else:
-                    tracked_data = self._grab_tracked(tracked_callsign, zone_flights=flights)
+                    # Departure window guard: don't search FR24 until 30 min before
+                    # scheduled departure. Prevents matching an earlier same-day leg.
+                    # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+                    _skip_poll = False
+                    if scheduled_dep and not self._tracked_was_live:
+                        mins_to_dep = (scheduled_dep - time()) / 60
+                        if mins_to_dep > 30:
+                            logger.info(
+                                f"Tracked {tracked_callsign} departs in "
+                                f"{mins_to_dep:.0f}m — not polling FR24 yet"
+                            )
+                            _skip_poll = True
+                            # Build SCHEDULED display from cached_route if available
+                            if cached_route:
+                                sched_cs = tracked_callsign
+                                if len(sched_cs) >= 3 and sched_cs[:2] in IATA_TO_ICAO and sched_cs[2:3].isdigit():
+                                    icao_pfx = IATA_TO_ICAO.get(sched_cs[:2])
+                                    if icao_pfx:
+                                        sched_cs = icao_pfx + sched_cs[2:]
+                                tracked_data = {
+                                    "callsign": sched_cs,
+                                    "number": tracked_callsign,
+                                    "airline_name": cached_route.get("airline_name", ""),
+                                    "is_live": False,
+                                    "is_scheduled": True,
+                                    "origin": cached_route.get("origin", ""),
+                                    "destination": cached_route.get("destination", ""),
+                                    "dep_time": cached_route.get("dep_time", ""),
+                                    "arr_time": cached_route.get("arr_time", ""),
+                                    "schedule_status": "scheduled",
+                                    "aircraft_type": cached_route.get("aircraft_type", ""),
+                                    "altitude": 0, "ground_speed": 0, "heading": 0,
+                                    "vertical_speed": 0, "dist_remaining": None,
+                                    "total_distance": None, "time_remaining": None,
+                                    "latitude": None, "longitude": None,
+                                    "last_seen_ts": 0, "dest_lat": 0, "dest_lon": 0,
+                                }
 
-                if tracked_data:
-                    # Flight found — reset miss counter, store latest ETA and data
+                    if not _skip_poll:
+                        # Position-only mode: after first airborne, skip expensive
+                        # get_flight_details and use cached route data instead.
+                        # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+                        pos_only = self._tracked_was_live and self._tracked_route_cached is not None
+                        tracked_data = self._grab_tracked(
+                            tracked_callsign, zone_flights=flights,
+                            update_position_only=pos_only,
+                        )
+
+                if tracked_data and tracked_data.get("is_live"):
+                    just_became_live = not self._tracked_was_live
                     self._tracked_was_live = True
                     self._tracked_miss_count = 0
+
+                    if just_became_live:
+                        # First airborne detection — cache route data.
+                        # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+                        new_route = {
+                            k: tracked_data.get(k)
+                            for k in ("origin", "destination", "dest_lat", "dest_lon",
+                                      "aircraft_type", "airline_name", "number",
+                                      "total_distance", "callsign")
+                        }
+                        # Merge coords from cached_route if FR24 didn't provide them
+                        if cached_route:
+                            for k in ("origin_lat", "origin_lon", "dest_lat", "dest_lon",
+                                      "time_scheduled_departure", "time_scheduled_arrival"):
+                                if not new_route.get(k):
+                                    new_route[k] = cached_route.get(k)
+
+                        # Plausibility check: verify plane position is consistent
+                        # with the route (within 1.25x great circle distance).
+                        # Concept from c0wsaysmoo/plane-tracker-rgb-pi.
+                        _plausible = True
+                        o_lat = new_route.get("origin_lat")
+                        o_lon = new_route.get("origin_lon")
+                        d_lat = new_route.get("dest_lat")
+                        d_lon = new_route.get("dest_lon")
+                        p_lat = tracked_data.get("latitude")
+                        p_lon = tracked_data.get("longitude")
+                        if o_lat and o_lon and d_lat and d_lon and p_lat and p_lon:
+                            # Ratio (to_o + to_d) / total is unit-independent
+                            total = haversine(o_lat, o_lon, d_lat, d_lon)
+                            to_o = haversine(p_lat, p_lon, o_lat, o_lon)
+                            to_d = haversine(p_lat, p_lon, d_lat, d_lon)
+                            if total > 0 and (to_o + to_d) > total * 1.25:
+                                _plausible = False
+                                logger.warning(
+                                    f"Tracked flight position implausible for "
+                                    f"{new_route.get('origin')}→{new_route.get('destination')} "
+                                    f"— keeping cached route"
+                                )
+
+                        if _plausible:
+                            self._tracked_route_cached = new_route
+                        elif cached_route and not self._tracked_route_cached:
+                            # FR24 route implausible, use cached route from search time
+                            self._tracked_route_cached = cached_route
+
+                        logger.info(f"Tracked flight {tracked_callsign} airborne — route cached")
+                    elif self._tracked_route_cached:
+                        # Subsequent cycles: merge cached route + live position
+                        tracked_data = {**self._tracked_route_cached, **tracked_data}
+                        # Recalculate dist_remaining from live position + cached dest
+                        dest_lat = self._tracked_route_cached.get("dest_lat")
+                        dest_lon = self._tracked_route_cached.get("dest_lon")
+                        if dest_lat and dest_lon and tracked_data.get("latitude"):
+                            tracked_data["dist_remaining"] = haversine(
+                                tracked_data["latitude"], tracked_data["longitude"],
+                                dest_lat, dest_lon
+                            )
+                            # Recalculate time_remaining: speed is in knots (from FR24 gRPC)
+                            speed = tracked_data.get("ground_speed", 0)
+                            if speed and speed > 50 and tracked_data["dist_remaining"]:
+                                if DISTANCE_UNITS == "metric":
+                                    dist_nm = tracked_data["dist_remaining"] * 0.539957
+                                else:
+                                    dist_nm = tracked_data["dist_remaining"] * 0.868976
+                                hrs = dist_nm / speed
+                                mins = int(hrs * 60)
+                                if mins > 0:
+                                    h, m = divmod(mins, 60)
+                                    tracked_data["time_remaining"] = f"{h}:{m:02d}" if h else f"{m}m"
+
                     self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
                     self._tracked_last_data = tracked_data
+                elif tracked_data:
+                    # SCHEDULED or NOT TRACKABLE — not live, don't set was_live
+                    pass
                 else:
                     if self._tracked_was_live:
                         # Was live before, now missing
@@ -1218,8 +1347,9 @@ class Overhead:
         self._tracked_schedule_cache.clear()
         self._tracked_last_callsign = ""
         self._tracked_alt_callsign = ""
+        self._tracked_route_cached = None
 
-    def _grab_tracked(self, flight_input, zone_flights=None):
+    def _grab_tracked(self, flight_input, zone_flights=None, update_position_only=False):
         flight_input = flight_input.strip().upper()
 
         # Convert IATA format (UA353, B6555) to ICAO (UAL353, JBU555) for gRPC filter
@@ -1319,6 +1449,22 @@ class Overhead:
 
             if not match:
                 return None
+
+            # Position-only mode: skip expensive get_flight_details, return
+            # just live position data. Route info comes from cached_route.
+            # Concept from c0wsaysmoo/plane-tracker-rgb-pi (just_became_live pattern).
+            if update_position_only:
+                return {
+                    "callsign": (match.callsign or "").upper(),
+                    "is_live": True,
+                    "altitude": match.altitude or 0,
+                    "ground_speed": match.ground_speed or 0,
+                    "heading": match.heading or 0,
+                    "vertical_speed": match.vertical_speed,
+                    "latitude": match.latitude,
+                    "longitude": match.longitude,
+                    "last_seen_ts": time(),
+                }
 
             flight_details = self._api.get_flight_details(match)
             match.set_flight_details(flight_details)
