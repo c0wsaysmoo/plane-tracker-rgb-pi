@@ -1113,7 +1113,11 @@ class Overhead:
                                     h, m = divmod(mins, 60)
                                     tracked_data["time_remaining"] = f"{h}:{m:02d}" if h else f"{m}m"
 
-                    self._tracked_last_eta = tracked_data.get("time_estimated_arrival")
+                    # Only update ETA when available — position-only cycles don't
+                    # have it, so preserve the value from the first-airborne cycle
+                    eta_val = tracked_data.get("time_estimated_arrival")
+                    if eta_val is not None:
+                        self._tracked_last_eta = eta_val
                     self._tracked_last_data = tracked_data
                 elif tracked_data:
                     # SCHEDULED or NOT TRACKABLE — not live, don't set was_live
