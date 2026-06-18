@@ -14,6 +14,7 @@ Usage:
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -32,6 +33,7 @@ _cached_passes = None
 _cached_ts = 0.0
 _next_retry_after = 0.0  # absolute timestamp; 0 = retry immediately
 _consecutive_failures = 0
+_lock = threading.Lock()
 
 
 def _fetch(lat, lon):
@@ -75,41 +77,41 @@ def _load_cache():
 def _refresh():
     """Refresh data if poll interval has elapsed."""
     global _cached_passes, _cached_ts, _next_retry_after, _consecutive_failures
+    with _lock:
+        import config as cfg
+        location = cfg.LOCATION_HOME
+        if location == [0.0, 0.0]:
+            return []
 
-    import config as cfg
-    location = cfg.LOCATION_HOME
-    if location == [0.0, 0.0]:
-        return []
+        now = time.time()
+        if _cached_passes is not None and now < _next_retry_after:
+            return _cached_passes
 
-    now = time.time()
-    if _cached_passes is not None and now < _next_retry_after:
-        return _cached_passes
+        if _cached_passes is None:
+            disk, disk_ts = _load_cache()
+            if disk is not None:
+                _cached_passes = disk
+                _cached_ts = disk_ts
+                _next_retry_after = disk_ts + _POLL_INTERVAL
+                logger.info("[ISS] Loaded from disk cache")
+                if now < _next_retry_after:
+                    return _cached_passes
 
-    if _cached_passes is None:
-        disk, disk_ts = _load_cache()
-        if disk is not None:
-            _cached_passes = disk
-            _cached_ts = disk_ts
-            _next_retry_after = disk_ts + _POLL_INTERVAL
-            logger.info("[ISS] Loaded from disk cache")
-            if now < _next_retry_after:
-                return _cached_passes
+        if now >= _next_retry_after:
+            passes = _fetch(location[0], location[1])
+            if passes is not None:
+                _cached_passes = passes
+                _cached_ts = now
+                _consecutive_failures = 0
+                _next_retry_after = now + _POLL_INTERVAL
+            else:
+                _consecutive_failures += 1
+                # Exponential backoff: 60m, 120m, max 4h
+                backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
+                _next_retry_after = now + backoff
+                logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
 
-    if now >= _next_retry_after:
-        passes = _fetch(location[0], location[1])
-        if passes is not None:
-            _cached_passes = passes
-            _cached_ts = now
-            _consecutive_failures = 0
-            _next_retry_after = now + _POLL_INTERVAL
-        else:
-            _consecutive_failures += 1
-            # Exponential backoff: 60m, 120m, max 4h
-            backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
-            _next_retry_after = now + backoff
-            logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
-
-    return _cached_passes or []
+        return _cached_passes or []
 
 
 def _find_active_pass(passes):
