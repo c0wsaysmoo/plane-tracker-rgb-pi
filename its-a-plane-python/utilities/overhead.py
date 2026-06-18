@@ -1244,10 +1244,29 @@ class Overhead:
             if not match and self._tracked_alt_callsign:
                 match = self._api.find_by_callsign(self._tracked_alt_callsign)
 
-            # Strategy 3: route-based search for regional/codeshare flights
-            # Marketing flight numbers (AA4617) don't map to operating callsigns
-            # (RPA4394) — the only reliable approach is searching by route and
-            # filtering by operating carrier prefix and departure time.
+            # Strategy 3: try operating carrier prefix + same flight number
+            # (e.g., AAL4728 → RPA4728). Works when marketing and operating
+            # flight numbers match (most common case for US regionals).
+            if not match:
+                sched = self._tracked_schedule_cache.get(flight_input)
+                if not sched:
+                    for k in self._tracked_schedule_cache:
+                        sched = self._tracked_schedule_cache[k]
+                        break
+                cs_airline = (sched.get("cs_airline_iata", "") if sched else "")
+                cs_icao = IATA_TO_ICAO.get(cs_airline, "")
+                if cs_icao:
+                    flight_num = flight_input.lstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                    alt_cs = cs_icao + flight_num
+                    if alt_cs != flight_input:
+                        match = self._api.find_by_callsign(alt_cs)
+                        if match:
+                            self._tracked_alt_callsign = alt_cs
+                            logger.info(f"Found tracked flight via prefix swap: {alt_cs}")
+
+            # Strategy 4: route-based search for regional/codeshare flights
+            # Fallback when prefix swap fails (operating carrier uses different
+            # flight numbers) — searches by route and filters by carrier prefix.
             if not match:
                 sched = self._tracked_schedule_cache.get(flight_input)
                 if not sched:
