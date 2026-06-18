@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrix Display Mirror</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #0d0d0b;
+    --amber: #ffb300;
+    --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.1);
+    --amber-bright: #ffd54f;
+    --green: #69f0ae;
+    --red: #ff3d00;
+    --row-border: rgba(255,179,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  .board-header {
+    background: var(--amber);
+    color: var(--bg);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .board-title {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .board-clock {
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    margin-left: auto;
+    background: var(--bg);
+    color: var(--amber);
+    padding: 2px 12px;
+    letter-spacing: 3px;
+  }
+
+  .back-link {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    padding: 2px 12px;
+    text-decoration: none;
+    letter-spacing: 2px;
+  }
+
+  .display-outer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px;
+    gap: 16px;
+  }
+
+  @media (max-width: 700px) {
+    .display-outer { padding: 10px 8px; gap: 8px; }
+    .matrix-frame { width: 100%; }
+  }
+
+  .matrix-frame {
+    position: relative;
+    border: 3px solid #2a2010;
+    border-radius: 3px;
+    box-shadow: 0 0 40px rgba(0,0,0,0.9), inset 0 0 8px rgba(0,0,0,0.5);
+    overflow: hidden;
+    background: #030302;
+  }
+
+  #matrix-canvas {
+    display: block;
+    image-rendering: pixelated;
+    max-width: 100%;
+    aspect-ratio: 2 / 1;
+  }
+
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 9px,
+      rgba(0,0,0,0.18) 9px,
+      rgba(0,0,0,0.18) 10px
+    );
+    pointer-events: none;
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+  }
+
+  .info-bar {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--amber-dim);
+    text-align: center;
+  }
+  .info-bar span { color: var(--amber-bright); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    max-width: 660px;
+    border-top: 1px solid var(--row-border);
+    padding-top: 14px;
+    margin-top: 4px;
+  }
+
+  .legend-item {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 700px) {
+    .board-title { font-size: 22px; }
+    .board-header { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="board-header">
+  <span style="font-size:26px">✈</span>
+  <span class="board-title">Matrix Display Mirror</span>
+  <a class="back-link" href="/" style="margin-left:auto">← BOARD</a>
+</div>
+
+<div class="display-outer">
+  <div class="matrix-frame">
+    <canvas id="matrix-canvas"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <div class="info-bar" id="info-bar">LOADING...</div>
+
+</div>
+
+<script>
+// ── Display dimensions ──────────────────────────────────────────────────────────
+const COLS = 64, ROWS = 32, SCALE = 10;
+const CW = COLS * SCALE, CH = ROWS * SCALE;
+
+const canvas = document.getElementById('matrix-canvas');
+canvas.width  = CW;
+canvas.height = CH;
+const ctx = canvas.getContext('2d');
+
+// ── Colours (from colours.py) ───────────────────────────────────────────────────
+const C = {
+  clockDay:    '#fea727',   // LIGHT_ORANGE
+  clockNight:  '#28b7f6',   // LIGHT_BLUE
+  clockErr:    '#ff0000',
+  temp:        '#ffffff',
+  hiTemp:      '#ff7142',   // LIGHT_DARK_ORANGE (max temp)
+  loTemp:      '#42a4f4',   // LIGHT_MID_BLUE    (min temp)
+  date:        '#c090c8',   // mid-purple (simplified moon gradient)
+  dayLabel:    '#ec417b',   // LIGHT_PINK (DAY_COLOUR)
+  planeType:   '#42a4f4',
+  planeDist:   '#ec417b',
+  flightAlpha: '#aa46bc',   // LIGHT_PURPLE
+  flightNum:   '#fea727',
+  origin:      '#67ba6a',   // LIGHT_MID_GREEN
+  dest:        '#67ba6a',
+  delayYellow: '#feef58',
+  delayRed:    '#ef5251',
+  arrow:       '#c0c0c0',
+  distNum:     '#26c6da',   // LIGHT_TEAL
+  distUnit:    '#27a69b',
+  altColor:    '#ec417b',
+  climb:       '#9ccc65',
+  descend:     '#e47372',
+  alertOrange: '#fea727',
+  alertYellow: '#feef58',
+  alertRed:    '#ef5251',
+  alertWhite:  '#ffffff',
+  divider:     'rgba(255,179,0,0.12)',
+};
+
+const ALERT_COLOR_MAP = {
+  orange: C.alertOrange, yellow: C.alertYellow,
+  red: C.alertRed,       white:  C.alertWhite,
+};
+
+// ── State ───────────────────────────────────────────────────────────────────────
+const state = {
+  flights: [], alerts: [],
+  sunrise: null, sunset: null,
+  temperature: null, humidity: null, moonPhase: null,
+  forecast: [],        // [{dayName, iconCode, minTemp, maxTemp}]
+  clockFormat: '12hr',
+  distUnits: 'imperial',
+  tempUnits: 'imperial',
+};
+
+// Preloaded icon images keyed by weather code
+const iconCache = {};
+// Preloaded airline logos keyed by owner_icao
+const logoCache = {};
+
+// Scroll positions for flight/plane text rows
+let scrollFlight = CW;
+let scrollPlane  = CW;
+let alertCycleTick = 0;
+let flightIndex = 0;
+
+// ── Canvas helpers ──────────────────────────────────────────────────────────────
+const px = n => n * SCALE;
+
+function clear() {
+  ctx.fillStyle = '#030302';
+  ctx.fillRect(0, 0, CW, CH);
+}
+
+function measure(str, fontPx) {
+  ctx.font = `bold ${fontPx}px "Courier New", monospace`;
+  return ctx.measureText(str).width;
+}
+
+function drawText(str, canvasX, canvasY, color, fontPx, baseline = 'alphabetic') {
+  ctx.font = `bold ${fontPx}px "Courier New", monospace`;
+  ctx.textBaseline = baseline;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 4;
+  ctx.fillText(str, canvasX, canvasY);
+  ctx.shadowBlur = 0;
+  return ctx.measureText(str).width;
+}
+
+// ── Clock helpers ───────────────────────────────────────────────────────────────
+function clockColor() {
+  if (!state.sunrise || !state.sunset) return C.clockErr;
+  const now = new Date();
+  return (now >= new Date(state.sunrise) && now < new Date(state.sunset))
+    ? C.clockDay : C.clockNight;
+}
+
+function timeStr() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  if (state.clockFormat === '24hr') {
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  const h = now.getHours() % 12 || 12;
+  return `${h}:${pad(now.getMinutes())}`;
+}
+
+// ── Heading arrow ───────────────────────────────────────────────────────────────
+const ARROWS = ['↑','↗','→','↘','↓','↙','←','↖'];
+function headingArrow(h) { return ARROWS[Math.round(h / 45) % 8]; }
+
+// ── Altitude ────────────────────────────────────────────────────────────────────
+function fmtAlt(alt) {
+  if (!alt) return '';
+  alt = Math.round(alt);
+  if (state.distUnits === 'metric') return `${Math.round(alt * 0.3048)}m`;
+  if (alt >= 18000) return `FL${Math.floor(alt / 100)}`;
+  return `${alt.toLocaleString()}ft`;
+}
+
+// ── Delay color ─────────────────────────────────────────────────────────────────
+const COL_GREY    = '#888888';
+const COL_ORANGE  = '#ffa040';
+const COL_PURPLE  = '#aa46bc';
+const COL_DKBLUE  = '#5c6bc0';
+
+function depDelayColor(mins) {
+  if (mins == null)   return COL_GREY;
+  if (mins <= 20)     return C.origin;
+  if (mins <= 40)     return C.delayYellow;
+  if (mins <= 60)     return COL_ORANGE;
+  if (mins <= 240)    return C.delayRed;
+  if (mins <= 480)    return COL_PURPLE;
+  return COL_DKBLUE;
+}
+
+function arrDelayColor(mins) {
+  if (mins == null)   return COL_GREY;
+  if (mins <= 0)      return C.origin;
+  if (mins <= 30)     return C.delayYellow;
+  if (mins <= 60)     return COL_ORANGE;
+  if (mins <= 240)    return C.delayRed;
+  if (mins <= 480)    return COL_PURPLE;
+  return COL_DKBLUE;
+}
+
+// ── Forecast icon preload ───────────────────────────────────────────────────────
+function preloadIcon(code) {
+  if (code == null || iconCache[code]) return;
+  const img = new Image();
+  img.src = `/icons/${code}.png`;
+  iconCache[code] = img;
+}
+
+function preloadLogo(icao) {
+  const key = (icao && icao !== 'N/A') ? icao : 'default';
+  if (logoCache[key]) return;
+  const img = new Image();
+  img.onerror = () => {
+    if (key !== 'default') {
+      logoCache[key] = logoCache['default'];
+    }
+  };
+  img.src = `/logos/${key}.png`;
+  logoCache[key] = img;
+}
+
+// Always preload the default logo on boot
+preloadLogo('default');
+
+// Moon phase 0-7 gradient pairs matching date.py / colours.py
+const MOON_GRADIENTS = [
+  [[143,37,170],[143,37,170]],   // 0 new moon
+  [[143,37,170],[199,146,212]],  // 1 waxing crescent
+  [[143,37,170],[255,255,255]],  // 2 first quarter
+  [[199,146,212],[255,255,255]], // 3 waxing gibbous
+  [[192,192,192],[192,192,192]], // 4 full moon
+  [[255,255,255],[199,146,212]], // 5 waning gibbous
+  [[255,255,255],[143,37,170]],  // 6 last quarter
+  [[199,146,212],[143,37,170]],  // 7 waning crescent
+];
+
+function moonGradientColors(phase) {
+  if (phase == null) return null;
+  return MOON_GRADIENTS[Math.min(Math.max(Math.round(phase), 0), 7)];
+}
+
+function drawGradientText(text, x, y, fnt, colors) {
+  ctx.font = `bold ${fnt}px "Courier New", monospace`;
+  const [[r1,g1,b1],[r2,g2,b2]] = colors;
+  const n = text.length;
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 0;
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 3;
+    let cx = x;
+    for (let j = 0; j < i; j++) cx += ctx.measureText(text[j]).width;
+    ctx.fillText(text[i], cx, y);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function humidityColor(humidity) {
+  if (humidity == null) return C.temp;
+  const r = humidity / 100;
+  return `rgb(${Math.round(255 + (12 - 255) * r)},${Math.round(255 + (70 - 255) * r)},${Math.round(255 + (230 - 255) * r)})`;
+}
+
+// ── RENDER: forecast bottom zone (y=12..31, matrix) ────────────────────────────
+// 3 columns of equal width (~21px each); each column: day name → icon → min/max
+function renderForecast() {
+  if (!state.forecast.length) return;
+
+  const colW    = Math.floor(COLS / 3);  // 21
+  const iconSz  = 10;                    // ICON_SIZE
+  const fntPx   = 42;                    // extrasmall at 10x
+
+  // Zone: matrix y=12..31 → canvas y=120..320
+  const zoneTop = px(12);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, zoneTop, CW, CH - zoneTop);
+  ctx.clip();
+
+  state.forecast.slice(0, 3).forEach((day, i) => {
+    const colOffset = i * colW + 1;                 // matrix x
+    const cx        = px(colOffset);
+
+    // ── Day name (baseline at matrix y=17) ──────────────────────────────────
+    const dayW  = measure(day.dayName, fntPx);
+    const dayX  = cx + (px(colW) - dayW) / 2;
+    ctx.font = `bold ${fntPx}px "Courier New", monospace`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = C.dayLabel;
+    ctx.shadowColor = C.dayLabel;
+    ctx.shadowBlur = 3;
+    ctx.fillText(day.dayName, dayX, px(17));
+    ctx.shadowBlur = 0;
+
+    // ── Weather icon (top at matrix y=17, 10×10) ────────────────────────────
+    const iconCanvasW = px(iconSz);
+    const iconX = cx + (px(colW) - iconCanvasW) / 2;
+    const iconY = px(17);                           // matrix y=17
+
+    if (day.iconCode != null && iconCache[day.iconCode]?.complete) {
+      try {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(iconCache[day.iconCode], iconX, iconY, iconCanvasW, iconCanvasW);
+      } catch (e) { /* icon not ready */ }
+    }
+
+    // ── Min / Max temps (baseline at matrix y=32) ───────────────────────────
+    const maxStr = `${Math.round(day.maxTemp)}`;
+    const minStr = `${Math.round(day.minTemp)}`;
+    const maxW   = measure(maxStr, fntPx);
+    const minW   = measure(minStr, fntPx);
+    const totalTW = maxW + minW + px(0.5);
+    const tempStartX = cx + (px(colW) - totalTW) / 2;
+
+    ctx.font = `bold ${fntPx}px "Courier New", monospace`;
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.fillStyle = C.hiTemp; ctx.shadowColor = C.hiTemp; ctx.shadowBlur = 2;
+    ctx.fillText(maxStr, tempStartX, px(32));
+
+    ctx.fillStyle = C.loTemp; ctx.shadowColor = C.loTemp;
+    ctx.fillText(minStr, tempStartX + maxW + px(0.5), px(32));
+    ctx.shadowBlur = 0;
+  });
+
+  ctx.restore();
+
+  // Horizontal divider between top and forecast zones
+  ctx.fillStyle = C.divider;
+  ctx.fillRect(0, px(12), CW, 1);
+}
+
+// ── RENDER: idle (no flight) ────────────────────────────────────────────────────
+// Top zone (y=0..11): left=clock, right=temp+date
+// Bottom zone (y=12..31): 3-day forecast
+function renderIdle(clkColor, clkStr, alert) {
+  // ── Clock (left, x=0..39) ───────────────────────────────────────────────────
+  if (alert) {
+    // Small clock centred in x=0..39, baseline at y=6
+    const smallFnt = 52;
+    const smallW   = measure(clkStr, smallFnt);
+    const smallX   = (px(40) - smallW) / 2;
+    drawText(clkStr, smallX, px(6), clkColor, smallFnt);
+
+    // Scrolling alert text, baseline at y=12
+    const aColor  = ALERT_COLOR_MAP[alert.color] || C.alertOrange;
+    const alertFnt = 42;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, px(40), px(12)); ctx.clip();
+    const atw    = measure(alert.text || '', alertFnt);
+    const aTotal = px(40) + atw + px(4);
+    const ax     = px(40) - (alertCycleTick * 1.5 % aTotal);
+    drawText(alert.text || '', ax, px(12), aColor, alertFnt);
+    ctx.restore();
+  } else {
+    // Big clock, centred in x=0..39, baseline at y=11
+    const clkW = measure(clkStr, 115);
+    const clkX = (px(40) - clkW) / 2;
+    drawText(clkStr, clkX, px(11), clkColor, 115);
+  }
+
+  // ── Temperature (right, x=40..63, baseline y=6) ─────────────────────────────
+  if (state.temperature != null) {
+    const tempStr  = `${Math.round(state.temperature)}°`;
+    const tempFnt  = 52;
+    const tempCol  = humidityColor(state.humidity);
+    const tw  = measure(tempStr, tempFnt);
+    const tx  = px(40) + (px(24) - tw) / 2;
+    drawText(tempStr, tx, px(6), tempCol, tempFnt);
+  }
+
+  // ── Date (right, x=40..63, baseline y=11) ───────────────────────────────────
+  const now     = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  const dateFnt = 40;
+  const dw  = measure(dateStr, dateFnt);
+  const dx  = px(40) + (px(24) - dw) / 2;
+  const moonColors = moonGradientColors(state.moonPhase);
+  if (moonColors) {
+    drawGradientText(dateStr, dx, px(11), dateFnt, moonColors);
+  } else {
+    drawText(dateStr, dx, px(11), C.date, dateFnt);
+  }
+
+  // Vertical divider between clock and temp/date zones
+  ctx.fillStyle = C.divider;
+  ctx.fillRect(px(40), 0, 1, px(12));
+
+  // ── Forecast (bottom zone) ───────────────────────────────────────────────────
+  renderForecast();
+}
+
+// ── RENDER: flight overhead ─────────────────────────────────────────────────────
+function renderFlight(clkColor, clkStr, f) {
+  // ── Airline logo (top-left, 16×16 matrix pixels) ───────────────────────────
+  const logoIcao = (f.owner_icao && f.owner_icao !== 'N/A') ? f.owner_icao : 'default';
+  const logoImg  = logoCache[logoIcao] || logoCache['default'];
+  if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(logoImg, 0, 0, px(16), px(16));
+  }
+  const origin = f.origin || '???';
+  const dest   = f.destination || '???';
+  const dUnit  = state.distUnits === 'metric' ? 'km' : state.distUnits === 'nautical' ? 'nm' : 'mi';
+
+  // Delay colors
+  const depDelay = (f.time_real_departure && f.time_scheduled_departure)
+    ? (f.time_real_departure - f.time_scheduled_departure) / 60 : null;
+  const arrDelay = (f.time_estimated_arrival && f.time_scheduled_arrival)
+    ? (f.time_estimated_arrival - f.time_scheduled_arrival) / 60 : null;
+
+  // ── Origin → Destination (y=10) ─────────────────────────────────────────────
+  ctx.textBaseline = 'alphabetic';
+  let jx = px(17);
+  // Fixed arrow zone mirrors journey.py (arrow tip ~x=44, base ~x=36 in matrix coords)
+  const arrowX1 = px(36);
+  const arrowX2 = px(44);
+  const arrowW  = arrowX2 - arrowX1;
+  const gap     = px(1);
+  const leftMax = arrowX1 - jx - gap;   // max width for origin text
+  const rightMax = CW - arrowX2 - gap;  // max width for dest text
+
+  // Auto-shrink font until both texts fit in their respective wings
+  let jFnt = 95;
+  ctx.font = `bold ${jFnt}px "Courier New", monospace`;
+  while (jFnt > 40 && (ctx.measureText(origin).width > leftMax || ctx.measureText(dest).width > rightMax)) {
+    jFnt -= 2;
+    ctx.font = `bold ${jFnt}px "Courier New", monospace`;
+  }
+
+  const ow   = ctx.measureText(origin).width;
+  const dw   = ctx.measureText(dest).width;
+  // Right-align origin against arrow, left-align dest from arrow
+  const origX = arrowX1 - gap - ow;
+  const destX = arrowX2 + gap;
+
+  // Draw origin
+  ctx.fillStyle = depDelayColor(depDelay); ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 3;
+  ctx.fillText(origin, origX, px(10));
+
+  // Draw destination
+  ctx.fillStyle = arrDelayColor(arrDelay); ctx.shadowColor = ctx.fillStyle;
+  ctx.fillText(dest, destX, px(10));
+  ctx.shadowBlur = 0;
+
+  // ── Progress triangle (right-pointing, split by flight progress) ─────────────
+  {
+    const progRatio = (f.distance_origin != null && f.distance_destination != null)
+      ? Math.min(1, Math.max(0, f.distance_origin / (f.distance_origin + f.distance_destination)))
+      : 0.5;
+    const triCY  = px(5);           // vertical centre (matrix y=5)
+    const triH   = px(8);           // full base height (matrix 8px)
+    const colW   = Math.max(1, arrowW / 40);  // width of each column step
+    const cols   = Math.round(arrowW / colW);
+    const splitC = Math.round(cols * progRatio);
+
+    ctx.shadowBlur = 0;
+    for (let c = 0; c < cols; c++) {
+      const x        = arrowX1 + c * colW;
+      const halfH    = (triH / 2) * (1 - c / cols);
+      ctx.fillStyle  = c < splitC ? '#9ccc65' : '#e47372';
+      ctx.fillRect(x, triCY - halfH, colW, halfH * 2);
+    }
+  }
+
+  // ── Distances (y=16) ────────────────────────────────────────────────────────
+  if (f.distance_origin != null && f.distance_destination != null) {
+    const dstFnt = 42;
+    const halfW  = px(23);
+    const doStr  = `${Math.round(f.distance_origin)}${dUnit}`;
+    const ddStr  = `${Math.round(f.distance_destination)}${dUnit}`;
+    ctx.font = `bold ${dstFnt}px "Courier New", monospace`;
+    const doX = px(17) + (halfW - ctx.measureText(doStr).width) / 2;
+    const ddX = px(40) + (halfW - ctx.measureText(ddStr).width) / 2;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = C.distNum; ctx.shadowColor = C.distNum; ctx.shadowBlur = 2;
+    ctx.fillText(doStr, doX, px(16));
+    ctx.fillText(ddStr, ddX, px(16));
+    ctx.shadowBlur = 0;
+  }
+
+  // ── Flight number row (y=24, scrolling) ─────────────────────────────────────
+  {
+    const callsign  = f.callsign   || '';
+    const airline   = f.airline    || '';
+    const ownerIcao = f.owner_icao || '';
+    let label = '';
+    if (callsign && callsign !== 'N/A') {
+      if (airline && ownerIcao && callsign.startsWith(ownerIcao))
+        label = `${airline} ${callsign.slice(ownerIcao.length)}`;
+      else if (airline) label = `${airline} ${callsign}`;
+      else label = callsign;
+    }
+
+    if (label) {
+      const detFnt = 80;
+      ctx.font = `bold ${detFnt}px "Courier New", monospace`;
+      const totalW = ctx.measureText(label).width;
+      const gap    = px(8);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, px(17), CW, px(8)); ctx.clip();
+
+      for (let pass = 0, drawX = scrollFlight; pass < 2; pass++, drawX += totalW + gap) {
+        if (drawX > CW * 2) break;
+        let cx = drawX;
+        for (const ch of label) {
+          ctx.font = `bold ${detFnt}px "Courier New", monospace`;
+          const col = /\d/.test(ch) ? C.flightNum : C.flightAlpha;
+          ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 2;
+          ctx.textBaseline = 'alphabetic';
+          const cw = ctx.measureText(ch).width;
+          ctx.fillText(ch, cx, px(24));
+          cx += cw;
+        }
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      scrollFlight -= 9;
+      if (scrollFlight < -(totalW + gap)) {
+        scrollFlight = CW;
+        scrollPlane = CW;
+        if (state.flights.length > 1) flightIndex = (flightIndex + 1) % state.flights.length;
+      }
+    }
+  }
+
+  // ── Plane details row (y=32, scrolling) ─────────────────────────────────────
+  {
+    const planeName = f.plane    || '';
+    const distance  = f.distance || 0;
+    const direction = f.direction || '';
+    const altitude  = f.altitude  || 0;
+    const vs        = f.vertical_speed || 0;
+    const heading   = f.heading;
+
+    const altStr  = altitude ? ` @ ${fmtAlt(altitude)}` : '';
+    const vsArrow = vs > 64 ? '↑' : vs < -64 ? '↓' : '';
+    const hdgStr  = heading != null ? ` ${headingArrow(heading)}` : '';
+    const distStr = `${distance.toFixed(2)}${dUnit} ${direction}`;
+
+    const parts = [];
+    for (const ch of `${planeName} `) parts.push([ch, C.planeType]);
+    for (const ch of distStr)         parts.push([ch, C.planeDist]);
+    for (const ch of altStr)          parts.push([ch, C.altColor]);
+    if (vsArrow) parts.push([vsArrow, vs > 64 ? C.climb : C.descend]);
+    for (const ch of hdgStr)          parts.push([ch, C.planeDist]);
+
+    if (parts.length) {
+      const detFnt  = 80;
+      ctx.font      = `bold ${detFnt}px "Courier New", monospace`;
+      const fullW   = ctx.measureText(parts.map(p => p[0]).join('')).width;
+      const gap     = px(8);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, px(24), CW, px(8)); ctx.clip();
+
+      for (let pass = 0, drawX = scrollPlane; pass < 2; pass++, drawX += fullW + gap) {
+        if (drawX > CW * 2) break;
+        let cx = drawX;
+        for (const [ch, col] of parts) {
+          ctx.font = `bold ${detFnt}px "Courier New", monospace`;
+          ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 2;
+          ctx.textBaseline = 'alphabetic';
+          const cw = ctx.measureText(ch).width;
+          ctx.fillText(ch, cx, px(32));
+          cx += cw;
+        }
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      scrollPlane -= 9;
+      if (scrollPlane < -(fullW + gap)) scrollPlane = CW;
+    }
+  }
+}
+
+// ── Main render ─────────────────────────────────────────────────────────────────
+function render() {
+  clear();
+
+  const clkColor = clockColor();
+  const clkStr   = timeStr();
+  const flight   = state.flights.length > 0 ? state.flights[flightIndex] : null;
+
+  if (flight) {
+    renderFlight(clkColor, clkStr, flight);
+  } else {
+    const alert = state.alerts.length
+      ? state.alerts[Math.floor(alertCycleTick / 40) % state.alerts.length]
+      : null;
+    renderIdle(clkColor, clkStr, alert);
+  }
+
+  alertCycleTick++;
+}
+
+// ── Data fetch ──────────────────────────────────────────────────────────────────
+async function fetchData() {
+  const [clock, overhead, weather, config] = await Promise.allSettled([
+    fetch('/clock/json').then(r => r.json()),
+    fetch('/overhead/json').then(r => r.json()),
+    fetch('/weather/json').then(r => r.json()),
+    fetch('/api/config').then(r => r.json()),
+  ]);
+
+  if (clock.status === 'fulfilled') {
+    const d = clock.value;
+    state.sunrise = d.sunrise || null;
+    state.sunset  = d.sunset  || null;
+    state.alerts  = d.alerts  || [];
+  }
+
+  if (overhead.status === 'fulfilled') {
+    const prev = state.flights[0]?.callsign ?? null;
+    state.flights = Array.isArray(overhead.value) ? overhead.value : [];
+    const next = state.flights[0]?.callsign ?? null;
+    if (prev !== next) { scrollFlight = CW; scrollPlane = CW; flightIndex = 0; }
+    state.flights.forEach(f => preloadLogo(f.owner_icao));
+  }
+
+  if (weather.status === 'fulfilled') {
+    const w = weather.value;
+    state.temperature = w.temperature ?? null;
+    state.humidity    = w.humidity    ?? null;
+    state.moonPhase   = w.moonPhase   ?? null;
+
+    // Parse forecast days
+    const raw   = w.forecast || [];
+    const today = new Date().toDateString();
+    const days  = [];
+    for (const entry of raw) {
+      if (days.length >= 3) break;
+      try {
+        const dt = new Date(entry.startTime);
+        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+        if (dt < todayStart) continue;
+        const code = entry.values?.weatherCodeFullDay ?? null;
+        days.push({
+          dayName:  dt.toLocaleDateString('en-US', { weekday: 'short' }),
+          iconCode: code,
+          minTemp:  entry.values?.temperatureMin ?? 0,
+          maxTemp:  entry.values?.temperatureMax ?? 0,
+        });
+        preloadIcon(code);
+      } catch (e) { /* skip malformed entry */ }
+    }
+    state.forecast = days;
+  }
+
+  if (config.status === 'fulfilled') {
+    const cfg      = config.value.config || {};
+    state.clockFormat = cfg.location?.clock_format      || '12hr';
+    state.distUnits   = cfg.location?.distance_units    || 'imperial';
+    state.tempUnits   = cfg.location?.temperature_units || 'imperial';
+  }
+
+  updateInfoBar();
+}
+
+function updateInfoBar() {
+  const el = document.getElementById('info-bar');
+  const f  = state.flights[0];
+  if (f) {
+    const route = (f.origin && f.destination) ? ` ${f.origin}→${f.destination}` : '';
+    el.innerHTML = `MODE: <span>FLIGHT OVERHEAD</span> — <span>${f.callsign || ''}${route}</span>`;
+  } else if (state.alerts.length) {
+    el.innerHTML = `MODE: <span>CLOCK + ALERT</span> — ${state.alerts.length} ACTIVE ALERT${state.alerts.length > 1 ? 'S' : ''}`;
+  } else {
+    el.innerHTML = `MODE: <span>CLOCK / WEATHER</span>`;
+  }
+}
+
+// ── Boot ────────────────────────────────────────────────────────────────────────
+fetchData();
+setInterval(fetchData, 5000);
+setInterval(render, 67);   // ~15fps matches display frame rate
+</script>
+</body>
+</html>
