@@ -29,7 +29,7 @@
     background: var(--amber); color: var(--bg);
     padding: 10px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
   }
-  .board-title { font-family: 'VT323', monospace; font-size: 28px; letter-spacing: 4px; text-transform: uppercase; }
+  .board-title { font-family: 'VT323', monospace; font-size: 32px; letter-spacing: 4px; text-transform: uppercase; }
   .board-sub { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.6; margin-left: 4px; font-family: 'Share Tech Mono', monospace; }
   .nav-links { margin-left: auto; display: flex; gap: 8px; }
   .back { font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px;
@@ -70,7 +70,7 @@
 </head>
 <body>
 <div class="board-header">
-  <span style="font-size:22px">✈</span>
+  <span style="font-size:26px">✈</span>
   <div>
     <span class="board-title" id="page-title">Loading...</span>
     <span class="board-sub" id="page-sub"></span>
@@ -228,6 +228,7 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Aircraft (Top 12)</div><canvas id="aircraftChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Route Deviation (top 12)</div><canvas id="deviationChart"></canvas></div>
       <div class="panel chart-full">
         <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
         <div id="routeMap" class="route-map-wrap"></div>
@@ -321,6 +322,64 @@ async function render() {
   }
 
   await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
+  await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits);
+}
+
+// ── Route Deviation Table ─────────────────────────────────────────────────────
+async function buildDeviationTable(canvasId, tally, zone, distUnits) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !zone || !zone.tl_y) return;
+
+  const zoneLat = (zone.tl_y + zone.br_y) / 2;
+  const zoneLon = (zone.tl_x + zone.br_x) / 2;
+
+  const codes = new Set();
+  Object.keys(tally).forEach(r => { const [o,d]=r.split('↔'); if(o)codes.add(o); if(d)codes.add(d); });
+
+  let coords = {};
+  try { coords = await fetch(`/api/airport-coords?codes=${[...codes].join(',')}`).then(r=>r.json()); } catch(e) {}
+
+  const apLabel = code => { const n=coords[code]?.name; return n ? `${n} (${code})` : code; };
+
+  const rows = [];
+  Object.entries(tally).forEach(([route, count]) => {
+    const [o, d] = route.split('↔');
+    const oc = coords[o], dc = coords[d];
+    if (!oc || !dc) return;
+    const direct  = haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits);
+    const viaZone = haversineDist(oc.lat, oc.lon, zoneLat, zoneLon, distUnits) +
+                    haversineDist(zoneLat, zoneLon, dc.lat, dc.lon, distUnits);
+    if (direct < 75) return;
+    const deviationPct = ((viaZone / direct) - 1) * 100;
+    rows.push({ route, o, d, direct, viaZone, deviationPct, count });
+  });
+
+  rows.sort((a, b) => b.deviationPct - a.deviationPct);
+  const top = rows.slice(0, 12);
+  if (!top.length) return;
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: top.map(r => `${r.o}↔${r.d}`),
+      datasets: [{
+        data: top.map(r => +r.deviationPct.toFixed(1)),
+        backgroundColor: top.map((_, i) => COLOURS[i % COLOURS.length] + '99'),
+        borderColor:     top.map((_, i) => COLOURS[i % COLOURS.length]),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const r = top[ctx.dataIndex];
+          return ` ${apLabel(r.o)} ↔ ${apLabel(r.d)} — +${r.deviationPct.toFixed(1)}% detour · ${distLabel(r.direct, distUnits)} direct · ${r.count} flight${r.count>1?'s':''}`;
+        }}}
+      }
+    }
+  });
 }
 
 // ── Route Heat Map ────────────────────────────────────────────────────────────
