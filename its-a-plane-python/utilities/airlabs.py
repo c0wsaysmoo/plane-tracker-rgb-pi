@@ -129,6 +129,8 @@ def get_flight_schedule(callsign):
             "airline_icao": best.get("airline_icao", ""),
             "flight_number": best.get("flight_iata", callsign),
             "flight_icao": best.get("flight_icao", ""),
+            "cs_airline_iata": best.get("cs_airline_iata", ""),  # Operating carrier IATA (e.g., YX=Republic)
+            "dep_time_ts": best.get("dep_time_ts"),              # Scheduled departure unix timestamp
             "duration": best.get("duration"),
         }
         logger.info(f"AirLabs: Found {result['flight_number']} {result['origin']}→{result['destination']} status={result['status']}")
