@@ -334,16 +334,21 @@ def _load_parks():
 # Nominatim reverse geocoding (background thread)
 # ---------------------------------------------------------------------------
 
-_nom_result = None  # Last resolved name string
-_nom_query_lat = None  # Lat of the query that produced _nom_result
-_nom_query_lon = None  # Lon of the query that produced _nom_result
+_nom_city = None  # Last resolved settlement name (city/town/village only)
+_nom_country = None  # Country name fallback from Nominatim response
+_nom_query_lat = None  # Lat of the query that produced the result
+_nom_query_lon = None  # Lon of the query that produced the result
 _nom_fetching = False  # True while a background fetch is in flight
 _nom_lock = threading.Lock()
 
 
 def _nominatim_fetch(lat, lon):
-    """Reverse-geocode via Nominatim. Runs in a background daemon thread."""
-    global _nom_result, _nom_query_lat, _nom_query_lon, _nom_fetching
+    """Reverse-geocode via Nominatim. Runs in a background daemon thread.
+
+    Stores settlement names and country names separately so that the main
+    priority chain can prefer cities.json over vague country names.
+    """
+    global _nom_city, _nom_country, _nom_query_lat, _nom_query_lon, _nom_fetching
     try:
         r = requests.get(
             NOMINATIM_URL,
@@ -360,7 +365,7 @@ def _nominatim_fetch(lat, lon):
         country_code = address.get("country_code", "")
 
         # Try named settlement from address hierarchy (ASCII only)
-        cleaned = None
+        city_name = None
         for key in ("city", "town", "village", "municipality", "suburb"):
             candidate = address.get(key)
             if not candidate:
@@ -372,19 +377,15 @@ def _nominatim_fetch(lat, lon):
                 continue
             if len(candidate) > MAX_NAME_LEN:
                 continue
-            cleaned = _format_city_name(candidate, state, country_code)
+            city_name = _format_city_name(candidate, state, country_code)
             break
 
-        # Fall back to country name
-        if not cleaned and country_code:
-            cleaned = _country_name(country_code)
-
-        # Fall back to ocean/sea
-        if not cleaned:
-            cleaned = _get_ocean_name(lat, lon)
+        # Country name stored separately — only used as last resort
+        country_name = _country_name(country_code) if country_code else None
 
         with _nom_lock:
-            _nom_result = cleaned
+            _nom_city = city_name
+            _nom_country = country_name
             _nom_query_lat = lat
             _nom_query_lon = lon
 
@@ -402,8 +403,9 @@ def _ensure_nominatim(lat, lon):
     """
     Kick off a background Nominatim fetch if the plane has moved far enough.
 
-    Returns the most recent Nominatim city name (may be from previous position),
-    or None if no result is available yet.
+    Returns (city_name, country_name) from the most recent Nominatim result.
+    city_name is an actual settlement; country_name is a last-resort fallback.
+    Either or both may be None if no result is available yet.
     """
     global _nom_fetching
     with _nom_lock:
@@ -417,7 +419,7 @@ def _ensure_nominatim(lat, lon):
                 args=(lat, lon),
                 daemon=True,
             ).start()
-        return _nom_result
+        return _nom_city, _nom_country
 
 
 # ---------------------------------------------------------------------------
@@ -431,12 +433,15 @@ def get_nearest_landmark(latitude, longitude):
 
     Priority chain:
       1. NPS parks within 30km
-      2. Nominatim city (background, re-queried every 15km of movement)
+      2. Nominatim settlement (actual city/town/village)
       3. Local cities.json nearest-neighbour
-      4. Country name from country_code (via Nominatim response)
-      5. Ocean/sea name from coordinates
+      4. Country name from Nominatim response
+      5. Ocean/sea name from coordinate bounding boxes
 
-    Returns {"name": str, "distance_km": float, "type": "park"|"city"} or None.
+    Steps 2 and 4 are separated so that cities.json (step 3) always beats
+    a vague country name. "Topeka" is more useful than "United States".
+
+    Returns {"name": str, "distance_km": float, "type": str} or None.
     """
     _load_parks()
 
@@ -452,8 +457,8 @@ def get_nearest_landmark(latitude, longitude):
         if best_park and best_dist <= PARKS_RADIUS_KM:
             return {"name": best_park, "distance_km": best_dist, "type": "park"}
 
-    # 2. Nominatim city (non-blocking background fetch)
-    nom_city = _ensure_nominatim(latitude, longitude)
+    # 2. Nominatim settlement only (not country/ocean fallbacks)
+    nom_city, nom_country = _ensure_nominatim(latitude, longitude)
     if nom_city:
         return {"name": nom_city, "distance_km": 0.0, "type": "city"}
 
@@ -462,8 +467,11 @@ def get_nearest_landmark(latitude, longitude):
     if city:
         return {"name": city["name"], "distance_km": city["distance_km"], "type": "city"}
 
-    # 4-5. Country and ocean are handled inside _nominatim_fetch as fallbacks.
-    #       If Nominatim hasn't returned yet, try ocean lookup directly.
+    # 4. Country name from Nominatim response (last resort for land)
+    if nom_country:
+        return {"name": nom_country, "distance_km": 0.0, "type": "country"}
+
+    # 5. Ocean/sea name from bounding boxes (last resort for water)
     ocean = _get_ocean_name(latitude, longitude)
     if ocean:
         return {"name": ocean, "distance_km": 0.0, "type": "ocean"}
@@ -473,9 +481,10 @@ def get_nearest_landmark(latitude, longitude):
 
 def clear_cache():
     """Clear Nominatim cache — forces re-query on next call."""
-    global _nom_result, _nom_query_lat, _nom_query_lon, _nom_fetching
+    global _nom_city, _nom_country, _nom_query_lat, _nom_query_lon, _nom_fetching
     with _nom_lock:
-        _nom_result = None
+        _nom_city = None
+        _nom_country = None
         _nom_query_lat = None
         _nom_query_lon = None
         _nom_fetching = False
