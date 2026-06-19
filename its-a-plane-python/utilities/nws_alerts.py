@@ -19,6 +19,11 @@ import time
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.weather.gov/alerts/active"
@@ -29,8 +34,10 @@ _USER_AGENT = "PlaneTracker/1.0 (flight tracker LED display)"
 
 # Abbreviation map: NWS event name → (short text, color name)
 # Color names are resolved by the scene (clock.py) to actual RGB values.
+# Short text should be ≤9 chars to avoid alert overflow (>9 clears date zone).
+# Based on official NWS hazard map (weather.gov/help-map, updated March 2025).
 _ALERT_MAP = {
-    # Life-threatening warnings — red
+    # ── Life-threatening warnings — red ──
     "Tornado Warning":                ("Tornado!", "red"),
     "Severe Thunderstorm Warning":    ("SvrStorm", "red"),
     "Hurricane Warning":              ("Hurricne", "red"),
@@ -39,43 +46,162 @@ _ALERT_MAP = {
     "Tsunami Warning":                ("Tsunami!", "red"),
     "Extreme Wind Warning":           ("ExtWind",  "red"),
     "Storm Surge Warning":            ("StrmSrge", "red"),
-    # Significant warnings — orange
+    "Snow Squall Warning":            ("SnSquall", "red"),
+    "Earthquake Warning":             ("Quake!",   "red"),
+    "Volcano Warning":                ("Volcano!", "red"),
+    # Civil emergencies — red
+    "Evacuation Immediate":           ("EVACUATE", "red"),
+    "Shelter In Place Warning":       ("SHELTER",  "red"),
+    "Civil Danger Warning":           ("CivilWrn", "red"),
+    "Civil Emergency Message":        ("CivilEmg", "red"),
+    "Nuclear Power Plant Warning":    ("Nuclear!", "red"),
+    "Radiological Hazard Warning":    ("RadHaz!",  "red"),
+    "Hazardous Materials Warning":    ("HazMat!",  "red"),
+    "Law Enforcement Warning":        ("LawEnfrc", "red"),
+    "Local Area Emergency":           ("LocalEmg", "red"),
+    "911 Telephone Outage":           ("911 Out",  "red"),
+    # ── Significant warnings — orange ──
     "Flood Warning":                  ("Flood",    "orange"),
     "High Wind Warning":              ("HiWind",   "orange"),
     "Blizzard Warning":               ("Blizzard", "orange"),
     "Ice Storm Warning":              ("IceStorm", "orange"),
     "Winter Storm Warning":           ("WntStorm", "orange"),
-    "Heat Advisory":                  ("Heat Adv", "orange"),
     "Excessive Heat Warning":         ("ExtHeat",  "orange"),
+    "Extreme Heat Warning":           ("ExtHeat",  "orange"),
+    "Heat Advisory":                  ("Heat Adv", "orange"),
     "Tropical Storm Warning":         ("TropStrm", "orange"),
     "Fire Weather Watch":             ("FireWthr", "orange"),
     "Red Flag Warning":               ("RedFlag",  "orange"),
-    # Advisories and statements — cyan
+    "Wind Chill Warning":             ("WndChill", "orange"),
+    "Extreme Cold Warning":           ("ExtCold",  "orange"),
+    "Coastal Flood Warning":          ("CstFldW",  "orange"),
+    "Lakeshore Flood Warning":        ("LkFlood",  "orange"),
+    "Lake Effect Snow Warning":       ("LkSnow",   "orange"),
+    "Fire Warning":                   ("Fire!",    "orange"),
+    "Extreme Fire Danger":            ("FireDngr", "orange"),
+    "Dust Storm Warning":             ("DustStrm", "orange"),
+    "Typhoon Warning":                ("Typhoon!", "orange"),
+    "Avalanche Warning":              ("Avalanch", "orange"),
+    "Ashfall Warning":                ("Ashfall",  "orange"),
+    "Heavy Freezing Spray Warning":   ("FrzSpray", "orange"),
+    # Marine — orange
+    "Special Marine Warning":         ("MarineWn", "orange"),
+    "Gale Warning":                   ("Gale!",    "orange"),
+    "Storm Warning":                  ("Storm!",   "orange"),
+    "Hazardous Seas Warning":         ("HazSeas",  "orange"),
+    "High Surf Warning":              ("HiSurf!",  "orange"),
+    # ── Advisories and statements — cyan ──
     "High Surf Advisory":             ("HiSurf",   "cyan"),
     "Rip Current Statement":          ("RipCurr",  "cyan"),
     "Wind Advisory":                  ("Wind Adv", "cyan"),
     "Wind Chill Advisory":            ("WndChill", "cyan"),
-    "Wind Chill Warning":             ("WndChill", "orange"),
+    "Cold Weather Advisory":          ("ColdAdv",  "cyan"),
     "Freeze Warning":                 ("Freeze",   "cyan"),
     "Frost Advisory":                 ("Frost",    "cyan"),
     "Winter Weather Advisory":        ("WntWthr",  "cyan"),
     "Coastal Flood Advisory":         ("CstFlood", "cyan"),
-    "Coastal Flood Warning":          ("CstFldW",  "orange"),
     "Dense Fog Advisory":             ("DensFog",  "cyan"),
+    "Freezing Fog Advisory":          ("FrzFog",   "cyan"),
+    "Dense Smoke Advisory":           ("Smoke",    "cyan"),
+    "Freezing Rain Advisory":         ("FrzRain",  "cyan"),
+    "Freezing Spray Advisory":        ("FrzSpray", "cyan"),
     "Beach Hazards Statement":        ("BeachHaz", "cyan"),
-    # Air quality — yellow
-    "Air Quality Alert":              ("AirQlty",  "yellow"),
-    # Other common alerts
-    "Special Weather Statement":      ("SpclWthr", "grey"),
+    "Flood Advisory":                 ("FloodAdv", "cyan"),
+    "Lakeshore Flood Advisory":       ("LkFldAdv", "cyan"),
+    "Lake Wind Advisory":             ("LkWind",   "cyan"),
+    "Brisk Wind Advisory":            ("BrskWind", "cyan"),
+    "Dust Advisory":                  ("Dust",     "cyan"),
+    "Blowing Dust Advisory":          ("BlwDust",  "cyan"),
+    "Blowing Dust Warning":           ("BlwDust!", "orange"),
+    "Avalanche Advisory":             ("AvalAdv",  "cyan"),
+    "Ashfall Advisory":               ("AshAdv",   "cyan"),
+    "Small Craft Advisory":           ("SmlCraft", "cyan"),
+    "Low Water Advisory":             ("LowWater", "cyan"),
+    "Tsunami Advisory":               ("TsuAdv",   "cyan"),
     "Marine Weather Statement":       ("MarineWx", "cyan"),
-    # Watches — grey (lower urgency than warnings)
+    # ── Air quality — yellow ──
+    "Air Quality Alert":              ("AirQlty",  "yellow"),
+    "Air Stagnation Advisory":        ("AirStag",  "yellow"),
+    # ── Statements / misc — grey ──
+    "Special Weather Statement":      ("SpclWthr", "grey"),
+    "Severe Weather Statement":       ("SvrStmt",  "grey"),
+    "Flash Flood Statement":          ("FFldStmt", "grey"),
+    "Flood Statement":                ("FldStmt",  "grey"),
+    "Coastal Flood Statement":        ("CstFStmt", "grey"),
+    "Lakeshore Flood Statement":      ("LkFStmt",  "grey"),
+    "Tropical Cyclone Local Statement": ("TropStmt", "grey"),
+    # ── Watches — grey (lower urgency; suppressed when matching warning active) ──
     "Tornado Watch":                  ("TornWtch", "grey"),
     "Severe Thunderstorm Watch":      ("StrmWtch", "grey"),
     "Flash Flood Watch":              ("FldWatch", "grey"),
+    "Flood Watch":                    ("FldWatch", "grey"),
     "Winter Storm Watch":             ("WntWatch", "grey"),
     "Hurricane Watch":                ("HrcnWtch", "grey"),
+    "Hurricane Force Wind Watch":     ("HrcnWWch", "grey"),
     "Tropical Storm Watch":           ("TropWtch", "grey"),
+    "Storm Surge Watch":              ("SrgeWtch", "grey"),
+    "Typhoon Watch":                  ("TyphWtch", "grey"),
+    "Excessive Heat Watch":           ("HeatWtch", "grey"),
+    "Extreme Heat Watch":             ("HeatWtch", "grey"),
+    "Extreme Cold Watch":             ("ColdWtch", "grey"),
+    "Wind Chill Watch":               ("WChlWtch", "grey"),
+    "High Wind Watch":                ("HWndWtch", "grey"),
+    "Freeze Watch":                   ("FrezWtch", "grey"),
+    "Avalanche Watch":                ("AvalWtch", "grey"),
+    "Gale Watch":                     ("GaleWtch", "grey"),
+    "Storm Watch":                    ("StmWatch", "grey"),
+    "Hazardous Seas Watch":           ("HzSeaWch", "grey"),
+    "Lakeshore Flood Watch":          ("LkFWatch", "grey"),
+    "Coastal Flood Watch":            ("CstFWtch", "grey"),
+    "Heavy Freezing Spray Watch":     ("FrzSpWch", "grey"),
 }
+
+# Force certain high-impact events to red regardless of their default color.
+# (e.g. Extreme Heat has severity="Severe" in API but deserves red on display.)
+_EVENT_COLOUR_OVERRIDE = {
+    "Extreme Heat Warning":           "red",
+    "Extreme Heat Watch":             "red",
+    "Excessive Heat Warning":         "red",
+    "Tornado Watch":                  "red",
+    "Blizzard Warning":               "red",
+    "Ice Storm Warning":              "red",
+    "Tsunami Warning":                "red",
+    "Earthquake Warning":             "red",
+    "Nuclear Power Plant Warning":    "red",
+    "Radiological Hazard Warning":    "red",
+    "Hazardous Materials Warning":    "red",
+    "Evacuation Immediate":           "red",
+    "Shelter In Place Warning":       "red",
+}
+
+# ── Watch suppression ──
+# When a Warning is active, drop the matching Watch (e.g. Tornado Warning
+# active → suppress Tornado Watch). Matching is done on the NWS event name
+# prefix: "Tornado Warning" and "Tornado Watch" share "Tornado".
+
+def _suppress_watches(alerts, features):
+    """Drop Watch-level alerts when a Warning for the same hazard is active."""
+    # Build set of hazard prefixes that have an active warning
+    warning_prefixes = set()
+    for feature in features:
+        event = feature.get("properties", {}).get("event", "")
+        if event.endswith(" Warning"):
+            warning_prefixes.add(event.replace(" Warning", ""))
+
+    if not warning_prefixes:
+        return alerts
+
+    filtered = []
+    for alert, feature in zip(alerts, features):
+        event = feature.get("properties", {}).get("event", "")
+        if event.endswith(" Watch"):
+            prefix = event.replace(" Watch", "")
+            if prefix in warning_prefixes:
+                logger.info(f"[NWS] Suppressing '{event}' — warning already active")
+                continue
+        filtered.append(alert)
+    return filtered
+
 
 # In-memory cache
 _cached_alerts = None  # list of alert dicts from API
@@ -94,6 +220,7 @@ def _fetch(lat, lon):
             "Accept": "application/geo+json",
         }, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("nws")
         data = r.json()
         features = data.get("features", [])
 
@@ -161,6 +288,7 @@ def get_active_alerts():
     Each dict: {"text": "HiSurf", "color": "cyan"}
     Returns [] if no alerts or no location configured.
     Deduplicates by event name (same event won't appear twice).
+    Suppresses Watch-level alerts when a matching Warning is active.
     """
     features = _refresh()
     if not features:
@@ -168,6 +296,7 @@ def get_active_alerts():
 
     seen = set()
     alerts = []
+    matched_features = []
     for feature in features:
         props = feature.get("properties", {})
         event = props.get("event", "")
@@ -178,10 +307,18 @@ def get_active_alerts():
         mapping = _ALERT_MAP.get(event)
         if mapping:
             text, color = mapping
-            alerts.append({"text": text, "color": color})
         else:
             # Unknown alert type — show first 9 chars
-            abbrev = event[:9]
-            alerts.append({"text": abbrev, "color": "grey"})
+            text = event[:9]
+            color = "grey"
+
+        # Apply color override for high-impact events
+        color = _EVENT_COLOUR_OVERRIDE.get(event, color)
+
+        alerts.append({"text": text, "color": color})
+        matched_features.append(feature)
+
+    # Suppress Watch alerts when matching Warning is active
+    alerts = _suppress_watches(alerts, matched_features)
 
     return alerts

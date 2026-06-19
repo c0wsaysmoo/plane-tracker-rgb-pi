@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Usage</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            padding: 20px;
+            background: #0d0d0b;
+            color: #ffb000;
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 4px);
+            pointer-events: none;
+            z-index: 100;
+        }
+        h1 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 28px;
+            margin-bottom: 5px;
+            color: #ffd54f;
+            text-shadow: 0 0 10px rgba(255,180,0,0.3);
+        }
+        h3 {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
+            color: #ffb000;
+            margin: 20px 0 8px 0;
+        }
+        .nav { margin-bottom: 16px; font-size: 14px; }
+        .nav a { color: #ffb000; text-decoration: none; margin-right: 16px; }
+        .nav a:hover { text-decoration: underline; color: #ffd54f; }
+        .subtitle { font-size: 13px; color: #806000; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #222; font-size: 13px; }
+        th { color: #806000; font-size: 11px; text-transform: uppercase; }
+        td.num { text-align: right; font-family: 'VT323', monospace; font-size: 16px; color: #ffd54f; }
+        .bar-wrap { display: flex; align-items: center; gap: 8px; }
+        .bar-fill {
+            height: 14px;
+            background: #ffb000;
+            border-radius: 0;
+            min-width: 1px;
+            transition: width 0.3s;
+        }
+        .bar-label { font-size: 11px; color: #806000; white-space: nowrap; }
+        .card-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+        .card {
+            background: #111;
+            border: 1px solid #333;
+            border-top: 2px solid #ffb000;
+            padding: 12px 16px;
+            flex: 1;
+            min-width: 140px;
+        }
+        .card .label { font-size: 11px; color: #806000; text-transform: uppercase; }
+        .card .value {
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 26px;
+            color: #ffd54f;
+            margin-top: 2px;
+        }
+        .card .sub { font-size: 11px; color: #555; }
+        .section {
+            background: #111;
+            border: 1px solid #333;
+            padding: 14px;
+            margin: 16px 0;
+        }
+        .empty { color: #555; font-size: 13px; padding: 20px 0; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>API USAGE</h1>
+    <div class="subtitle" id="month-label">Loading...</div>
+    <div class="nav">
+        <a href="/">← Dashboard</a>
+        <a href="/stats">Stats</a>
+        <a href="/config">Config</a>
+    </div>
+
+    <div class="card-row" id="cards"></div>
+
+    <h3>▸ Monthly Totals by Source</h3>
+    <div class="section">
+        <table>
+            <thead><tr><th>Source</th><th></th><th style="text-align:right">Calls</th></tr></thead>
+            <tbody id="totals-body"></tbody>
+        </table>
+        <div class="empty" id="no-data" style="display:none">No API usage data recorded yet.</div>
+    </div>
+
+    <h3>▸ Daily Breakdown (Last 7 Days)</h3>
+    <div class="section" style="overflow-x:auto">
+        <table>
+            <thead><tr id="daily-head"><th>Source</th></tr></thead>
+            <tbody id="daily-body"></tbody>
+        </table>
+        <div class="empty" id="no-daily" style="display:none">No daily data available.</div>
+    </div>
+
+    <script>
+        const FRIENDLY = {
+            'fr24_grpc': 'FR24 gRPC',
+            'airlabs': 'AirLabs',
+            'noaa_tides': 'NOAA Tides',
+            'noaa_water': 'NOAA Water',
+            'tomorrow_io': 'Tomorrow.io',
+            'owm': 'OpenWeatherMap',
+            'nws': 'NWS',
+            'iss_api': 'ISS API',
+            'faa_status': 'FAA Status',
+            'nominatim': 'Nominatim',
+            'nps': 'NPS',
+            'adsbdb': 'ADSBdb',
+            'flightstats': 'FlightStats',
+        };
+
+        function friendly(src) { return FRIENDLY[src] || src; }
+
+        async function load() {
+            let summary;
+            try {
+                const res = await fetch('/api/usage');
+                const raw = await res.json();
+                // Build summary client-side from raw data
+                const now = new Date();
+                const monthPrefix = now.toISOString().slice(0, 7);
+                const totals = {};
+                const daily = {};
+                for (const [date, sources] of Object.entries(raw)) {
+                    if (date.startsWith(monthPrefix)) {
+                        daily[date] = sources;
+                        for (const [src, count] of Object.entries(sources)) {
+                            totals[src] = (totals[src] || 0) + count;
+                        }
+                    }
+                }
+                summary = { month: monthPrefix, totals, daily };
+            } catch (e) {
+                document.getElementById('no-data').style.display = '';
+                return;
+            }
+
+            document.getElementById('month-label').textContent = summary.month;
+
+            const totals = summary.totals || {};
+            const daily = summary.daily || {};
+            const sortedSources = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+            const maxCount = sortedSources.length ? sortedSources[0][1] : 1;
+            const totalCalls = sortedSources.reduce((s, e) => s + e[1], 0);
+            const dayCount = Object.keys(daily).length || 1;
+
+            // Summary cards
+            const cards = document.getElementById('cards');
+            const cardData = [
+                { label: 'Total Calls', value: totalCalls.toLocaleString(), sub: summary.month },
+                { label: 'Sources Active', value: sortedSources.length, sub: '' },
+                { label: 'Daily Average', value: (totalCalls / dayCount).toFixed(0), sub: `${dayCount} days` },
+                { label: 'Top Source', value: sortedSources.length ? friendly(sortedSources[0][0]) : '—', sub: sortedSources.length ? sortedSources[0][1].toLocaleString() + ' calls' : '' },
+            ];
+            for (const c of cardData) {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `<div class="label">${c.label}</div><div class="value">${c.value}</div>${c.sub ? `<div class="sub">${c.sub}</div>` : ''}`;
+                cards.appendChild(div);
+            }
+
+            // Totals table with bar chart
+            if (!sortedSources.length) {
+                document.getElementById('no-data').style.display = '';
+            } else {
+                const tbody = document.getElementById('totals-body');
+                for (const [src, count] of sortedSources) {
+                    const pct = (count / maxCount * 100).toFixed(0);
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${friendly(src)}</td>
+                        <td><div class="bar-wrap"><div class="bar-fill" style="width:${pct * 2}px"></div><span class="bar-label">${pct}%</span></div></td>
+                        <td class="num">${count.toLocaleString()}</td>`;
+                    tbody.appendChild(tr);
+                }
+            }
+
+            // Daily breakdown — last 7 days
+            const dates = Object.keys(daily).sort().slice(-7);
+            if (!dates.length) {
+                document.getElementById('no-daily').style.display = '';
+                return;
+            }
+
+            // Collect all sources seen in the daily window
+            const allSources = new Set();
+            for (const d of dates) {
+                for (const src of Object.keys(daily[d])) allSources.add(src);
+            }
+            const srcList = Array.from(allSources).sort((a, b) => {
+                // Sort by total desc
+                const aT = dates.reduce((s, d) => s + (daily[d][a] || 0), 0);
+                const bT = dates.reduce((s, d) => s + (daily[d][b] || 0), 0);
+                return bT - aT;
+            });
+
+            // Header row: Source | date1 | date2 | ...
+            const thead = document.getElementById('daily-head');
+            for (const d of dates) {
+                const th = document.createElement('th');
+                th.style.textAlign = 'right';
+                th.textContent = d.slice(5); // MM-DD
+                thead.appendChild(th);
+            }
+
+            const dtbody = document.getElementById('daily-body');
+            for (const src of srcList) {
+                const tr = document.createElement('tr');
+                const tdName = document.createElement('td');
+                tdName.textContent = friendly(src);
+                tr.appendChild(tdName);
+                for (const d of dates) {
+                    const td = document.createElement('td');
+                    td.className = 'num';
+                    const val = (daily[d] || {})[src] || 0;
+                    td.textContent = val || '·';
+                    if (!val) td.style.color = '#333';
+                    tr.appendChild(td);
+                }
+                dtbody.appendChild(tr);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', load);
+    </script>
+</body>
+</html>

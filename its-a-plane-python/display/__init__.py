@@ -43,15 +43,17 @@ try:
         NIGHT_START,
         NIGHT_END,
         NIGHT_BRIGHTNESS,
+        LED_RGB_SEQUENCE,
     )
     NIGHT_START = datetime.strptime(NIGHT_START, "%H:%M")
     NIGHT_END = datetime.strptime(NIGHT_END, "%H:%M")
 
-except (ModuleNotFoundError, NameError):
+except (ImportError, NameError):
     BRIGHTNESS = 100
     GPIO_SLOWDOWN = 1
     HAT_PWM_ENABLED = True
     NIGHT_BRIGHTNESS = False
+    LED_RGB_SEQUENCE = "RGB"
 
 
 def adjust_brightness(matrix):
@@ -103,14 +105,12 @@ class Display(
         options.pwm_bits = 11
         options.brightness = BRIGHTNESS
         options.pwm_lsb_nanoseconds = 160
-        options.led_rgb_sequence = "RGB"
+        options.led_rgb_sequence = LED_RGB_SEQUENCE
         options.pixel_mapper_config = ""
         options.show_refresh_rate = 0
         options.gpio_slowdown = GPIO_SLOWDOWN
         options.disable_hardware_pulsing = True
-        # Keep running as root — the fr24 thread needs file/network access
-        # after matrix init. On a dedicated Pi this is fine.
-        options.drop_privileges = False
+        options.drop_privileges = True
         options.limit_refresh_rate_hz = 120
         self.matrix = RGBMatrix(options=options)
 

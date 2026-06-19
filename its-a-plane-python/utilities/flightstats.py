@@ -13,6 +13,11 @@ from datetime import datetime, timedelta
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 # FlightStats public JSON endpoint (not HTML scraping)
@@ -130,6 +135,7 @@ def get_route(callsign):
             })
             if r.status_code != 200:
                 continue
+            _log_api("flightstats")
 
             data = r.json()
             # Navigate to flight data

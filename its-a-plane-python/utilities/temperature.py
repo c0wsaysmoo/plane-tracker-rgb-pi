@@ -15,6 +15,11 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util.retry import Retry
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 # Attempt to load config data
 try:
     from config import TOMORROW_API_KEY
@@ -247,6 +252,7 @@ def grab_temperature_and_humidity():
         request.raise_for_status()
         _record_call("temp")
         _exit_backoff()
+        _log_api("tomorrow_io")
 
         data = request.json().get("data", {}).get("values", {})
         temperature = data.get("temperature")
@@ -356,6 +362,7 @@ def grab_forecast(tag="unknown"):
         resp.raise_for_status()
         _record_call("forecast")
         _exit_backoff()
+        _log_api("tomorrow_io")
 
         data = resp.json().get("data", {})
         timelines = data.get("timelines", [])

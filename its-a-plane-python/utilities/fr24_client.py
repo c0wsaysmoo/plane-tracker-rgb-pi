@@ -31,6 +31,11 @@ from typing import Any, Optional
 
 from utilities.cache import FR24Cache
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 
@@ -248,6 +253,7 @@ class FR24Client:
             )
             # Reset fr24_ok on success (fixes: flag never reset to True)
             self._fr24_ok = True
+            _log_api("fr24_grpc")
         except (ConnectionError, OSError) as e:
             logger.warning(f"FR24: Connection error: {e}")
             self._fr24_ok = False
@@ -284,6 +290,7 @@ class FR24Client:
                 lambda fr24: self._find_by_callsign_async(fr24, callsign)
             )
             self._fr24_ok = True
+            _log_api("fr24_grpc")
             if results:
                 logger.info(f"FR24: Found {callsign} at lat={results[0].latitude:.2f} lon={results[0].longitude:.2f}")
                 return results[0]
@@ -320,6 +327,7 @@ class FR24Client:
                 lambda fr24: self._find_by_route_async(fr24, origin_iata, destination_iata)
             )
             self._fr24_ok = True
+            _log_api("fr24_grpc")
             logger.info(f"FR24: Found {len(results)} flights on {origin_iata}→{destination_iata}")
             return results
         except (ConnectionError, OSError) as e:
@@ -502,6 +510,7 @@ class FR24Client:
             )
             # Reset fr24_ok on success
             self._fr24_ok = True
+            _log_api("fr24_grpc")
         except (ConnectionError, OSError) as e:
             logger.warning(f"FR24: Connection error getting details: {e}")
             self._fr24_ok = False

@@ -20,6 +20,11 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://nasstatus.faa.gov/api/airport-status-information"
@@ -138,6 +143,7 @@ def _fetch():
     try:
         r = requests.get(_API_URL, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("faa_status")
         data = _parse_xml(r.text)
 
         os.makedirs(_CACHE_DIR, exist_ok=True)
