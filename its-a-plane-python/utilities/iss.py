@@ -19,6 +19,11 @@ from datetime import datetime, timezone
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://iss-api.polluxlabs.io/iss-pass"
@@ -43,6 +48,7 @@ def _fetch(lat, lon):
             "visible_only": "true",
         }, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("iss_api")
         data = r.json()
         passes = data.get("passes", [])
 

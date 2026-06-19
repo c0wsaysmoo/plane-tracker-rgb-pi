@@ -20,6 +20,11 @@ from time import time
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://airlabs.co/api/v9"
@@ -92,6 +97,7 @@ def get_flight_schedule(callsign):
         logger.info(f"AirLabs: Looking up schedule for {callsign}")
         r = requests.get(f"{_API_BASE}/schedules", params=params, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("airlabs")
         data = r.json()
 
         schedules = data.get("response", [])
@@ -169,6 +175,7 @@ def get_flight_legs(callsign):
     try:
         r = requests.get(f"{_API_BASE}/schedules", params=params, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("airlabs")
         schedules = r.json().get("response", [])
         now = time()
         upcoming = [

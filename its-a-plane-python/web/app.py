@@ -703,6 +703,21 @@ def api_system():
     return jsonify(info)
 
 
+# ---- API Usage ----
+
+from utilities.api_usage import get_usage as _api_get_usage
+
+@app.get("/api/usage")
+def api_usage():
+    """Return API usage data as JSON."""
+    return jsonify(_api_get_usage())
+
+
+@app.get("/usage")
+def usage_page():
+    return render_template("usage.html")
+
+
 @app.post("/api/restart")
 def api_restart():
     """Restart the flight-tracker service via systemctl."""

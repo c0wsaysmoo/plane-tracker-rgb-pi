@@ -16,6 +16,11 @@ from datetime import datetime
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
@@ -82,6 +87,7 @@ def _fetch_predictions(station):
             "date": "today",
         }, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("noaa_tides")
         data = r.json()
         predictions = data.get("predictions", [])
         if not predictions:
@@ -206,6 +212,7 @@ def get_water_temp():
             "format": "json",
         }, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("noaa_water")
         data = r.json()
         readings = data.get("data", [])
         if readings:

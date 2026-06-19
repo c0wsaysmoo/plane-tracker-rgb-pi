@@ -20,6 +20,11 @@ import time
 
 import requests
 
+try:
+    from utilities.api_usage import log_call as _log_api
+except ImportError:
+    _log_api = lambda source: None
+
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.openweathermap.org/data/3.0/onecall"
@@ -45,6 +50,7 @@ def _fetch(lat, lon, api_key):
             "appid": api_key,
         }, timeout=(5, 15))
         r.raise_for_status()
+        _log_api("owm")
         data = r.json()
 
         # Cache to disk
