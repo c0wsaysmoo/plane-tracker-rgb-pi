@@ -74,44 +74,65 @@ def _load_cache():
     return None, 0
 
 
-def _refresh():
-    """Refresh data if poll interval has elapsed."""
+def _background_refresh(lat, lon):
+    """Run the blocking fetch off the caller's thread. Releases _lock when done."""
     global _cached_passes, _cached_ts, _next_retry_after, _consecutive_failures
-    with _lock:
-        import config as cfg
-        location = cfg.LOCATION_HOME
-        if location == [0.0, 0.0]:
-            return []
-
+    try:
         now = time.time()
-        if _cached_passes is not None and now < _next_retry_after:
-            return _cached_passes
+        passes = _fetch(lat, lon)
+        if passes is not None:
+            _cached_passes = passes
+            _cached_ts = now
+            _consecutive_failures = 0
+            _next_retry_after = now + _POLL_INTERVAL
+        else:
+            _consecutive_failures += 1
+            # Exponential backoff: 60m, 120m, max 4h
+            backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
+            _next_retry_after = now + backoff
+            logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
+    finally:
+        _lock.release()
 
-        if _cached_passes is None:
-            disk, disk_ts = _load_cache()
-            if disk is not None:
-                _cached_passes = disk
-                _cached_ts = disk_ts
-                _next_retry_after = disk_ts + _POLL_INTERVAL
-                logger.info("[ISS] Loaded from disk cache")
-                if now < _next_retry_after:
-                    return _cached_passes
 
-        if now >= _next_retry_after:
-            passes = _fetch(location[0], location[1])
-            if passes is not None:
-                _cached_passes = passes
-                _cached_ts = now
-                _consecutive_failures = 0
-                _next_retry_after = now + _POLL_INTERVAL
-            else:
-                _consecutive_failures += 1
-                # Exponential backoff: 60m, 120m, max 4h
-                backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
-                _next_retry_after = now + backoff
-                logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
+def _refresh():
+    """Return cached passes immediately; kick off a background fetch if stale.
 
-        return _cached_passes or []
+    Never blocks on the network. If a refresh is already in flight (or we're
+    in a backoff window), callers just get the current cached passes — this
+    is what prevents thread pileup on the Flask server when the ISS API or
+    DNS is degraded.
+    """
+    global _cached_passes, _cached_ts, _next_retry_after
+
+    import config as cfg
+    location = cfg.LOCATION_HOME
+    if location == [0.0, 0.0]:
+        return []
+
+    now = time.time()
+    if _cached_passes is not None and now < _next_retry_after:
+        return _cached_passes
+
+    if _cached_passes is None:
+        disk, disk_ts = _load_cache()
+        if disk is not None:
+            _cached_passes = disk
+            _cached_ts = disk_ts
+            _next_retry_after = disk_ts + _POLL_INTERVAL
+            logger.info("[ISS] Loaded from disk cache")
+            if now < _next_retry_after:
+                return _cached_passes
+
+    # Stale (and past backoff) — try to claim the refresh slot without blocking.
+    if now >= _next_retry_after and _lock.acquire(blocking=False):
+        threading.Thread(
+            target=_background_refresh, args=(location[0], location[1]), daemon=True
+        ).start()
+    # else: a refresh is already in flight elsewhere, or we're still in a
+    # backoff window — fall through and return whatever we've got.
+
+    return _cached_passes or []
 
 
 def _find_active_pass(passes):

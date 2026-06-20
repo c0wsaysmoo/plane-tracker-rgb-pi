@@ -14,6 +14,7 @@ Usage:
 import json
 import logging
 import os
+import threading
 import time
 
 import requests
@@ -194,6 +195,7 @@ def _abbreviate(event):
 # In-memory cache
 _cached_data = None
 _cached_ts = 0.0
+_lock = threading.Lock()
 
 
 def _suppress_watches(alerts):
@@ -267,8 +269,32 @@ def _load_cache():
     return None, 0
 
 
+def _background_refresh(lat, lon):
+    """Run the blocking fetch off the caller's thread. Releases _lock when done."""
+    global _cached_data, _cached_ts
+    try:
+        now = time.time()
+        data = _fetch(lat, lon)
+        if data is not None:
+            _cached_data = data
+            _cached_ts = now
+        else:
+            # Back off so a failed fetch doesn't retry every second
+            _cached_ts = now
+    finally:
+        _lock.release()
+
+
 def _refresh(lat, lon):
-    """Return cached alerts, fetching fresh data if the poll interval has elapsed."""
+    """Return cached alerts immediately; kick off a background fetch if stale.
+
+    Never blocks on the network. Previously this had no lock at all, so a
+    stale cache meant *every* concurrent request (e.g. a slave hammering
+    /clock/json) would independently open its own blocking call to
+    api.weather.gov — if that call hung (DNS outage, slow upstream), each
+    request thread hung with it, exhausting the Flask server's threads. Now
+    only one background fetch runs at a time and callers never block.
+    """
     global _cached_data, _cached_ts
 
     now = time.time()
@@ -281,15 +307,14 @@ def _refresh(lat, lon):
             _cached_data = disk
             _cached_ts = disk_ts
             logger.info("[NWS] Loaded from disk cache")
+            if (now - _cached_ts) < _POLL_INTERVAL:
+                return _cached_data
 
-    if (now - _cached_ts) >= _POLL_INTERVAL:
-        data = _fetch(lat, lon)
-        if data is not None:
-            _cached_data = data
-            _cached_ts = now
-        else:
-            # Back off so a failed fetch doesn't retry every second
-            _cached_ts = now
+    # Stale or missing — try to claim the refresh slot without blocking.
+    if _lock.acquire(blocking=False):
+        threading.Thread(target=_background_refresh, args=(lat, lon), daemon=True).start()
+    # else: a refresh is already in flight elsewhere — fall through and
+    # return whatever we've got.
 
     return _cached_data or []
 
@@ -317,42 +342,3 @@ def get_nws_alerts():
         return []
 
     return _refresh(lat, lon)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SLAVE MODE — override public function to poll master instead
-# ─────────────────────────────────────────────────────────────────────────────
-try:
-    from config import MASTER_TRACKER as _MASTER_TRACKER
-except (ImportError, ModuleNotFoundError, NameError):
-    _MASTER_TRACKER = ""
-
-if _MASTER_TRACKER:
-    import requests as _requests
-    from requests.exceptions import RequestException as _RequestException
-
-    _slave_cache: list = []
-    _slave_cache_ts: float = 0.0
-    _SLAVE_TTL = 60  # seconds
-
-    def _slave_url(path):
-        host = _MASTER_TRACKER.rstrip("/")
-        if not host.startswith("http"):
-            host = f"http://{host}.local:8080"
-        return f"{host}{path}"
-
-    def get_nws_alerts():
-        global _slave_cache, _slave_cache_ts
-        now = time.time()
-        if _slave_cache_ts and (now - _slave_cache_ts) < _SLAVE_TTL:
-            return _slave_cache
-        try:
-            r = _requests.get(_slave_url("/nws/json"), timeout=10)
-            r.raise_for_status()
-            _slave_cache = r.json() or []
-            _slave_cache_ts = now
-        except _RequestException as e:
-            logger.error(f"[Slave/NWS] Cannot reach master: {e}")
-        return _slave_cache
-
-    logger.info(f"[NWS] Slave mode — polling master at {_slave_url('')}")
