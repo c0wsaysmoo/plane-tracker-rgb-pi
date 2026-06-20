@@ -180,29 +180,48 @@ def _load_cache():
     return None, 0
 
 
+def _background_refresh():
+    """Run the blocking fetch off the caller's thread. Releases _lock when done."""
+    global _cached_data, _cached_ts
+    try:
+        data = _fetch()
+        if data is not None:
+            _cached_data = data
+            _cached_ts = time.time()
+    finally:
+        _lock.release()
+
+
 def _refresh():
-    """Refresh data if poll interval has elapsed."""
+    """Return cached data immediately; kick off a background fetch if stale.
+
+    Never blocks on the network. If a refresh is already in flight, callers
+    just get the current (possibly stale) cached value instead of queueing
+    up behind a slow/hung request — this is what prevents thread pileup on
+    the Flask server when nasstatus.faa.gov is slow or DNS is degraded.
+    """
     global _cached_data, _cached_ts
 
-    with _lock:
-        now = time.time()
-        if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
-            return _cached_data
-
-        if _cached_data is None:
-            disk, disk_ts = _load_cache()
-            if disk is not None:
-                _cached_data = disk
-                _cached_ts = disk_ts
-                logger.info("[AirportStatus] Loaded from disk cache")
-
-        if (now - _cached_ts) >= _POLL_INTERVAL:
-            data = _fetch()
-            if data is not None:
-                _cached_data = data
-                _cached_ts = now
-
+    now = time.time()
+    if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
         return _cached_data
+
+    if _cached_data is None:
+        disk, disk_ts = _load_cache()
+        if disk is not None:
+            _cached_data = disk
+            _cached_ts = disk_ts
+            logger.info("[AirportStatus] Loaded from disk cache")
+            if (now - _cached_ts) < _POLL_INTERVAL:
+                return _cached_data
+
+    # Stale or missing — try to claim the refresh slot without blocking.
+    if _lock.acquire(blocking=False):
+        threading.Thread(target=_background_refresh, daemon=True).start()
+    # else: a refresh is already in flight elsewhere — fall through and
+    # return whatever we've got.
+
+    return _cached_data
 
 
 def get_airport_alerts():
