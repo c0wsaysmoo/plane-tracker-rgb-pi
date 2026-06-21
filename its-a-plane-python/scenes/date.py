@@ -107,6 +107,10 @@ class DateScene(object):
             self._redraw_date = True
             return
 
+        # Keep rotation counter ticking even while suppressed, so when the
+        # date gets its turn back it shows the next item, not a stale one.
+        self._cycle_counter += 1
+
         # Suppress date when alert text overflows into date area.
         # _alert_overflow is the alert char count (0 = no overflow).
         # Clear only date pixels PAST the alert end to avoid wiping alert text.
@@ -128,9 +132,6 @@ class DateScene(object):
         if len(self._data):
             self._redraw_date = True
             return
-
-        # Increment cycle counter
-        self._cycle_counter += 1
 
         # Build display items: date always, tides + water temp if available
         tides = self._get_tides()

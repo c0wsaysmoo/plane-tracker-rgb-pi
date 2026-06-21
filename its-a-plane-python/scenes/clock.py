@@ -263,6 +263,14 @@ class ClockScene(object):
 
         # Build unified alert list and pick current item
         alert_items = self._build_alert_items()
+
+        # Single long alert (>9 chars) would overflow into the date zone and
+        # permanently suppress date/tides rotation.  Inject a blank slot so the
+        # alert cycles on/off with the same 4-second timing as multi-alert
+        # rotation, giving date.py its turn to draw.
+        if len(alert_items) == 1 and alert_items[0][0] and len(alert_items[0][0]) > 9:
+            alert_items.append((None, None))
+
         self._alert_cycle_counter += 1
 
         if alert_items:
