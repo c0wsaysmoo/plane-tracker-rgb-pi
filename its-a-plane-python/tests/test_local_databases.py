@@ -184,7 +184,7 @@ class TestAirlinesModule:
             "UAL": "United Airlines",
             "BAW": "British Airways",
             "ENY": "American Eagle",
-            "RPA": "United Express",
+            "RPA": "Republic Airways",
             "SKW": "SkyWest Airlines",
             "DLH": "Lufthansa",
         }
@@ -252,7 +252,7 @@ class TestAirlinesModule:
             airlines_mod._db = {}
             # These should be overridden to user-friendly names
             assert airlines_mod.get_airline_name("ENY") == "American Eagle"
-            assert airlines_mod.get_airline_name("RPA") == "United Express"
+            assert airlines_mod.get_airline_name("RPA") == "Republic Airways"
             assert airlines_mod.get_airline_name("SKW") == "SkyWest Airlines"
 
 
