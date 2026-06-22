@@ -188,8 +188,9 @@
             const hourTotals = Array(24).fill(0);
             summary.forEach(d => d.by_hour.forEach((v,i) => hourTotals[i] += v));
             const avgByHour = hourTotals.map(v => v / totalDays);
-            const peakHourIdx = avgByHour.indexOf(Math.max(...avgByHour));
-            document.getElementById('peak-hour').textContent = `${peakHourIdx}:00`;
+            const maxHourVal = Math.max(...avgByHour);
+            const peakHourIdxs = avgByHour.reduce((a,v,i) => v === maxHourVal ? [...a,i] : a, []);
+            document.getElementById('peak-hour').textContent = peakHourIdxs.map(i => `${i}:00`).join(', ');
 
             // Average by DOW
             const dowTotals = Array(7).fill(0);
@@ -200,8 +201,9 @@
                 dowCounts[dow]++;
             });
             const avgByDow = dowTotals.map((v,i) => dowCounts[i] ? v / dowCounts[i] : 0);
-            const peakDow = avgByDow.indexOf(Math.max(...avgByDow));
-            document.getElementById('peak-dow').textContent = DOWS[peakDow];
+            const maxDowVal = Math.max(...avgByDow);
+            const peakDows = avgByDow.reduce((a,v,i) => v === maxDowVal ? [...a,i] : a, []);
+            document.getElementById('peak-dow').textContent = peakDows.map(i => DOWS[i]).join(', ');
 
             // Collect all flights for breakdown analysis
             const airlines = {};

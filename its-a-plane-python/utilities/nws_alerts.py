@@ -15,6 +15,7 @@ Usage:
 import json
 import logging
 import os
+import threading
 import time
 
 import requests
@@ -206,6 +207,8 @@ def _suppress_watches(alerts, features):
 # In-memory cache
 _cached_alerts = None  # list of alert dicts from API
 _cached_ts = 0.0
+_refresh_lock = threading.Lock()
+_refresh_pending = False
 
 
 def _fetch(lat, lon):
@@ -250,9 +253,22 @@ def _load_cache():
     return None, 0
 
 
+def _background_fetch(lat, lon):
+    """Fetch NWS alerts in a background thread so the display never blocks."""
+    global _cached_alerts, _cached_ts, _refresh_pending
+    with _refresh_lock:
+        try:
+            features = _fetch(lat, lon)
+            if features is not None:
+                _cached_alerts = features
+                _cached_ts = time.time()
+        finally:
+            _refresh_pending = False
+
+
 def _refresh():
-    """Refresh data if poll interval has elapsed."""
-    global _cached_alerts, _cached_ts
+    """Return cached data immediately; kick off background fetch if stale."""
+    global _cached_alerts, _cached_ts, _refresh_pending
 
     import config as cfg
     location = cfg.LOCATION_HOME
@@ -263,7 +279,7 @@ def _refresh():
     if _cached_alerts is not None and (now - _cached_ts) < _POLL_INTERVAL:
         return _cached_alerts
 
-    # Try disk cache first (survives reboot)
+    # Cold start: try disk cache (non-blocking)
     if _cached_alerts is None:
         disk, disk_ts = _load_cache()
         if disk is not None:
@@ -271,12 +287,10 @@ def _refresh():
             _cached_ts = disk_ts
             logger.info("[NWS] Loaded from disk cache")
 
-    # Fetch from API if interval elapsed
-    if (now - _cached_ts) >= _POLL_INTERVAL:
-        features = _fetch(location[0], location[1])
-        if features is not None:
-            _cached_alerts = features
-            _cached_ts = now
+    # Schedule non-blocking background fetch if interval elapsed
+    if (now - _cached_ts) >= _POLL_INTERVAL and not _refresh_pending:
+        _refresh_pending = True
+        threading.Thread(target=_background_fetch, args=(location[0], location[1]), daemon=True).start()
 
     return _cached_alerts or []
 
