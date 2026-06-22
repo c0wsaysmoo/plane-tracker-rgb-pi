@@ -112,10 +112,19 @@ class TrackedRouteScene(object):
             is_arrival=True,
         )
 
-        # Build text chars
+        # Build text chars — airline name (or IATA designator) in alpha colour,
+        # trailing flight digits in numeric colour.  When airline_name is set
+        # display_name is "JetBlue 1234" (all-alpha name + space + digits) so
+        # the split works naturally.  When it falls back to raw number like
+        # "B61234", skip the 2-char IATA designator so "6" in B6 stays purple.
+        designator_len = 0 if airline_name else 2
+        alpha_prefix = (len(airline_name) + 1 if airline_name else 0) + designator_len
         chars = []
-        for ch in display_name:
-            chars.append((ch, NUMERIC_COLOUR if ch.isnumeric() else colours.LIGHT_PURPLE))
+        for i, ch in enumerate(display_name):
+            if i < alpha_prefix:
+                chars.append((ch, colours.LIGHT_PURPLE))
+            else:
+                chars.append((ch, NUMERIC_COLOUR if ch.isnumeric() else colours.LIGHT_PURPLE))
         chars.append((" ", ARROW_COLOUR))
         for ch in origin:
             chars.append((ch, origin_colour))
