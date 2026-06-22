@@ -15,11 +15,13 @@ Usage:
 import csv
 import json
 import os
+import threading
 import requests
 from io import StringIO
 
 BASE_DIR    = os.path.dirname(os.path.dirname(__file__))
 CACHE_FILE  = os.path.join(BASE_DIR, "airports.json")
+CUSTOM_FILE = os.path.join(BASE_DIR, "airports_custom.json")
 CSV_URL     = "https://raw.githubusercontent.com/datasets/airport-codes/master/data/airport-codes.csv"
 
 # In-memory lookup: both IATA and ICAO -> {lat, lon, name}
@@ -27,6 +29,23 @@ _db               = {}
 _loaded           = False
 _last_refresh     = 0.0      # epoch seconds of last successful download
 _REFRESH_COOLDOWN = 86400    # only re-download once per 24 hours on a miss
+_not_found        = set()    # codes confirmed missing even after a fresh download
+_refresh_lock     = threading.Lock()
+_refresh_pending  = False    # True while a background refresh thread is running
+
+
+def _apply_custom(db):
+    """Merge airports_custom.json entries on top of db in-place."""
+    if not os.path.exists(CUSTOM_FILE):
+        return
+    try:
+        with open(CUSTOM_FILE, "r", encoding="utf-8") as f:
+            custom = json.load(f)
+        for code, entry in custom.items():
+            db[code.upper().strip()] = entry
+        print(f"[Airports] Applied {len(custom)} custom entries from airports_custom.json")
+    except Exception as e:
+        print(f"[Airports] Could not load airports_custom.json: {e}")
 
 
 def _download_and_build():
@@ -64,11 +83,13 @@ def _download_and_build():
             if icao:
                 db[icao] = entry
 
+        _apply_custom(db)
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(db, f)
         import time as _time
-        global _last_refresh
+        global _last_refresh, _not_found
         _last_refresh = _time.time()
+        _not_found = set()  # reset so newly-added airports can be found
         print(f"[Airports] Database built — {len(db)} entries cached to airports.json")
         return db
 
@@ -87,7 +108,7 @@ def _load():
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 _db = json.load(f)
-
+            _apply_custom(_db)
             _loaded = True
             return
         except Exception as e:
@@ -97,23 +118,47 @@ def _load():
     _loaded = True
 
 
+def _background_refresh():
+    """Download a fresh airport database in a background thread (non-blocking)."""
+    global _db, _loaded, _refresh_pending
+    with _refresh_lock:
+        try:
+            if os.path.exists(CACHE_FILE):
+                os.remove(CACHE_FILE)
+            new_db = _download_and_build()
+            if new_db:
+                _db = new_db
+                _loaded = True
+        finally:
+            _refresh_pending = False
+
+
 def get_airport_coords(code):
     """
     Look up airport coordinates by IATA or ICAO code.
     Returns {"lat": float, "lon": float} or empty dict if not found.
-    On a cache miss, re-downloads the database if cooldown has elapsed, then retries once.
+    On a cache miss, kicks off a background refresh (non-blocking) if cooldown has
+    elapsed; returns {} immediately so the display never freezes.
 
     Examples:
         get_airport_coords("ORD")   -> {"lat": 41.978, "lon": -87.904}
         get_airport_coords("KORD")  -> {"lat": 41.978, "lon": -87.904}
         get_airport_coords("EGLL")  -> {"lat": 51.477, "lon": -0.461}
     """
-    global _db, _loaded
+    global _db, _loaded, _refresh_pending
     _load()
     if not code:
         return {}
 
     code = code.strip().upper()
+
+    # Placeholder values used when route lookup fails — never valid airport codes
+    if code in ("?", "???", "N/A", "UNK", "UNKN", "ZZZZ"):
+        return {}
+
+    # Skip codes already confirmed missing (cleared after a successful refresh)
+    if code in _not_found:
+        return {}
 
     def _lookup(db, c):
         if c in db:
@@ -128,23 +173,17 @@ def get_airport_coords(code):
     if result:
         return result
 
-    # Miss — try a refresh if cooldown has elapsed
-    if code == "?":
-        return {}
+    # Miss — schedule a background refresh if cooldown has elapsed and none is running
     import time as _time
-    if _time.time() - _last_refresh > _REFRESH_COOLDOWN:
-        print(f"[Airports] '{code}' not found — refreshing database...")
-        _loaded = False
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
-        _db = _download_and_build()
-        _loaded = True
-        result = _lookup(_db, code)
-        if result:
-            print(f"[Airports] '{code}' found after refresh")
-        else:
-            print(f"[Airports] '{code}' still not found after refresh")
-        return result or {}
+    if _time.time() - _last_refresh > _REFRESH_COOLDOWN and not _refresh_pending:
+        _refresh_pending = True
+        print(f"[Airports] '{code}' not found — scheduling background refresh...")
+        t = threading.Thread(target=_background_refresh, daemon=True)
+        t.start()
+    else:
+        # Cooldown active or refresh already in progress — mark as not found for now
+        _not_found.add(code)
+        print(f"[Airports] '{code}' not found in database")
 
     return {}
 
