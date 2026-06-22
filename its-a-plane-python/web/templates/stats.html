@@ -97,6 +97,11 @@
   .route-map-wrap .leaflet-container { background: #0a0a08; }
   .route-tip { background: #1a1a15 !important; border: 1px solid var(--amber-dim) !important; color: var(--amber) !important; font-family: 'Share Tech Mono', monospace !important; font-size: 12px !important; padding: 4px 8px !important; box-shadow: none !important; }
   .route-tip::before { display: none !important; }
+  .rp .leaflet-popup-content-wrapper { background: #1a1a15; border: 1px solid var(--amber-dim); color: var(--amber); font-family: 'Share Tech Mono', monospace; font-size: 12px; box-shadow: none; border-radius: 0; padding: 6px 10px; }
+  .rp .leaflet-popup-content { margin: 0; line-height: 1.5; }
+  .rp .leaflet-popup-tip-container { display: none; }
+  .rp .leaflet-popup-close-button { color: var(--amber) !important; top: 4px !important; right: 6px !important; }
+  @media (max-width: 600px) { .route-map-wrap { height: 280px; } }
 </style>
 </head>
 <body>
@@ -501,6 +506,18 @@ function heatColor(t) {
   return `rgb(255,${Math.round(179*(1-s))},0)`;
 }
 
+function shortName(name) {
+  if (!name) return '';
+  return name
+    .replace(/\bInternational\b/gi, 'Intl')
+    .replace(/ Intl Airport$/i, '')
+    .replace(/ Airport$/i, '')
+    .replace(/ Airfield$/i, '')
+    .replace(/ Regional$/i, '')
+    .replace(/ Municipal$/i, '')
+    .trim();
+}
+
 let _routeMap = null;
 async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, zone) {
   // Sort descending to tally all routes, but draw ascending so hot routes paint on top
@@ -532,13 +549,12 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
 
   const maxCount = valid[0][1];
   const bounds = [];
-  const tipOpts = { sticky: true, className: 'route-tip' };
+  const popupOpts = { className: 'rp', maxWidth: 240 };
 
   // Draw rarest first so most-frequent routes paint on top and stay visible.
   // Collect actual normalized arc endpoints for dot placement — pts[0]/pts[last]
   // already have the world-copy-adjusted longitude (e.g. HKG at −246° not +114°).
   const actualPos = {};
-  const apLabel = code => { const n=coords[code]?.name; return n ? `${n} (${code})` : code; };
   [...valid].reverse().forEach(([route, count]) => {
     const [o,d] = route.split('↔');
     const oc = coords[o], dc = coords[d];
@@ -548,21 +564,29 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
     if (!actualPos[o]) actualPos[o] = pts[0];
     if (!actualPos[d]) actualPos[d] = pts[pts.length-1];
     const dist = distLabel(haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits), distUnits);
-    L.polyline(pts, {
+    const sn_o = shortName(oc.name) || o;
+    const sn_d = shortName(dc.name) || d;
+    const html = `<b>${o} ↔ ${d}</b><br>${sn_o} ↔ ${sn_d}<br>${dist} — ${count} flight${count>1?'s':''}`;
+    const line = L.polyline(pts, {
       color: heatColor(t),
       weight: Math.max(1, 1 + t * 4),
       opacity: 0.2 + t * 0.7,
-    }).bindTooltip(`${apLabel(o)} ↔ ${apLabel(d)} · ${dist} — ${count} flight${count>1?'s':''}`, tipOpts).addTo(map);
+      interactive: false,
+    }).addTo(map);
+    // Wide transparent hit zone so routes are easy to tap on touch screens
+    L.polyline(pts, { color: 'transparent', weight: 20, opacity: 0.001 })
+      .bindPopup(html, popupOpts).addTo(map);
   });
 
   Object.entries(actualPos).forEach(([code, pos]) => {
     const apCoord = coords[code];
+    const sn = shortName(apCoord?.name) || code;
     const homeDist = (homeLat != null && homeLon != null && apCoord)
-      ? ' · ' + distLabel(haversineDist(homeLat, homeLon, apCoord.lat, apCoord.lon, distUnits), distUnits) + ' from home'
+      ? '<br>' + distLabel(haversineDist(homeLat, homeLon, apCoord.lat, apCoord.lon, distUnits), distUnits) + ' from home'
       : '';
     L.circleMarker(pos, {
-      radius: 3, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
-    }).bindTooltip(apLabel(code) + homeDist, { permanent: false, className: 'route-tip' }).addTo(map);
+      radius: 5, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
+    }).bindPopup(`<b>${code}</b><br>${sn}${homeDist}`, popupOpts).addTo(map);
   });
 
   if (homeLat != null && homeLon != null) {
