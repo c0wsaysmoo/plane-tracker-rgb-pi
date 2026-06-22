@@ -156,9 +156,10 @@
             // By hour
             const byHour = Array(24).fill(0);
             flights.forEach(f => byHour[f.hour || 0]++);
-            const peakHour = byHour.indexOf(Math.max(...byHour));
-            document.getElementById('peak-hour').textContent = `${peakHour}:00`;
-            document.getElementById('peak-sub').textContent = `${byHour[peakHour]} flights`;
+            const maxHourVal = Math.max(...byHour);
+            const peakHours = byHour.reduce((a,v,i) => v === maxHourVal ? [...a,i] : a, []);
+            document.getElementById('peak-hour').textContent = peakHours.map(i => `${i}:00`).join(', ');
+            document.getElementById('peak-sub').textContent = `${maxHourVal} flights`;
 
             // First/last
             if (flights.length) {
@@ -205,8 +206,8 @@
                     labels: Array.from({length:24}, (_,i) => `${i}:00`),
                     datasets: [{
                         data: byHour,
-                        backgroundColor: byHour.map((_,i) => i === peakHour ? 'rgba(255,107,53,0.4)' : 'rgba(255,179,0,0.2)'),
-                        borderColor: byHour.map((_,i) => i === peakHour ? '#ff6b35' : '#ffb300'),
+                        backgroundColor: byHour.map((_,i) => peakHours.includes(i) ? 'rgba(255,107,53,0.4)' : 'rgba(255,179,0,0.2)'),
+                        borderColor: byHour.map((_,i) => peakHours.includes(i) ? '#ff6b35' : '#ffb300'),
                         borderWidth: 1
                     }]
                 },

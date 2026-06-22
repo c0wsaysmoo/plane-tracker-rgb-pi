@@ -47,7 +47,7 @@ def _download_and_build():
             if icao and icao != "N/A" and len(icao) == 3:
                 db[icao] = _OVERRIDES.get(icao, name)
             if iata and iata != "-" and len(iata) == 2:
-                db[iata] = _OVERRIDES.get(icao, name)
+                db[iata] = _OVERRIDES.get(iata, name)
         # Apply overrides
         db.update(_OVERRIDES)
         with open(CACHE_FILE, "w", encoding="utf-8") as f:

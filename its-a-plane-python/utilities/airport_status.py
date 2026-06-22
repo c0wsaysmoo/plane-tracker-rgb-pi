@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -35,6 +36,8 @@ _POLL_INTERVAL = 300  # 5 minutes
 # In-memory cache
 _cached_data = None
 _cached_ts = 0.0
+_refresh_lock = threading.Lock()
+_refresh_pending = False
 
 
 def _parse_minutes(text):
@@ -172,14 +175,28 @@ def _load_cache():
     return None, 0
 
 
+def _background_fetch():
+    """Fetch FAA status in a background thread so the display never blocks."""
+    global _cached_data, _cached_ts, _refresh_pending
+    with _refresh_lock:
+        try:
+            data = _fetch()
+            if data is not None:
+                _cached_data = data
+                _cached_ts = time.time()
+        finally:
+            _refresh_pending = False
+
+
 def _refresh():
-    """Refresh data if poll interval has elapsed."""
-    global _cached_data, _cached_ts
+    """Return cached data immediately; kick off background fetch if stale."""
+    global _cached_data, _cached_ts, _refresh_pending
 
     now = time.time()
     if _cached_data is not None and (now - _cached_ts) < _POLL_INTERVAL:
         return _cached_data
 
+    # Cold start: try disk cache (non-blocking)
     if _cached_data is None:
         disk, disk_ts = _load_cache()
         if disk is not None:
@@ -187,11 +204,10 @@ def _refresh():
             _cached_ts = disk_ts
             logger.info("[AirportStatus] Loaded from disk cache")
 
-    if (now - _cached_ts) >= _POLL_INTERVAL:
-        data = _fetch()
-        if data is not None:
-            _cached_data = data
-            _cached_ts = now
+    # Schedule non-blocking background fetch if interval elapsed
+    if (now - _cached_ts) >= _POLL_INTERVAL and not _refresh_pending:
+        _refresh_pending = True
+        threading.Thread(target=_background_fetch, daemon=True).start()
 
     return _cached_data
 

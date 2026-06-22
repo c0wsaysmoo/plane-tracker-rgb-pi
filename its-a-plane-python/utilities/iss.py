@@ -14,6 +14,7 @@ Usage:
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -37,6 +38,8 @@ _cached_passes = None
 _cached_ts = 0.0
 _next_retry_after = 0.0  # absolute timestamp; 0 = retry immediately
 _consecutive_failures = 0
+_refresh_lock = threading.Lock()
+_refresh_pending = False
 
 
 def _fetch(lat, lon):
@@ -78,9 +81,30 @@ def _load_cache():
     return None, 0
 
 
+def _background_fetch(lat, lon):
+    """Fetch ISS passes in a background thread so the display never blocks."""
+    global _cached_passes, _cached_ts, _next_retry_after, _consecutive_failures, _refresh_pending
+    with _refresh_lock:
+        try:
+            passes = _fetch(lat, lon)
+            now = time.time()
+            if passes is not None:
+                _cached_passes = passes
+                _cached_ts = now
+                _consecutive_failures = 0
+                _next_retry_after = now + _POLL_INTERVAL
+            else:
+                _consecutive_failures += 1
+                backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
+                _next_retry_after = now + backoff
+                logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
+        finally:
+            _refresh_pending = False
+
+
 def _refresh():
-    """Refresh data if poll interval has elapsed."""
-    global _cached_passes, _cached_ts, _next_retry_after, _consecutive_failures
+    """Return cached data immediately; kick off background fetch if stale."""
+    global _refresh_pending
 
     import config as cfg
     location = cfg.LOCATION_HOME
@@ -91,6 +115,7 @@ def _refresh():
     if _cached_passes is not None and now < _next_retry_after:
         return _cached_passes
 
+    # Cold start: try disk cache (non-blocking)
     if _cached_passes is None:
         disk, disk_ts = _load_cache()
         if disk is not None:
@@ -101,19 +126,10 @@ def _refresh():
             if now < _next_retry_after:
                 return _cached_passes
 
-    if now >= _next_retry_after:
-        passes = _fetch(location[0], location[1])
-        if passes is not None:
-            _cached_passes = passes
-            _cached_ts = now
-            _consecutive_failures = 0
-            _next_retry_after = now + _POLL_INTERVAL
-        else:
-            _consecutive_failures += 1
-            # Exponential backoff: 60m, 120m, max 4h
-            backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
-            _next_retry_after = now + backoff
-            logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
+    # Schedule non-blocking background fetch if interval elapsed
+    if now >= _next_retry_after and not _refresh_pending:
+        _refresh_pending = True
+        threading.Thread(target=_background_fetch, args=(location[0], location[1]), daemon=True).start()
 
     return _cached_passes or []
 
