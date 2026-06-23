@@ -104,7 +104,7 @@ def _background_fetch(lat, lon):
 
 def _refresh():
     """Return cached data immediately; kick off background fetch if stale."""
-    global _refresh_pending
+    global _cached_passes, _cached_ts, _next_retry_after, _refresh_pending
 
     import config as cfg
     location = cfg.LOCATION_HOME
