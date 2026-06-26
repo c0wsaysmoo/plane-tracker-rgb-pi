@@ -53,7 +53,7 @@ def _fetch(lat, lon):
             json.dump({"ts": time.time(), "passes": passes}, f)
 
         visible_count = len(passes)
-        logger.info(f"[ISS] Fetched {visible_count} visible passes")
+        logger.debug(f"[ISS] Fetched {visible_count} visible passes")
         return passes
 
     except Exception as e:
@@ -120,7 +120,7 @@ def _refresh():
             _cached_passes = disk
             _cached_ts = disk_ts
             _next_retry_after = disk_ts + _POLL_INTERVAL
-            logger.info("[ISS] Loaded from disk cache")
+            logger.debug("[ISS] Loaded from disk cache")
             if now < _next_retry_after:
                 return _cached_passes
 
