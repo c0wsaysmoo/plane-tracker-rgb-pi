@@ -310,7 +310,12 @@ async function render() {
         const t=ctx.dataset.data.reduce((a,b)=>a+b,0);
         const oc=_apInfo[o], dc=_apInfo[d];
         const dist = oc && dc ? ' · ' + distLabel(haversineDist(oc.lat,oc.lon,dc.lat,dc.lon,distUnits),distUnits) : '';
-        return ` ${routeApLabel(o)} ↔ ${routeApLabel(d)}${dist} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;
+        const sno = shortName(oc?.name) || o;
+        const snd = shortName(dc?.name) || d;
+        return [
+          ` ${sno} ↔ ${snd}`,
+          ` ${ctx.parsed} flight${ctx.parsed>1?'s':''} (${((ctx.parsed/t)*100).toFixed(1)}%)${dist}`,
+        ];
       }}}
     }}});
 
@@ -327,11 +332,11 @@ async function render() {
   }
 
   await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
-  await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits);
+  await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits, AIRPORT_CODE);
 }
 
 // ── Route Deviation Table ─────────────────────────────────────────────────────
-async function buildDeviationTable(canvasId, tally, zone, distUnits) {
+async function buildDeviationTable(canvasId, tally, zone, distUnits, homeCode) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !zone || !zone.tl_y) return;
 
@@ -351,6 +356,7 @@ async function buildDeviationTable(canvasId, tally, zone, distUnits) {
     const [o, d] = route.split('↔');
     const oc = coords[o], dc = coords[d];
     if (!oc || !dc) return;
+    if (homeCode && (o === homeCode || d === homeCode)) return;
     const direct  = haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits);
     const viaZone = haversineDist(oc.lat, oc.lon, zoneLat, zoneLon, distUnits) +
                     haversineDist(zoneLat, zoneLon, dc.lat, dc.lon, distUnits);
@@ -380,7 +386,12 @@ async function buildDeviationTable(canvasId, tally, zone, distUnits) {
         legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
         tooltip: { callbacks: { label: ctx => {
           const r = top[ctx.dataIndex];
-          return ` ${apLabel(r.o)} ↔ ${apLabel(r.d)} — +${r.deviationPct.toFixed(1)}% detour · ${distLabel(r.direct, distUnits)} direct · ${r.count} flight${r.count>1?'s':''}`;
+          const sno = shortName(coords[r.o]?.name) || r.o;
+          const snd = shortName(coords[r.d]?.name) || r.d;
+          return [
+            ` ${sno} ↔ ${snd}`,
+            ` +${r.deviationPct.toFixed(1)}% detour · ${distLabel(r.direct, distUnits)} direct · ${r.count} flight${r.count>1?'s':''}`,
+          ];
         }}}
       }
     }
