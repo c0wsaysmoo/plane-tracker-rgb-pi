@@ -413,6 +413,22 @@ function renderForm() {
           <label>Forecast Days</label>
           <input id="forecast_days" type="number" min="1" max="5" value="${disp.forecast_days??3}">
         </div>
+        <div class="field">
+          <label>Forecast Mode</label>
+          <select id="forecast_mode">
+            <option value="daily"     ${(disp.forecast_mode||'daily')==='daily'    ?'selected':''}>3-Day (daily)</option>
+            <option value="hourly"    ${(disp.forecast_mode||'daily')==='hourly'   ?'selected':''}>Time of Day (hourly)</option>
+            <option value="scheduled" ${(disp.forecast_mode||'daily')==='scheduled'?'selected':''}>Hourly in window, else 3-Day</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Hourly Window Start (HH:MM)</label>
+          <input id="forecast_hourly_start" value="${disp.forecast_hourly_start||'05:00'}">
+        </div>
+        <div class="field">
+          <label>Hourly Window End (HH:MM)</label>
+          <input id="forecast_hourly_end" value="${disp.forecast_hourly_end||'09:00'}">
+        </div>
       </div>
     </div>
 
@@ -493,7 +509,7 @@ function renderForm() {
       <div class="section-header" onclick="toggleSection(this)">▸ API Sources &amp; Order</div>
       <div class="section-body">
         <div>
-          <div class="hint" style="margin-bottom:8px">Enable sources and set priority order. FlightStats is free (no key). OpenSky provides position data only.</div>
+          <div class="hint" style="margin-bottom:8px">Enable sources and set priority order. OpenSky provides position data only.</div>
           <div id="api-sources-list" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -705,7 +721,10 @@ function collectConfig() {
         gpio_slowdown:     gi('gpio_slowdown'),
         hat_pwm_enabled:   gc('hat_pwm_enabled'),
         led_rgb_sequence:  gv('led_rgb_sequence'),
-        forecast_days:     gi('forecast_days'),
+        forecast_days:          gi('forecast_days'),
+        forecast_mode:          gv('forecast_mode'),
+        forecast_hourly_start:  gv('forecast_hourly_start'),
+        forecast_hourly_end:    gv('forecast_hourly_end'),
       },
       flights: {
         min_altitude: gi('min_altitude'),

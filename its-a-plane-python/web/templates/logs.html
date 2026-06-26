@@ -206,6 +206,7 @@
 <div class="toolbar">
   <div class="status-dot" id="status-dot"></div>
   <span id="status-text">Loading...</span>
+  <span id="stdout-badge" style="font-family:'VT323',monospace;font-size:16px;letter-spacing:1px;padding:2px 8px;border:1px solid;display:none"></span>
   <div class="filter-wrap">
     <span class="filter-label">Filter</span>
     <input id="filter-input" type="text" placeholder="keyword..." oninput="applyFilter()">
@@ -338,6 +339,47 @@
   }
 
   // pause follow when user scrolls up
+  async function checkServiceFile() {
+    try {
+      const res = await fetch('/api/service-file');
+      const data = await res.json();
+      const badge = document.getElementById('stdout-badge');
+      badge.style.display = '';
+      if (data.error) {
+        badge.textContent = 'SERVICE FILE: NOT FOUND';
+        badge.style.color = 'var(--red)';
+        badge.style.borderColor = 'var(--red)';
+        return;
+      }
+      const content = data.content || '';
+      const hasNull = /StandardOutput\s*=\s*null/i.test(content);
+      const hasJournal = /StandardOutput\s*=\s*journal/i.test(content);
+      const hasFile = /StandardOutput\s*=\s*file/i.test(content);
+      const hasLine = /StandardOutput/i.test(content);
+      if (hasNull) {
+        badge.textContent = 'StandardOutput=null ✗ LOGS WILL BE LOST';
+        badge.style.color = 'var(--red)';
+        badge.style.borderColor = 'var(--red)';
+      } else if (hasFile) {
+        badge.textContent = 'StandardOutput=file ✗ NOT IN JOURNAL';
+        badge.style.color = 'var(--orange)';
+        badge.style.borderColor = 'var(--orange)';
+      } else if (hasJournal) {
+        badge.textContent = 'StandardOutput=journal ✓';
+        badge.style.color = 'var(--green)';
+        badge.style.borderColor = 'var(--green)';
+      } else if (!hasLine) {
+        badge.textContent = 'StandardOutput not set — default is journal ✓';
+        badge.style.color = 'var(--green)';
+        badge.style.borderColor = 'var(--green)';
+      } else {
+        badge.textContent = 'StandardOutput=' + (content.match(/StandardOutput\s*=\s*(\S+)/i)||[])[1];
+        badge.style.color = 'var(--amber)';
+        badge.style.borderColor = 'var(--amber)';
+      }
+    } catch(e) {}
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const c = document.getElementById('log-container');
     c.addEventListener('scroll', () => {
@@ -347,6 +389,7 @@
         document.getElementById('btn-follow').classList.remove('active');
       }
     });
+    checkServiceFile();
     loadInitial();
   });
 </script>

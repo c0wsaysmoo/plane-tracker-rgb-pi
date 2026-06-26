@@ -191,8 +191,7 @@
     border: 1px solid currentColor;
     white-space: nowrap;
   }
-  .badge.fr24u  { color: var(--green); }
-  .badge.fs     { color: var(--blue); }
+  .badge.fr24   { color: var(--green); }
   .badge.al     { color: var(--amber); }
   .badge.fa     { color: var(--orange); }
   .badge.none   { color: var(--amber-dim); }
@@ -211,7 +210,6 @@
   .day-counters .fa-cost { color: var(--orange); }
   .day-counters .al-used { color: var(--amber); }
   .day-counters .fr-used { color: var(--green); }
-  .day-counters .fs-used { color: var(--blue); }
 
   .chevron {
     font-family: 'VT323', monospace;
@@ -264,8 +262,7 @@
   .col-counts  { color: var(--amber-dim); font-size: 11px; }
 
   /* source colours for table rows */
-  tr.src-fr24u  td.col-src { color: var(--green); }
-  tr.src-fs     td.col-src { color: var(--blue); }
+  tr.src-fr24   td.col-src { color: var(--green); }
   tr.src-al     td.col-src { color: var(--amber); }
   tr.src-fa     td.col-src { color: var(--orange); }
   tr.src-none   td.col-src { color: var(--amber-dim); opacity: .6; }
@@ -314,8 +311,7 @@
   <input id="filter-input" type="text" placeholder="callsign / source / route…" oninput="applyFilter()">
 
   <button class="pill active" id="btn-all"    onclick="setSourceFilter('all')">All</button>
-  <button class="pill"        id="btn-fr24u"  onclick="setSourceFilter('fr24u')">FR24</button>
-  <button class="pill"        id="btn-fs"     onclick="setSourceFilter('fs')">FlightStats</button>
+  <button class="pill"        id="btn-fr24"   onclick="setSourceFilter('fr24')">FR24</button>
   <button class="pill"        id="btn-al"     onclick="setSourceFilter('al')">AirLabs</button>
   <button class="pill"        id="btn-fa"     onclick="setSourceFilter('fa')">FlightAware</button>
   <button class="pill"        id="btn-none"   onclick="setSourceFilter('none')">None</button>
@@ -331,8 +327,7 @@
 // ── Parse log ──────────────────────────────────────────────────────────────
 function srcClass(src) {
   const s = src.toLowerCase();
-  if (s.startsWith('fr24unofficial') || s.startsWith('fr24(')) return 'fr24u';
-  if (s.startsWith('flightstats'))  return 'fs';
+  if (s.startsWith('fr24'))         return 'fr24';
   if (s.startsWith('airlabs'))      return 'al';
   if (s.startsWith('flightaware'))  return 'fa';
   if (s === 'none')                 return 'none';
@@ -341,12 +336,11 @@ function srcClass(src) {
 
 function srcLabel(src) {
   // Shorten for badge display
-  return src.replace('Unofficial','').replace('FlightAware','FA').replace('FlightStats','FS').replace('AirLabs','AL');
+  return src.replace('FlightAware','FA').replace('AirLabs','AL');
 }
 
 function parseLine(raw) {
-  // Format A (old): 2026-05-08 19:44:46  AirLabs               ENY9865     ORD→LAN       [AL:504 FA:$0.485 FR:388]
-  // Format B (new): 2026-05-10 10:00:00  FlightStats                SWA245      MDW→MSP       [FS:125 AL:8 FA:$0.025]
+  // Format: 2026-05-08 19:44:46  AirLabs               ENY9865     ORD→LAN       [AL:504 FA:$0.485 FR:388]
   const m = raw.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+(\S+)\s+(\S+)\s+\[([^\]]+)\]/);
   if (!m) return null;
   const [, date, time, src, callsign, route, counts] = m;
@@ -355,7 +349,7 @@ function parseLine(raw) {
   // Parse counters — handle both bracket formats
   const counters = {};
   for (const part of counts.split(' ')) {
-    const kv = part.match(/^(FS|AL|FA|FR):(\$?[\d.]+)$/);
+    const kv = part.match(/^(AL|FA|FR):(\$?[\d.]+)$/);
     if (kv) counters[kv[1]] = kv[2];
   }
 
@@ -380,7 +374,7 @@ let allExpanded = false;
 
 function setSourceFilter(f) {
   srcFilter = f;
-  ['all','fr24u','fs','al','fa','none'].forEach(id => {
+  ['all','fr24','al','fa','none'].forEach(id => {
     document.getElementById('btn-' + id)?.classList.toggle('active', id === f);
   });
   render();
@@ -402,8 +396,8 @@ function toggleDay(el) {
 }
 
 function buildBadges(srcCounts) {
-  const order = ['fr24u','fs','al','fa','none','other'];
-  const labels = { fr24u:'FR24U', fs:'FS', al:'AL', fa:'FA', none:'NONE', other:'OTHER' };
+  const order = ['fr24','al','fa','none','other'];
+  const labels = { fr24:'FR24', al:'AL', fa:'FA', none:'NONE', other:'OTHER' };
   return order
     .filter(k => srcCounts[k])
     .map(k => `<span class="badge ${k}">${labels[k]}×${srcCounts[k]}</span>`)
@@ -464,7 +458,6 @@ function render() {
       if (last.FA) counterHtml += `<span class="fa-cost">FA $${last.FA.replace('$','')}</span>`;
       if (last.AL) counterHtml += `<span class="al-used">AL ${last.AL}</span>`;
       if (last.FR) counterHtml += `<span class="fr-used">FR ${last.FR}</span>`;
-      if (last.FS) counterHtml += `<span class="fs-used">FS ${last.FS}</span>`;
 
       // Build rows
       const rows = lines.map(l => {
