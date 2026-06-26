@@ -250,6 +250,7 @@ Please please please reread the instructions carefully if you have any issues. M
 https://github.com/user-attachments/assets/854f535a-4aa3-4a97-8ee5-4d9e60f76eaf
 
 ![PXL_20241019_155956016](https://github.com/user-attachments/assets/91532d4f-3b6f-4a1b-9a26-43ffe5c6093d)
+<img width="4080" height="3072" alt="PXL_20260626_212416823" src="https://github.com/user-attachments/assets/53ea72ea-7153-4545-b03e-5affb98da00f" />
 ![PXL_20241019_165254031](https://github.com/user-attachments/assets/2e70bfcd-70ae-4acc-ba69-dde07c56a068)
 ![PXL_20241019_165305826](https://github.com/user-attachments/assets/5188780d-84ff-4111-8bde-9584d6a70df2)
 ![PXL_20241019_155500974](https://github.com/user-attachments/assets/5c3540e9-b699-41c8-8aef-32fb7a7f7b5d)
@@ -274,9 +275,11 @@ Map will show the top 3 (by default) farthest flights, and the top 3 closest pin
 
 The email
 
-<img width="1433" height="1862" alt="day" src="https://github.com/user-attachments/assets/5b513583-1b76-411f-8f5f-316a2ad11bbc" />
-<img width="1429" height="2319" alt="main" src="https://github.com/user-attachments/assets/f66e705c-f9d4-43c6-a0b8-70ee8b198782" />
-<img width="2553" height="704" alt="Screenshot 2026-06-14 085757" src="https://github.com/user-attachments/assets/ac85c1b3-cfd7-4d9f-a38e-bc6d1db9af0f" />
+<img width="1429" height="2204" alt="Screenshot 2026-06-26 163846" src="https://github.com/user-attachments/assets/76366f5c-b23c-48f9-9435-a2b594475180" />
+<img width="1421" height="2384" alt="Screenshot 2026-06-26 163811" src="https://github.com/user-attachments/assets/d3b50f84-aad3-48f2-a8c7-55d8dfab6eed" />
+<img width="1426" height="623" alt="Screenshot 2026-06-26 163740" src="https://github.com/user-attachments/assets/99a45a8b-41a2-489e-8717-82675771a243" />
+<img width="1797" height="742" alt="Screenshot 2026-06-26 163642" src="https://github.com/user-attachments/assets/9d6f1c3c-ff1c-4d90-b34d-7d54800bfc40" />
+
 
 
 The local webpage to track flights or to look at your maps/logs/stats. You can look at the overall stats or click on the dates at the bottom to look at stats for individual days
