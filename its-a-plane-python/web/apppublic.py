@@ -280,11 +280,13 @@ def tracked_set():
     cached_route = data.get("cached_route")
     flight_id    = data.get("flight_id", "")
     sched_dep    = data.get("scheduled_departure")
+    is_live      = bool(data.get("is_live"))
     try:
         payload = {"callsign": callsign}
         if cached_route:  payload["cached_route"]        = cached_route
         if flight_id:     payload["flight_id"]           = flight_id
         if sched_dep:     payload["scheduled_departure"] = sched_dep
+        if is_live:       payload["airborne"]            = True
         with open(TRACKED_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         msg = f"Now tracking {callsign}." if callsign else "Tracking cleared."
@@ -372,6 +374,13 @@ def weather_json():
             forecast_data = obj.get("data", [])
     except Exception:
         forecast_data = []
+    hourly_data = []
+    try:
+        with open(os.path.join(_cache_dir, "hourly_forecast.json"), "r") as f:
+            obj = json.load(f)
+            hourly_data = obj.get("data", [])
+    except Exception:
+        hourly_data = []
     moon_phase = None
     try:
         with open(os.path.join(_cache_dir, "moonphase.json"), "r") as f:
@@ -380,11 +389,12 @@ def weather_json():
     except Exception:
         pass
     return jsonify({
-        "temperature": temp_data,
-        "humidity":    humidity_data,
-        "weatherCode": weather_code_data,
-        "forecast":    forecast_data,
-        "moonPhase":   moon_phase,
+        "temperature":     temp_data,
+        "humidity":        humidity_data,
+        "weatherCode":     weather_code_data,
+        "forecast":        forecast_data,
+        "hourly_forecast": hourly_data,
+        "moonPhase":       moon_phase,
     })
 
 @app.get("/clock/json")
@@ -910,9 +920,29 @@ def wifi_connect():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.get("/logs-hub")
+def logs_hub():
+    return render_template("logs_hub.html")
+
+@app.get("/counter/log")
+def counter_log_page():
+    return render_template("log_viewer.html",
+        title="Flight Counter Log", data_url="/counter", mode="counter")
+
 @app.get("/logs")
 def logs_page():
     return render_template("logs.html")
+
+@app.get("/api/service-file")
+def api_service_file():
+    """Return the contents of the its-a-plane systemd service file."""
+    try:
+        path = "/etc/systemd/system/its-a-plane.service"
+        with open(path, "r") as f:
+            content = f.read()
+        return jsonify({"content": content, "path": path, "error": None})
+    except Exception as e:
+        return jsonify({"content": None, "path": None, "error": str(e)})
 
 @app.get("/api/logs")
 def api_logs():
