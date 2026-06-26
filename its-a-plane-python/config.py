@@ -29,6 +29,7 @@ def reload():
     global BRIGHTNESS, BRIGHTNESS_NIGHT, NIGHT_BRIGHTNESS
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
     global LED_RGB_SEQUENCE, FORECAST_DAYS
+    global FORECAST_MODE, FORECAST_HOURLY_START, FORECAST_HOURLY_END
     global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL, BLOCKED_CALLSIGNS
     global AIRPORT_STATUS_LIST, ISS_ALERTS_ENABLED, WEATHER_ALERTS_ENABLED
     global MASTER_TRACKER, OTHER_TRACKER_HOSTNAMES
@@ -74,6 +75,9 @@ def reload():
     HAT_PWM_ENABLED   = _disp.get("hat_pwm_enabled", False)
     LED_RGB_SEQUENCE  = _disp.get("led_rgb_sequence", "RGB")
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
+    FORECAST_MODE     = _disp.get("forecast_mode", "daily")
+    FORECAST_HOURLY_START = _disp.get("forecast_hourly_start", "05:00")
+    FORECAST_HOURLY_END   = _disp.get("forecast_hourly_end", "09:00")
 
     # Flights
     MIN_ALTITUDE         = _flt.get("min_altitude", 2000)

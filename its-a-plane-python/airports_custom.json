@@ -1,0 +1,652 @@
+{
+  "MMV": {
+    "lat": 45.194401,
+    "lon": -123.136002,
+    "name": "McMinnville Municipal Airport"
+  },
+  "KMMV": {
+    "lat": 45.194401,
+    "lon": -123.136002,
+    "name": "McMinnville Municipal Airport"
+  },
+  "QQA": {
+    "lat": 45.14027777777778,
+    "lon": -93.20611111111111,
+    "name": "Anoka County-Blaine Airport"
+  },
+  "KANE": {
+    "lat": 45.14027777777778,
+    "lon": -93.20611111111111,
+    "name": "Anoka County-Blaine Airport"
+  },
+  "ANE": {
+    "lat": 45.14027777777778,
+    "lon": -93.20611111111111,
+    "name": "Anoka County-Blaine Airport"
+  },
+  "QQO": {
+    "lat": 36.31422578119358,
+    "lon": -119.62804825640508,
+    "name": "Hanford Municipal Airport"
+  },
+  "KHJO": {
+    "lat": 36.31422578119358,
+    "lon": -119.62804825640508,
+    "name": "Hanford Municipal Airport"
+  },
+  "HJO": {
+    "lat": 36.31422578119358,
+    "lon": -119.62804825640508,
+    "name": "Hanford Municipal Airport"
+  },
+  "QQN": {
+    "lat": 36.1824,
+    "lon": -86.886703,
+    "name": "Nashville John C. Tune Airport"
+  },
+  "KJWN": {
+    "lat": 36.1824,
+    "lon": -86.886703,
+    "name": "Nashville John C. Tune Airport"
+  },
+  "JWN": {
+    "lat": 36.1824,
+    "lon": -86.886703,
+    "name": "Nashville John C. Tune Airport"
+  },
+  "QTC": {
+    "lat": 34.213758,
+    "lon": -119.094354,
+    "name": "Camarillo Airport"
+  },
+  "KCMA": {
+    "lat": 34.213758,
+    "lon": -119.094354,
+    "name": "Camarillo Airport"
+  },
+  "CMA": {
+    "lat": 34.213758,
+    "lon": -119.094354,
+    "name": "Camarillo Airport"
+  },
+  "QSA": {
+    "lat": 45.2471,
+    "lon": -122.769997,
+    "name": "Aurora State Airport"
+  },
+  "KUAO": {
+    "lat": 45.2471,
+    "lon": -122.769997,
+    "name": "Aurora State Airport"
+  },
+  "UAO": {
+    "lat": 45.2471,
+    "lon": -122.769997,
+    "name": "Aurora State Airport"
+  },
+  "QSN": {
+    "lat": 44.094799,
+    "lon": -121.200996,
+    "name": "Bend Municipal Airport"
+  },
+  "KBDN": {
+    "lat": 44.094799,
+    "lon": -121.200996,
+    "name": "Bend Municipal Airport"
+  },
+  "BDN": {
+    "lat": 44.094799,
+    "lon": -121.200996,
+    "name": "Bend Municipal Airport"
+  },
+  "QQW": {
+    "lat": 48.160801,
+    "lon": -122.158997,
+    "name": "Arlington Municipal Airport"
+  },
+  "KAWO": {
+    "lat": 48.160801,
+    "lon": -122.158997,
+    "name": "Arlington Municipal Airport"
+  },
+  "AWO": {
+    "lat": 48.160801,
+    "lon": -122.158997,
+    "name": "Arlington Municipal Airport"
+  },
+  "JZI": {
+    "lat": 32.701,
+    "lon": -80.0033,
+    "name": "Charleston Executive Airport"
+  },
+  "KJZI": {
+    "lat": 32.701,
+    "lon": -80.0033,
+    "name": "Charleston Executive Airport"
+  },
+  "TYQ": {
+    "lat": 40.0307,
+    "lon": -86.2514,
+    "name": "Indianapolis Executive Airport"
+  },
+  "KTYQ": {
+    "lat": 40.0307,
+    "lon": -86.2514,
+    "name": "Indianapolis Executive Airport"
+  },
+  "UNV": {
+    "lat": 40.84917,
+    "lon": -77.84861,
+    "name": "State College Regional Airport"
+  },
+  "KUNV": {
+    "lat": 40.84917,
+    "lon": -77.84861,
+    "name": "State College Regional Airport"
+  },
+  "VDF": {
+    "lat": 28.014,
+    "lon": -82.3453,
+    "name": "Tampa Executive Airport"
+  },
+  "KVDF": {
+    "lat": 28.014,
+    "lon": -82.3453,
+    "name": "Tampa Executive Airport"
+  },
+  "QQI": {
+    "lat": 41.535,
+    "lon": -87.52944,
+    "name": "Chicago Lansing Municipal Airport"
+  },
+  "KIGQ": {
+    "lat": 41.535,
+    "lon": -87.52944,
+    "name": "Chicago Lansing Municipal Airport"
+  },
+  "IGQ": {
+    "lat": 41.535,
+    "lon": -87.52944,
+    "name": "Chicago Lansing Municipal Airport"
+  },
+  "QNY": {
+    "lat": 39.6276,
+    "lon": -86.088,
+    "name": "Indy South Greenwood Airport"
+  },
+  "KHFY": {
+    "lat": 39.6276,
+    "lon": -86.088,
+    "name": "Indy South Greenwood Airport"
+  },
+  "HFY": {
+    "lat": 39.6276,
+    "lon": -86.088,
+    "name": "Indy South Greenwood Airport"
+  },
+  "QTY": {
+    "lat": 39.83083,
+    "lon": -86.29444,
+    "name": "Eagle Creek Airpark"
+  },
+  "KEYE": {
+    "lat": 39.83083,
+    "lon": -86.29444,
+    "name": "Eagle Creek Airpark"
+  },
+  "EYE": {
+    "lat": 39.83083,
+    "lon": -86.29444,
+    "name": "Eagle Creek Airpark"
+  },
+  "QQR": {
+    "lat": 34.01306,
+    "lon": -84.59861,
+    "name": "Cobb County International Airport"
+  },
+  "KRYY": {
+    "lat": 34.01306,
+    "lon": -84.59861,
+    "name": "Cobb County International Airport"
+  },
+  "RYY": {
+    "lat": 34.01306,
+    "lon": -84.59861,
+    "name": "Cobb County International Airport"
+  },
+  "QSV": {
+    "lat": 38.36556,
+    "lon": -85.73833,
+    "name": "Louisville Clark Regional Airport"
+  },
+  "KJVY": {
+    "lat": 38.36556,
+    "lon": -85.73833,
+    "name": "Louisville Clark Regional Airport"
+  },
+  "JVY": {
+    "lat": 38.36556,
+    "lon": -85.73833,
+    "name": "Louisville Clark Regional Airport"
+  },
+  "KBFZ": {
+    "lat": 34.22911,
+    "lon": -86.25576,
+    "name": "Albertville Regional Airport"
+  },
+  "BFZ": {
+    "lat": 34.22911,
+    "lon": -86.25576,
+    "name": "Albertville Regional Airport"
+  },
+  "QTX": {
+    "lat": 45.3142,
+    "lon": -85.2761,
+    "name": "Charlevoix Municipal Airport"
+  },
+  "KCVX": {
+    "lat": 45.3142,
+    "lon": -85.2761,
+    "name": "Charlevoix Municipal Airport"
+  },
+  "CVX": {
+    "lat": 45.3142,
+    "lon": -85.2761,
+    "name": "Charlevoix Municipal Airport"
+  },
+  "QDH": {
+    "lat": 40.4818,
+    "lon": -111.429001,
+    "name": "Heber Valley Airport"
+  },
+  "KHCR": {
+    "lat": 40.4818,
+    "lon": -111.429001,
+    "name": "Heber Valley Airport"
+  },
+  "HCR": {
+    "lat": 40.4818,
+    "lon": -111.429001,
+    "name": "Heber Valley Airport"
+  },
+  "QDK": {
+    "lat": 37.579409,
+    "lon": -84.774347,
+    "name": "Stuart Powell Field"
+  },
+  "KDVK": {
+    "lat": 37.579409,
+    "lon": -84.774347,
+    "name": "Stuart Powell Field"
+  },
+  "DVK": {
+    "lat": 37.579409,
+    "lon": -84.774347,
+    "name": "Stuart Powell Field"
+  },
+  "QQQ": {
+    "lat": 39.843498,
+    "lon": -85.8971,
+    "name": "Indianapolis Regional Airport"
+  },
+  "KMQJ": {
+    "lat": 39.843498,
+    "lon": -85.8971,
+    "name": "Indianapolis Regional Airport"
+  },
+  "MQJ": {
+    "lat": 39.843498,
+    "lon": -85.8971,
+    "name": "Indianapolis Regional Airport"
+  },
+  "QQU": {
+    "lat": 42.690700531005,
+    "lon": -88.30460357666,
+    "name": "Burlington Municipal Airport"
+  },
+  "KBUU": {
+    "lat": 42.690700531005,
+    "lon": -88.30460357666,
+    "name": "Burlington Municipal Airport"
+  },
+  "BUU": {
+    "lat": 42.690700531005,
+    "lon": -88.30460357666,
+    "name": "Burlington Municipal Airport"
+  },
+  "QSO": {
+    "lat": 39.077999,
+    "lon": -77.557503,
+    "name": "Leesburg Executive Airport"
+  },
+  "KJYO": {
+    "lat": 39.077999,
+    "lon": -77.557503,
+    "name": "Leesburg Executive Airport"
+  },
+  "JYO": {
+    "lat": 39.077999,
+    "lon": -77.557503,
+    "name": "Leesburg Executive Airport"
+  },
+  "QTZ": {
+    "lat": 48.2995,
+    "lon": -116.559998,
+    "name": "Sandpoint Airport"
+  },
+  "KSZT": {
+    "lat": 48.2995,
+    "lon": -116.559998,
+    "name": "Sandpoint Airport"
+  },
+  "SZT": {
+    "lat": 48.2995,
+    "lon": -116.559998,
+    "name": "Sandpoint Airport"
+  },
+  "QDP": {
+    "lat": 39.9352,
+    "lon": -86.044998,
+    "name": "Indianapolis Metropolitan Airport"
+  },
+  "KUMP": {
+    "lat": 39.9352,
+    "lon": -86.044998,
+    "name": "Indianapolis Metropolitan Airport"
+  },
+  "UMP": {
+    "lat": 39.9352,
+    "lon": -86.044998,
+    "name": "Indianapolis Metropolitan Airport"
+  },
+  "QDZ": {
+    "lat": 40.801601,
+    "lon": -80.160698,
+    "name": "Zelienople Municipal Airport"
+  },
+  "KPJC": {
+    "lat": 40.801601,
+    "lon": -80.160698,
+    "name": "Zelienople Municipal Airport"
+  },
+  "PJC": {
+    "lat": 40.801601,
+    "lon": -80.160698,
+    "name": "Zelienople Municipal Airport"
+  },
+  "QNC": {
+    "lat": 41.515647,
+    "lon": -82.868328,
+    "name": "Erie-Ottawa International Airport"
+  },
+  "KPCW": {
+    "lat": 41.515647,
+    "lon": -82.868328,
+    "name": "Erie-Ottawa International Airport"
+  },
+  "PCW": {
+    "lat": 41.515647,
+    "lon": -82.868328,
+    "name": "Erie-Ottawa International Airport"
+  },
+  "QNH": {
+    "lat": 46.251499,
+    "lon": -114.125569,
+    "name": "Ravalli County Airport"
+  },
+  "KHRF": {
+    "lat": 46.251499,
+    "lon": -114.125569,
+    "name": "Ravalli County Airport"
+  },
+  "HRF": {
+    "lat": 46.251499,
+    "lon": -114.125569,
+    "name": "Ravalli County Airport"
+  },
+  "QNO": {
+    "lat": 37.74760056,
+    "lon": -97.22109985,
+    "name": "Colonel James Jabara Airport"
+  },
+  "KAAO": {
+    "lat": 37.74760056,
+    "lon": -97.22109985,
+    "name": "Colonel James Jabara Airport"
+  },
+  "AAO": {
+    "lat": 37.74760056,
+    "lon": -97.22109985,
+    "name": "Colonel James Jabara Airport"
+  },
+  "QNR": {
+    "lat": 36.055901,
+    "lon": -85.530701,
+    "name": "Upper Cumberland Regional Airport"
+  },
+  "KSRB": {
+    "lat": 36.055901,
+    "lon": -85.530701,
+    "name": "Upper Cumberland Regional Airport"
+  },
+  "SRB": {
+    "lat": 36.055901,
+    "lon": -85.530701,
+    "name": "Upper Cumberland Regional Airport"
+  },
+  "QNV": {
+    "lat": 36.780391,
+    "lon": -76.44881,
+    "name": "Hampton Roads Executive Airport"
+  },
+  "KPVG": {
+    "lat": 36.780391,
+    "lon": -76.44881,
+    "name": "Hampton Roads Executive Airport"
+  },
+  "QQB": {
+    "lat": 29.0557,
+    "lon": -80.948898,
+    "name": "New Smyrna Beach Municipal Airport"
+  },
+  "KEVB": {
+    "lat": 29.0557,
+    "lon": -80.948898,
+    "name": "New Smyrna Beach Municipal Airport"
+  },
+  "EVB": {
+    "lat": 29.0557,
+    "lon": -80.948898,
+    "name": "New Smyrna Beach Municipal Airport"
+  },
+  "QQC": {
+    "lat": 34.3122,
+    "lon": -84.4221,
+    "name": "Cherokee County Regional Airport"
+  },
+  "KCNI": {
+    "lat": 34.3122,
+    "lon": -84.4221,
+    "name": "Cherokee County Regional Airport"
+  },
+  "CNI": {
+    "lat": 34.3122,
+    "lon": -84.4221,
+    "name": "Cherokee County Regional Airport"
+  },
+  "QQG": {
+    "lat": 32.663898468018,
+    "lon": -97.094299316406,
+    "name": "Arlington Municipal Airport"
+  },
+  "KGKY": {
+    "lat": 32.663898468018,
+    "lon": -97.094299316406,
+    "name": "Arlington Municipal Airport"
+  },
+  "GKY": {
+    "lat": 32.663898468018,
+    "lon": -97.094299316406,
+    "name": "Arlington Municipal Airport"
+  },
+  "QQL": {
+    "lat": 38.959702,
+    "lon": -94.371399,
+    "name": "Lee's Summit Municipal Airport"
+  },
+  "KLXT": {
+    "lat": 38.959702,
+    "lon": -94.371399,
+    "name": "Lee's Summit Municipal Airport"
+  },
+  "LXT": {
+    "lat": 38.959702,
+    "lon": -94.371399,
+    "name": "Lee's Summit Municipal Airport"
+  },
+  "QQY": {
+    "lat": 36.048500061035,
+    "lon": -79.474899291992,
+    "name": "Burlington Alamance Regional Airport"
+  },
+  "KBUY": {
+    "lat": 36.048500061035,
+    "lon": -79.474899291992,
+    "name": "Burlington Alamance Regional Airport"
+  },
+  "BUY": {
+    "lat": 36.048500061035,
+    "lon": -79.474899291992,
+    "name": "Burlington Alamance Regional Airport"
+  },
+  "QQZ": {
+    "lat": 29.7045,
+    "lon": -98.042198,
+    "name": "New Braunfels National Airport"
+  },
+  "KBAZ": {
+    "lat": 29.7045,
+    "lon": -98.042198,
+    "name": "New Braunfels National Airport"
+  },
+  "BAZ": {
+    "lat": 29.7045,
+    "lon": -98.042198,
+    "name": "New Braunfels National Airport"
+  },
+  "QSP": {
+    "lat": 37.709,
+    "lon": -77.436699,
+    "name": "Hanover County Municipal Airport"
+  },
+  "KOFP": {
+    "lat": 37.709,
+    "lon": -77.436699,
+    "name": "Hanover County Municipal Airport"
+  },
+  "OFP": {
+    "lat": 37.709,
+    "lon": -77.436699,
+    "name": "Hanover County Municipal Airport"
+  },
+  "QSQ": {
+    "lat": 35.01879883,
+    "lon": -80.62020111,
+    "name": "Charlotte-Monroe Executive Airport"
+  },
+  "KEQY": {
+    "lat": 35.01879883,
+    "lon": -80.62020111,
+    "name": "Charlotte-Monroe Executive Airport"
+  },
+  "EQY": {
+    "lat": 35.01879883,
+    "lon": -80.62020111,
+    "name": "Charlotte-Monroe Executive Airport"
+  },
+  "QSW": {
+    "lat": 41.2747,
+    "lon": -85.840103,
+    "name": "Warsaw Municipal Airport"
+  },
+  "KASW": {
+    "lat": 41.2747,
+    "lon": -85.840103,
+    "name": "Warsaw Municipal Airport"
+  },
+  "ASW": {
+    "lat": 41.2747,
+    "lon": -85.840103,
+    "name": "Warsaw Municipal Airport"
+  },
+  "QTH": {
+    "lat": 39.3325,
+    "lon": -94.309601,
+    "name": "Midwest National Air Center Airport"
+  },
+  "KGPH": {
+    "lat": 39.3325,
+    "lon": -94.309601,
+    "name": "Midwest National Air Center Airport"
+  },
+  "GPH": {
+    "lat": 39.3325,
+    "lon": -94.309601,
+    "name": "Midwest National Air Center Airport"
+  },
+  "QDL": {
+    "lat": 43.5227,
+    "lon": -89.7702,
+    "name": "Baraboo Wisconsin Dells Airport"
+  },
+  "KDLL": {
+    "lat": 43.5227,
+    "lon": -89.7702,
+    "name": "Baraboo Wisconsin Dells Airport"
+  },
+  "DLL": {
+    "lat": 43.5227,
+    "lon": -89.7702,
+    "name": "Baraboo Wisconsin Dells Airport"
+  },
+  "QSU": {
+    "lat": 33.5228,
+    "lon": -112.2903,
+    "name": "Glendale Municipal Airport"
+  },
+  "KGEU": {
+    "lat": 33.5228,
+    "lon": -112.2903,
+    "name": "Glendale Municipal Airport"
+  },
+  "GEU": {
+    "lat": 33.5228,
+    "lon": -112.2903,
+    "name": "Glendale Municipal Airport"
+  },
+  "QSD": {
+    "lat": 33.2691,
+    "lon": -111.811,
+    "name": "Chandler Municipal Airport"
+  },
+  "KCHD": {
+    "lat": 33.2691,
+    "lon": -111.811,
+    "name": "Chandler Municipal Airport"
+  },
+  "CHD": {
+    "lat": 33.2691,
+    "lon": -111.811,
+    "name": "Chandler Municipal Airport"
+  },
+  "EHT": {
+    "lat": 41.7517,
+    "lon": -72.6253,
+    "name": "Rentschler Field"
+  },
+  "CT88": {
+    "lat": 41.7517,
+    "lon": -72.6253,
+    "name": "Rentschler Field"
+  }
+}
