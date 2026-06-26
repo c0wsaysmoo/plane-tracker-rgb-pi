@@ -62,7 +62,7 @@
   @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
   @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
-  .route-map-wrap { height: 340px; position: relative; }
+  .route-map-wrap { height: 680px; position: relative; }
   .route-map-wrap .leaflet-container { background: #0a0a08; }
   .route-tip { background: #1a1a15 !important; border: 1px solid var(--amber-dim) !important; color: var(--amber) !important; font-family: 'Share Tech Mono', monospace !important; font-size: 12px !important; padding: 4px 8px !important; box-shadow: none !important; }
   .route-tip::before { display: none !important; }
@@ -229,15 +229,11 @@ async function render() {
 
     <div class="charts-grid">
       <div class="panel chart-full"><div class="panel-title">▸ Flights by Hour</div><canvas id="hourChart"></canvas></div>
-      <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
-      <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Aircraft (Top 12)</div><canvas id="aircraftChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Route Deviation (top 12)</div><canvas id="deviationChart"></canvas></div>
-      <div class="panel chart-full">
-        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
-        <div id="routeMap" class="route-map-wrap"></div>
-      </div>
       <div class="panel">
         <div class="panel-title">▸ All Flights — ${day.count} total</div>
         <div style="max-height:280px;overflow-y:auto">
@@ -246,6 +242,10 @@ async function render() {
             <tbody>${flights.map((f,i)=>{const route=(f.origin&&f.dest)?`${f.origin}→${f.dest}`:(f.origin||f.dest||'—');return`<tr><td class="dim">${i+1}</td><td class="callsign">${f.callsign}</td><td class="dim">${f.aircraft||'—'}</td><td class="dim">${route}</td><td class="dim">${f.time}</td></tr>`;}).join('')}</tbody>
           </table>
         </div>
+      </div>
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
+        <div id="routeMap" class="route-map-wrap"></div>
       </div>
     </div>`;
 
