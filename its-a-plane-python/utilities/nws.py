@@ -213,7 +213,7 @@ def _suppress_watches(alerts):
         if " WCH" in text:
             prefix = text.split(" WCH")[0].strip()
             if prefix in warning_prefixes:
-                logger.info(f"[NWS] Suppressing watch '{text}' — warning already active")
+                logger.debug(f"[NWS] Suppressing watch '{text}' — warning already active")
                 continue
         filtered.append(a)
     return filtered
@@ -238,7 +238,7 @@ def _fetch(lat, lon):
             if severity not in _SEVERITY_COLOUR:
                 continue
             event = props.get("event", "WX ALERT")
-            logger.info(f"[NWS] Raw event: {event!r}  severity: {severity!r}")
+            logger.debug(f"[NWS] Raw event: {event!r}  severity: {severity!r}")
             color = _EVENT_COLOUR_OVERRIDE.get(event.strip(), _SEVERITY_COLOUR[severity])
             alerts.append({"text": _abbreviate(event), "color": color})
 
@@ -248,7 +248,7 @@ def _fetch(lat, lon):
         with open(_CACHE_FILE, "w") as f:
             json.dump({"ts": time.time(), "data": alerts}, f)
 
-        logger.info(f"[NWS] Fetched {len(alerts)} Extreme/Severe alert(s)")
+        logger.debug(f"[NWS] Fetched {len(alerts)} Extreme/Severe alert(s)")
         return alerts
 
     except Exception as e:
@@ -306,7 +306,7 @@ def _refresh(lat, lon):
         if disk is not None:
             _cached_data = disk
             _cached_ts = disk_ts
-            logger.info("[NWS] Loaded from disk cache")
+            logger.debug("[NWS] Loaded from disk cache")
             if (now - _cached_ts) < _POLL_INTERVAL:
                 return _cached_data
 

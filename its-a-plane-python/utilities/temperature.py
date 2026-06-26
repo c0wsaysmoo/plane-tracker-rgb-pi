@@ -77,6 +77,21 @@ if MASTER_TRACKER:
             logging.error(f"[Slave/Weather:{tag}] Cannot reach master for forecast: {e}")
             return []
 
+    def grab_hourly_forecast(tag="unknown"):
+        """Fetch hourly forecast from the master's /weather/json endpoint."""
+        try:
+            r = requests.get(_url("/weather/json"), timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            hourly = data.get("hourly_forecast", [])
+            if not isinstance(hourly, list):
+                logging.warning(f"[Slave/Weather:{tag}] Master returned non-list hourly forecast")
+                return []
+            return hourly
+        except RequestException as e:
+            logging.error(f"[Slave/Weather:{tag}] Cannot reach master for hourly forecast: {e}")
+            return []
+
     print(f"[Weather] Slave mode — polling master at {_url('')}")
 
 
@@ -103,6 +118,7 @@ else:
     os.makedirs(_CACHE_DIR, exist_ok=True)
     _TEMP_CACHE_FILE     = os.path.join(_CACHE_DIR, "temperature.json")
     _FORECAST_CACHE_FILE = os.path.join(_CACHE_DIR, "forecast.json")
+    _HOURLY_CACHE_FILE   = os.path.join(_CACHE_DIR, "hourly_forecast.json")
     _CACHE_TTL           = 7200  # 2 hours — use file cache if API fails within this window
 
     # ─── Day/Night helpers ────────────────────────────────────────────────────
@@ -327,4 +343,69 @@ else:
 
         except KeyError as e:
             logging.error(f"[Forecast:{tag}] Unexpected data format: {e}")
+            return []
+
+
+    def grab_hourly_forecast(tag="unknown"):
+        """Fetch ~36h of hourly intervals for time-of-day forecast mode."""
+        dt = datetime.now()
+        try:
+            s = get_session()
+            resp = s.post(
+                f"{TOMORROW_API_URL}/timelines",
+                headers={
+                    "Accept-Encoding": "gzip",
+                    "accept":          "application/json",
+                    "content-type":    "application/json"
+                },
+                params={"apikey": TOMORROW_API_KEY},
+                json={
+                    "location":  TEMPERATURE_LOCATION,
+                    "units":     TEMPERATURE_UNITS,
+                    "timezone":  "auto",
+                    "fields":    ["temperature", "weatherCode"],
+                    "timesteps": ["1h"],
+                    "startTime": dt.isoformat(),
+                    "endTime":   (dt + timedelta(hours=36)).isoformat(),
+                },
+                timeout=(5, 20)
+            )
+
+            if resp.status_code == 429:
+                logging.error(f"[HourlyForecast:{tag}] Rate limit, using file cache")
+                cached, ts = _load_file_cache(_HOURLY_CACHE_FILE, units=TEMPERATURE_UNITS)
+                if cached and (time.time() - ts) < _CACHE_TTL:
+                    return cached
+                return []
+
+            resp.raise_for_status()
+
+            data      = resp.json().get("data", {})
+            timelines = data.get("timelines", [])
+            if not timelines:
+                logging.error(f"[HourlyForecast:{tag}] No timelines returned")
+                return []
+
+            intervals = timelines[0].get("intervals", [])
+            if not intervals:
+                logging.error(f"[HourlyForecast:{tag}] No intervals returned")
+                return []
+
+            _save_file_cache(_HOURLY_CACHE_FILE, intervals, units=TEMPERATURE_UNITS)
+            return intervals
+
+        except RequestException as e:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            if is_dns_error(e):
+                logging.error(f"[{timestamp}] [HourlyForecast:{tag}] DNS failure")
+            else:
+                logging.error(f"[{timestamp}] [HourlyForecast:{tag}] API request failed: {e}")
+
+            cached, ts = _load_file_cache(_HOURLY_CACHE_FILE, units=TEMPERATURE_UNITS)
+            if cached and (time.time() - ts) < _CACHE_TTL:
+                return cached
+            return []
+
+        except KeyError as e:
+            logging.error(f"[HourlyForecast:{tag}] Unexpected data format: {e}")
             return []

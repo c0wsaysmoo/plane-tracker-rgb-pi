@@ -335,16 +335,17 @@ else:
                 _save_counter_log(log)
 
         def load_tracked_callsign():
-            """Return (callsign, scheduled_departure_ts, cached_route) from tracked_flight.json."""
+            """Return (callsign, scheduled_departure_ts, cached_route, airborne) from tracked_flight.json."""
             try:
                 with open(TRACKED_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                cs    = data.get("callsign", "").strip().upper()
-                dep   = data.get("scheduled_departure")   # Unix timestamp or None
-                route = data.get("cached_route")          # dict saved at search time, or None
-                return cs, dep, route
+                cs       = data.get("callsign", "").strip().upper()
+                dep      = data.get("scheduled_departure")   # Unix timestamp or None
+                route    = data.get("cached_route")          # dict saved at search time, or None
+                airborne = bool(data.get("airborne"))        # flight was already live when saved
+                return cs, dep, route, airborne
             except (FileNotFoundError, json.JSONDecodeError):
-                return "", None, None
+                return "", None, None, False
 
         def log_flight_data(entry):
             try:
@@ -528,7 +529,7 @@ else:
                         log_farthest_flight(entry, opensky=self._opensky)
                         log_flight_count(callsign, entry)
 
-                    tracked_callsign, tracked_sched_dep, tracked_cached_route = load_tracked_callsign()
+                    tracked_callsign, tracked_sched_dep, tracked_cached_route, tracked_airborne = load_tracked_callsign()
                     if tracked_callsign:
                         # Reset state if callsign changed
                         if tracked_callsign != self._tracked_last_callsign:
@@ -550,11 +551,16 @@ else:
                         # have landed and only the correct leg will be visible.
                         # If no scheduled_departure was saved (blind "save anyway" track),
                         # poll immediately — we have no timing info to gate on.
-                        if tracked_sched_dep is not None and not self._tracked_was_live:
+                        # If the flight was already airborne when the user saved it
+                        # (tracked_airborne), the matched leg IS the live one — poll now,
+                        # even if its scheduled departure looks far off (reused flight
+                        # number / wrong-leg schedule). Otherwise it would never display.
+                        if (tracked_sched_dep is not None and not self._tracked_was_live
+                                and not tracked_airborne):
                             mins_to_dep = (tracked_sched_dep - now_ts) / 60
                             within_dep_window = mins_to_dep <= 30
                         else:
-                            within_dep_window = True  # already live, or no sched dep known
+                            within_dep_window = True  # airborne at save, already live, or no sched dep known
 
                         if not within_dep_window:
                             # Too early to poll — log countdown and skip adsb entirely
