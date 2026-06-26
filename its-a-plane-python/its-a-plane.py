@@ -2,6 +2,30 @@
 import subprocess
 import os
 import json
+import sys
+import logging
+
+# Route logging + stray print()/stderr through the journal at a consistent format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s %(name)s: %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+
+
+class _PrintToLog:
+    def __init__(self, logger): self._log = logger
+    def write(self, msg):
+        msg = msg.rstrip()
+        if msg:
+            self._log.info(msg)
+    def flush(self): pass
+
+
+sys.stdout = _PrintToLog(logging.getLogger("stdout"))
+sys.stderr = _PrintToLog(logging.getLogger("stderr"))
 
 def _ensure_config():
     """
@@ -40,7 +64,10 @@ def _ensure_config():
             "night_end": "06:00",
             "gpio_slowdown": 2,
             "hat_pwm_enabled": False,
-            "forecast_days": 3
+            "forecast_days": 3,
+            "forecast_mode": "daily",
+            "forecast_hourly_start": "05:00",
+            "forecast_hourly_end": "09:00"
         },
         "flights": {
             "min_altitude": 2000,
