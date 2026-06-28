@@ -300,7 +300,34 @@ git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
 cd rpi-rgb-led-matrix
 make
 ```
-### 4. Install the Adafruit RGB Matrix Bonnet
+### 4. Increase swap size (Pi 3 only)
+
+The wheel compilation requires more memory than the Pi 3's 1GB provides. Without this it will crash mid-install.
+
+```bash
+sudo apt-get install -y dphys-swapfile
+sudo dphys-swapfile swapoff
+sudo nano /etc/dphys-swapfile
+```
+
+Add this line:
+CONF_SWAPSIZE=512
+
+Save with `Ctrl+O`, Enter, `Ctrl+X`, then:
+
+```bash
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+```
+
+Verify with `free -h` — you should see ~512MB (or more) under Swap. You can disable swap after installation is complete to reduce SD card wear:
+
+```bash
+sudo dphys-swapfile swapoff
+sudo systemctl disable dphys-swapfile
+```
+
+### 5. Install the Adafruit RGB Matrix Bonnet
 
 Install the Python installer dependency and run the Adafruit setup script:
 
@@ -317,7 +344,8 @@ You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flic
 **During the script:**
 - Interface board type: **Bonnet** (Option 1)
 - **Quality** if you soldered the jumper, **Convenience** if not
-### 5. Test the panel
+  
+### 6. Test the panel
 
 **Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
 
@@ -335,7 +363,7 @@ If you **did** solder:
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
-### 6. Build and install Python bindings
+### 7. Build and install Python bindings
 
 ```bash
 cd ~/rpi-rgb-led-matrix/bindings/python
@@ -343,7 +371,7 @@ make
 sudo pip3 install . --break-system-packages
 ```
 
-### 7. Git the tracker
+### 8. Git the tracker
 
 Clone the tracker:
 ```
@@ -361,7 +389,7 @@ mv ~/logo2/* ~/logos/
 rmdir ~/logo ~/logo2
 ```
 
-# 7. Install Python dependencies
+# 9. Install Python dependencies
 
 ```
 pip install pytz requests beautifulsoup4 folium selenium pillow flask --break-system-packages
@@ -377,19 +405,19 @@ If **Trixie**
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
-# 9. Make the Script Executable
+# 10. Make the Script Executable
 
 ```
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-# 10. Run the Script
+# 11. Run the Script
 Test the script manually by running
 
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-# 11. Find your project path
+# 12. Find your project path
 
 Open a terminal on your Pi and run:
 
@@ -402,7 +430,7 @@ Copy the path it shows — you'll need it in the next step. It will look somethi
 
 ---
 
-# 12. Create the service file
+# 13. Create the service file
 
 Run these commands **from inside your project folder** (after the `cd` above):
 
@@ -428,7 +456,7 @@ EOF
 
 ---
 
-# 13. Install and start the service
+# 14. Install and start the service
 
 ```bash
 sudo cp /tmp/its-a-plane.service /etc/systemd/system/
@@ -448,11 +476,11 @@ You should see `Active: active (running)` in green. If it shows an error, jump t
 ---
 
 
-# 14. Fill in the Config file.
+# 15. Fill in the Config file.
 
 You can only do so **IF** the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
 
-# 15. Enable the web UI restart button
+# 16. Enable the web UI restart button
 
 If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
 
