@@ -27,11 +27,6 @@ try:
 except ImportError:
     ephem = None
 
-try:
-    from utilities.api_usage import log_call as _log_api
-except ImportError:
-    _log_api = lambda source: None
-
 logger = logging.getLogger(__name__)
 
 _TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
