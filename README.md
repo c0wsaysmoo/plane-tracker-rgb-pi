@@ -349,8 +349,15 @@ You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flic
 
 **Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
 
+First build the C examples:
 ```bash
-cd ~/rpi-rgb-led-matrix/examples-api-use/
+cd ~/rpi-rgb-led-matrix
+make
+```
+
+Then run the test:
+```bash
+cd examples-api-use
 ```
 
 If you did **not** solder:
