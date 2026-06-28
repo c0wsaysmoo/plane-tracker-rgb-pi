@@ -393,7 +393,7 @@ rmdir ~/logo ~/logo2
 # 8. Install Python dependencies
 
 ```
-pip install pytz requests beautifulsoup4 folium selenium pillow flask --break-system-packages
+pip install pytz requests beautifulsoup4 folium selenium pillow flask ephem --break-system-packages
 ```
 If **Bookworm**
 ```
