@@ -92,7 +92,9 @@ class ISSPassScene(object):
         iss = self.overhead.iss_pass_data
         if not iss or not iss["is_active"]:
             if self._iss_was_active:
-                # Pass just ended — reset flags
+                # Pass just ended — wipe stale ISS pixels (sprite, progress
+                # bar, countdown) that no other scene would overwrite.
+                self.canvas.Clear()
                 self._iss_was_active = False
                 self._iss_plane_shown = False
             self._iss_active = False
@@ -108,6 +110,11 @@ class ISSPassScene(object):
             return
 
         self._iss_active = True  # suppress other scenes
+
+        # Clear the entire canvas — other scenes don't run during takeover,
+        # and clear_screen (keyframe 0) only fires once at startup, so stale
+        # clock/weather/forecast pixels persist unless we wipe them here.
+        self.canvas.Clear()
 
         progress = iss["progress"]
         time_remaining = iss["time_remaining_sec"]
