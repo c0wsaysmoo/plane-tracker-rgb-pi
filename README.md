@@ -370,15 +370,7 @@ If you **did** solder:
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
-### 7. Build and install Python bindings
-
-```bash
-cd ~/rpi-rgb-led-matrix/bindings/python
-make
-sudo pip3 install . --break-system-packages
-```
-
-### 8. Git the tracker
+### 7. Git the tracker
 
 Clone the tracker:
 ```
@@ -396,7 +388,7 @@ mv ~/logo2/* ~/logos/
 rmdir ~/logo ~/logo2
 ```
 
-# 9. Install Python dependencies
+# 8. Install Python dependencies
 
 ```
 pip install pytz requests beautifulsoup4 folium selenium pillow flask --break-system-packages
@@ -412,19 +404,19 @@ If **Trixie**
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
-# 10. Make the Script Executable
+# 9. Make the Script Executable
 
 ```
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-# 11. Run the Script
+# 10. Run the Script
 Test the script manually by running
 
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-# 12. Find your project path
+# 11. Find your project path
 
 Open a terminal on your Pi and run:
 
@@ -437,7 +429,7 @@ Copy the path it shows — you'll need it in the next step. It will look somethi
 
 ---
 
-# 13. Create the service file
+# 12. Create the service file
 
 Run these commands **from inside your project folder** (after the `cd` above):
 
@@ -463,7 +455,7 @@ EOF
 
 ---
 
-# 14. Install and start the service
+# 13. Install and start the service
 
 ```bash
 sudo cp /tmp/its-a-plane.service /etc/systemd/system/
@@ -483,11 +475,11 @@ You should see `Active: active (running)` in green. If it shows an error, jump t
 ---
 
 
-# 15. Fill in the Config file.
+# 14. Fill in the Config file.
 
 You can only do so **IF** the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
 
-# 16. Enable the web UI restart button
+# 15. Enable the web UI restart button
 
 If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
 
