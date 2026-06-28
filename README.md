@@ -344,20 +344,22 @@ You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flic
 **During the script:**
 - Interface board type: **Bonnet** (Option 1)
 - **Quality** if you soldered the jumper, **Convenience** if not
+
+After the script completes, copy the rgbmatrix module to system Python so it works without a venv:
+
+```bash
+sudo cp -r ~/env/lib/python3.13/site-packages/rgbmatrix /usr/lib/python3/dist-packages/
+python3 -c "import rgbmatrix; print('ok')"
+```
+
+You should see `ok` printed. If not, do not continue.
   
 ### 6. Test the panel
 
-**Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
+**Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red (depending on the panel, instead of RGB it's RBG. You can fix this in the config page later if the colors are inverted). If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
 
-First build the C examples:
 ```bash
-cd ~/rpi-rgb-led-matrix
-make
-```
-
-Then run the test:
-```bash
-cd examples-api-use
+cd ~/rpi-rgb-led-matrix/examples-api-use
 ```
 
 If you did **not** solder:
