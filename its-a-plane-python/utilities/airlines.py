@@ -31,6 +31,38 @@ _OVERRIDES = {
     "QXE": "Horizon Air",
     # Other
     "TIV": "Thrive Aviation",
+    "TWY": "Solairus Aviation",
+    "MXY": "Breeze Airways",
+    "NSH": "Sterling Aviation",
+    "CSB": "21 Air",
+    "CSG": "China Southern Cargo",
+    "CXK": "ATP Flight School",
+    "VAR": "United Aviate Academy",
+    "USC": "AirNet",
+    "LXJ": "Flexjet",
+    "WSN": "Advanced Air",
+    "JSX": "JSX",
+    "EJA": "NetJets",
+    "WUP": "Wheels Up",
+    "WJA": "WestJet",
+    "JZA": "Jazz Aviation",
+    "CBC": "SkyShare",
+    "NCJ": "North Central Aviation",
+    "WGN": "Western Global Airlines",
+    # Active airlines missing from the downloaded database
+    "EJU": "easyJet Europe",        # easyJet European AOC (IATA: EC)
+    "EZS": "easyJet",               # easyJet Swiss AOC (IATA: DS)
+    "ITY": "ITA Airways",           # Alitalia successor (IATA: AZ)
+    "JJP": "Jetstar Japan",         # (IATA: GK)
+    "JLJ": "J-Air",                 # JAL regional subsidiary
+    "KHV": "Air Cambodia",          # (IATA: K6)
+    "SJX": "STARLUX Airlines",      # Taiwan full-service (IATA: JX)
+    "TGU": "TAG Airlines",          # Guatemala (IATA: 5U)
+    "TTW": "Tigerair Taiwan",       # (IATA: IT)
+    "VJC": "VietJet Air",           # Vietnam LCC
+    "VOE": "Volotea",               # European LCC (IATA: V7)
+    "VTU": "Turpial Airlines",      # Venezuela
+    "JRE": "flyExclusive",
 }
 
 _db               = {}

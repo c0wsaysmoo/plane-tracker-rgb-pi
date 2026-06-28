@@ -1,247 +1,169 @@
-## 🚀 What's New & Improved
+## Overview
 
-I have done some more polishing and made things easier. Now the config also allows for wifi so changing networks is a lot easier. This clock has been a passion project for years and I hope years to come.
-
-Thanks to some fantastic help from **ajplotkin**, we’ve added a brand-new alerts feature! When enabled, your main clock will automatically scale down to display active alerts directly underneath it. 
-
-You can now toggle the following US-based alerts on or off:
-* **FAA Airport Alerts:** Stay updated on ground stops, departure delays, and more for major US airports.
-* **NWS Weather Alerts:** Get real-time weather warnings for your local area.
-* **ISS Pass-by Countdown:** Receive a live countdown when the International Space Station is just minutes away from passing over your location. (Works anywhere)
-
-All alerts are fully customizable and will seamlessly sync to your secondary screen if you use one.
-
-*   **New Web Configuration Page:** No more digging through raw files. You can now easily fill out and update all your settings directly from a clean, user-friendly webpage. At the bottom, it also tells you the system stats and the current API usage for each service. REMEMBER your local webpage is going to be http://hostname.local:8080 where hostname is the name of the PI (not your username). If you pull this version **BEFORE** you do, make a copy of your current config file. Afterwords use the old one to fill out the infomration in the new one.  
-*   **Smart Multi-Clock Sync:** If you run multiple clocks in the same house, they now work as a team. One clock acts as the **MASTER** to fetch weather data, and then seamlessly passes it to the other clocks. This saves system resources and ensures you only need a single weather API key, just like it does with the overhead flights!
-*   **More informative Loading Pulse:** The little light that blinks in the top right corner will now tell you that pinged OpenSky (white) and if it finds a callsign it will blink a different color depending what service it used to find the route (yellow=AirLabs, green=FR24, and cyan=FlightAware). If you have a Master/Slave setup, the Slave will blink green if it's connected to the Master and red if it isn't. This way you can tell at a glance if it is working and what service is being used.
-*   **System Service Integration:** I highly recommend migrating away from `crontab -e` and running the clock as a dedicated system service. 
-
-### Why switch to a System Service?
-*   **Automatic Restarts:** If the script crashes or the power cuts out, the system will automatically restart it.
-*   **Boot Management:** It starts reliably exactly when the system boots up, waiting properly for network dependencies.
-*   **Better Logging:** You can easily track errors and performance logs using standard system tools.
-
-## Step 1 — Find your project path
-
-Open a terminal on your Pi and run:
-
-```bash
-cd ~/its-a-plane-python
-pwd
-```
-
-Copy the path it shows — you'll need it in the next step. It will look something like `/home/pi/its-a-plane-python` or `/home/flight/its-a-plane-python`.
+A passion project years in the making. The tracker runs as a system service on a Raspberry Pi driving a 64×32 RGB LED matrix and is configured entirely through a web UI. It shows the time, weather, moon phases, overhead flights, active alerts, and can track specific flights end-to-end. Multiple clocks in the same house sync intelligently so you're never burning duplicate API credits.
 
 ---
 
-## Step 2 — Create the service file
+## Web Configuration & Clock Mirror
 
-Run these commands **from inside your project folder** (after the `cd` above):
+Open a browser on any device on your network and go to **http://hostname.local:8080** (use the Pi's hostname, not your username).
 
-```bash
-cat > /tmp/its-a-plane.service << EOF
-[Unit]
-Description=Plane Tracker
-After=network.target
+From this page you can:
 
-[Service]
-User=$(whoami)
-WorkingDirectory=$HOME
-ExecStart=$(pwd)/its-a-plane.py
-Restart=always
-RestartSec=10
+- Fill out and update all settings — including WiFi network — without touching any raw files
+- View **system stats** and current API usage per service at the bottom
+- **Mirror the clock display live** in your browser, with a pop-out option that floats always-on-top and is freely resizable — useful for keeping an eye on the display from another room or monitor
 
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-> ⚠️ **Important:** Run the `cd` command first or the paths will be wrong!
+> **Upgrading from an older version?** Make a copy of your existing config file before pulling, then use it to fill in the new config format.
 
 ---
 
-## Step 3 — Install and start the service
+## Clock Screen
+
+- Displays time, date, current temperature, and forecast
+- **Forecast modes:**
+  - **3-day forecast** — the default view showing three days at a glance
+  - **Daily forecast** — breaks the current day into Morning / Afternoon / Evening / Night periods
+  - **Hybrid** — automatically shows the daily breakdown during certain hours of the day and switches to the 3-day view the rest of the time; configure the time windows in the config
+- Temperature color is based on current humidity (white → blue gradient)
+- Time color shifts at sunrise and sunset
+- Date line shows moon phase with a purple-to-white gradient that tracks the lunar cycle
+- Display dims at predefined times set in the config
+- Toggle between 12 hr / 24 hr and imperial / metric
+
+---
+
+## Alerts
+
+When enabled, the clock scales down and shows active alerts beneath it. All alerts sync to a secondary screen if you run one.
+
+- **FAA Airport Alerts** — ground stops, departure delays, and more for major US airports
+- **NWS Weather Alerts** — real-time warnings for your local area
+- **ISS Pass-by Countdown** — live countdown when the ISS is minutes away from passing overhead (works anywhere)
+
+---
+
+## Flight Tracker Screen
+
+Detects aircraft in your bounding box every 30 seconds via OpenSky and displays:
+
+- **Origin → Destination** airport codes with distances to each
+- Airport codes color-coded by delay status:
+
+  | Departure delay | Color |
+  |---|---|
+  | 0–20 min | Green |
+  | 20–40 min | Yellow |
+  | 40–60 min | Orange |
+  | 1–4 hrs | Red |
+  | 4–8 hrs | Purple |
+  | 8+ hrs | Blue |
+
+  | Arrival | Color |
+  |---|---|
+  | On time / early | Green |
+  | 0–30 min late | Yellow |
+  | 30–60 min late | Orange |
+  | 1–4 hrs late | Red |
+  | 4–8 hrs late | Purple |
+  | 8+ hrs late | Blue |
+
+  Grey = actual time not yet available (common near airports)
+
+- Arrow between codes acts as a progress bar: red at departure, green near arrival
+- Airline IATA name, flight number, abbreviated aircraft type, and distance / direction / altitude to your location
+- Airline ICAO logo — especially useful for regional carriers operating under multiple brands (e.g., Republic Airways flying as United Express, Delta Connection, or American Eagle)
+
+---
+
+## Tracked Flight
+
+Track a specific flight from departure to landing via the web UI at **http://hostname.local:8080**.
+
+**How to use:**
+- Enter a flight number (must use the 3-letter ICAO airline code — e.g., **UAL1134** not UA1134)
+- If the flight is active, tracking starts immediately
+- If it hasn't departed yet, save it and tracking begins automatically once ADSB confirms wheels-up — no credits burned until then
+- Regional flights may not be supported due to API constraints
+
+**What the display shows:**
+- Airline logo, name, and route in the header
+- Dynamic progress bar with a moving arrow icon (turns red when live position data is unavailable, e.g. over the ocean)
+- Bottom line: time and distance remaining, aircraft type, airspeed, and altitude with a climb/descent indicator
+- When the flight lands, the display automatically returns to the weather forecast
+- Overhead flight detection continues normally throughout
+
+---
+
+## The "Waterfall" API Stack
+
+The system exhausts free tiers before touching paid ones, and rotates through multiple keys automatically:
+
+| Service | Role | Cost |
+|---|---|---|
+| **ADSB.lol/OpenSky Network** | Primary position scout — required | Free |
+| **AirLabs** |  1,000 credits/mo | Free |
+| **FlightAware** |  1,000 lookups | Free 5$ worth of credits a month |
+| **FlightRadar24** | 30,000 lookups | 9$/mo |
+
+Stack as many keys as you want across providers. The system rotates automatically. You can order them however you wish based on what accounts you have. You also can have 1 or all 3 providers. 
+
+**Credit efficiency features:**
+- ADSB signal must confirm takeoff before any route API is called
+- ETA calculated locally from current airspeed, position, and descent pattern — no repeated polling
+- Most flights consume **one credit total** for the entire tracking duration
+
+---
+
+## Master / Slave Multi-Clock Sync
+
+For households with multiple clocks:
+
+- One Pi is designated **Master** — it handles all API lookups and weather fetching
+- **Slave** units pull data from the Master over the local network
+- Single weather API key covers all clocks
+- The loading pulse in the top-right corner tells you status at a glance:
+  - **White** — pinged OpenSky
+  - **Yellow** — route found via AirLabs
+  - **Green** — route found via FR24 (or Slave connected to Master)
+  - **Cyan** — route found via FlightAware
+  - **Red** — Slave cannot reach Master
+
+---
+
+## Flight Logs & Email Alerts
+
+The tracker logs the closest and farthest flights it detects:
+
+- **Top N closest flights** to your location (configurable via `MAX_CLOSEST`)
+- **Top N farthest flights** by origin or destination (configurable via `MAX_FARTHEST`)
+
+Automatic email alerts fire when a new record is set, sent from **flight.tracker.alerts2025@gmail.com** with flight details and a link to an interactive map (link valid 30 days; maps also always viewable on your local web page). Emails can be disabled while keeping the log files and local web stats.
+
+---
+
+## Statistics Dashboard
+
+The web UI includes a stats dashboard showing real-time analytics: average daily flight counts, per-service API usage, and projected monthly consumption — so you can pick the API combination that matches your local sky traffic.
+
+---
+
+## System Service
+
+Run the tracker as a dedicated system service rather than via crontab:
 
 ```bash
-sudo cp /tmp/its-a-plane.service /etc/systemd/system/
-sudo systemctl daemon-reload
 sudo systemctl enable its-a-plane
 sudo systemctl start its-a-plane
 ```
 
-Check it's running:
-
-```bash
-sudo systemctl status its-a-plane
-```
-
-You should see `Active: active (running)` in green.
-
 ---
 
-## Step 4 — Disable your old crontab entry
+## Credits
 
-If you were previously using crontab to auto-start, disable it so they don't conflict:
+Built on [Colin Waddell's its-a-plane-python](https://github.com/ColinWaddell/its-a-plane-python). Additional forks and inspiration from [a10kiloham](https://github.com/a10kiloham/plane-tracker-rgb-pi), [yashmulgaonkar](https://github.com/yashmulgaonkar/plane-tracker-rgb-pi), and [ajplotkin](https://github.com/ajplotkin/plane-tracker-rgb-pi-f24only) — thanks especially to ajplotkin for the alerts feature.
 
-```bash
-crontab -e
-```
-
-Find the line that looks like:
-
-```
-@reboot sleep 30 && /home/youruser/its-a-plane-python/its-a-plane.py ...
-```
-
-Put a `#` at the start of the line to comment it out, then save and exit.
-
----
-
-## Step 5 (Optional) — Enable the web UI restart button
-
-If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
-
-```bash
-sudo visudo
-```
-
-This opens a text editor. Scroll to the very bottom and add this line (replace `pi` with your actual username — same as what `whoami` showed you):
-
-```
-pi ALL=(ALL) NOPASSWD: /bin/systemctl restart its-a-plane
-```
-
-Save and exit. Now the web UI restart button will work.
-
----
-
-
-
-### 1. The "Waterfall" API Stack
-To keep the tracker free for as many users as possible, the system now uses a prioritized "waterfall" logic. It exhausts free credits across multiple providers before tapping into paid tiers.
-
-*   **OpenSky-Network (Required):** Acts as the primary "scout." It pings your bounding box every 30 seconds to detect aircraft, altitude, airspeed, and flight paths.
-*   **AirLabs (1,000 Free Credits/Mo):** The first stop for route and status data (on-time/delayed).
-*   **FlightAware ($5 Free Credit/Mo):** The secondary failover for route lookups.
-*   **FlightRadar24 ($9 for 30,000 Lookups/Mo):** The final tier for high-volume users.
-*   **Smart Rotation:** You can stack multiple API keys; the system will automatically rotate to the next provider once one is exhausted. You can use any combination of Airlabs/FLightAware/FlightRadar24 that you want.
-
-### 2. Multi-Device "Master/Slave" Architecture
-For power users with multiple clocks in a single household, you can now designate one unit as the **Master**. 
-*   The **Master** unit performs the API lookups and processing.
-*   The **Slave** units sync data locally from the Master.
-This ensures you aren't burning multiple credits for the same aircraft flying over your house.
-
-### 3. Local Intelligence & Credit Efficiency
-I have shifted the heavy lifting from the API servers to your local hardware to drastically reduce data consumption.
-*   **Auto-Updating Databases:** The tracker now maintains a local airport and airline database. If the system encounters a code it doesn't recognize, it will automatically trigger a download of an updated database to ensure your display stays current without manual intervention.
-*   **ADSB Trigger:** You can pre-save a flight number, but the system will not burn an API credit for a lookup until the ADSB signal confirms the plane has actually taken off.
-*   **ADSB Trigger:** You can pre-save a flight number, but the system will not burn an API credit for a lookup until the ADSB signal confirms the plane has actually taken off.
-*   **Local ETA Calculation:** Instead of constantly polling APIs for "time remaining," the tracker now calculates distance and ETA locally. It factors in current airspeed, location, and descent patterns to give a ballpark arrival time.
-*   **The Result:** Most flights now only require **one single credit** for the entire tracking duration.
-
-### 4. New Statistics Dashboard
-The update includes a redesigned web interface that provides real-time analytics for your tracker. It calculates your **Average Daily Flights**, allowing you to project your monthly usage and choose the API combination that fits your specific "sky traffic."
-
-### Why this approach?
-Flight Radar 24 is becoming increasingly restricted. I researched community databases and "free" workarounds, but found them either too inaccurate or too easy for providers to shut down. 
-
-By building a system that stacks APIs, triggers only on live ADSB data, and calculates ETAs locally, I've created a version of the clock that is sustainable for the long haul.
-
-It’s been interesting seeing how everyone is pivoting after the FR24 setback. After weighing the options, I’ve decided to go with this configuration for my setup. 
-
-[a10kiloham](https://github.com/a10kiloham/plane-tracker-rgb-pi)
-
-[yashmulgaonkar](https://github.com/yashmulgaonkar/plane-tracker-rgb-pi)
-
-[ajplotkin](https://github.com/ajplotkin/plane-tracker-rgb-pi-f24only)
-
----
-**Note:** *I am working by msyelf in my free time. I’ve stress-tested the code as much as possible, but please keep in mind that the current build is still fluid. Getting this to work using 4 different sources that provide information in 4 different ways has been overwhelming, I am doing my best so be kind. It's still a very fluid project so keep checking.*
-
-## Real-Time Flight Tracking Added
-
-You can now monitor specific flights directly on your clock. To get started, open a browser on any device connected to the same network and navigate to: http://[hostname].local:8080
-
-Note: Use the hostname you chose during setup (e.g., if your Pi is flight@tracker, go to tracker.local:8080).
-
-How to Track
-
-- Search & Save: Enter a flight number to track it immediately. The system will verify if the flight is currently active; if it is not, you will have the option to save it so that tracking begins as soon as it departs. Please note that if an active flight returns a "Not Found" error, it is likely due to current tracking limitations.
-
-- Callsign Format: You must use the 3-digit ICAO airline code (e.g., UAL1134 instead of UA1134).
-- Limitations: Due to API constraints, tracking is currently limited to mainline carriers; regional flights may not be supported at this time.
-
-Display Features
-
-When tracking begins, the flight data will temporarily replace your three-day forecast with the following:
-
-- Status Header: Displays the logo, airline name, and route. 
-- Progress Visual: A dynamic progress bar with a moving arrow icon. If there isn't current live data during the flight such as crossing the ocean then the arrow icon will turn red. When there is no live data the tracker will calculate time and distance remaining until it refreshes with live data. 
-- Flight Telemetry: The bottom line shows remaining time and distance, aircraft type, airspeed, and altitude (with an arrow indicating climbing or descending).
-Once the flight reaches its destination, the display will automatically switch back to the weather forecast. In the meantime, the clock will continue to show overhead flights as usual.
-
-This project is based on [Colin Waddell's work](https://github.com/ColinWaddell/its-a-plane-python), with some additional features I’ve added.
-
-## Clock Screen:
-- Displays time, date, current temperature, and a 3-day forecast.
-- The current temperature color is based on the current humidity level on a gradient of white-blue.
-- Time changes color at sunrise and sunset.
-- The date shows moon phases with a purple-to-white gradient. It gradually becomes white on the right until the full moon, then fades white on the left as the moon wanes.
-- The display dims at predefined times, set in the config file.
-- You can switch between 12hr/24hr time and choose imperial or metric units.
-
-## Flight Tracker Screen:
-- Displays the origin and destination airport codes, with distances to both airports.
-- Airport codes are color-coded based on the difference between the scheduled and actual departure times, as well as the scheduled and estimated arrival times. Note that with the switch to multiple providers the ontime data seems to be infrequent.
-
-  **Departure:**
-  - 0-20 mins: Green
-  - 20-40 mins: Yellow
-  - 40-60 mins: Orange
-  - 1-4 hrs: Red
-  - 4-8 hrs: Purple
-  - 8+ hrs: Blue
-  
-  **Arrival:**
-  - On-time or early: Green
-  - 0-30 mins late: Yellow
-  - 30-60 mins late: Orange
-  - 1-4 hrs late: Red
-  - 4-8 hrs late: Purple
-  - 8+ hrs late: Blue
- 
-  - If either the actual arrival time is None (not updated yet) or actual departure time is None (not updated yet) the airport code will be Grey. Happens if you live close to an airport 
-
-- An arrow between the airport codes acts as a progress bar for the flight, starting red (just left) and turning green (almost complete).
-- Below, the airline’s IATA name, flight number, abbreviated aircraft type, and the distance/direction/altitude to your location are displayed.
-- The airline's ICAO code is shown in the logo, indicating which airline is operating the flight. This is especially useful for regional carriers, where an airline might operate flights for multiple brands (e.g., Republic Airways flying for American Eagle, Delta Connection, and United Express).
-
-Logs the closest flights to your location and farthest destinations
-
-1. **Top N closest flights** to your location (`MAX_CLOSEST`)  
-2. **Top N farthest flights** based on origin or destination (`MAX_FARTHEST`)  
-
-Each time a flight is detected:  
-
-- Calculates the **distance from home**  
-- Updates `close.txt` and `farthest.txt` if a **new closest flight** or a **new top-N farthest flight** is found  
-- Sends an **automatic email alert** when these changes occur with flight details and map 
-
-**Email notifications:**  
-
-- Sent from `flight.tracker.alerts2025@gmail.com`  
-- Includes a **link to an interactive map** showing flight positions (Link is good for 30 days. You can always view the maps on your local IP page)  
-
-**Key details:**  
-
-- Adjustable limits with `MAX_CLOSEST` and `MAX_FARTHEST`  
-- Closest flights to your house are always updated in `close.txt`  
-- Farthest destination/origin flights are maintained in `farthest.txt` independently  
-- Alerts taper off as flight positions stabilize  
-- Emails can be **turned off** while still keeping the log files and local wegpage. 
-
-I've put a LOT of my time and effort into this project. If you'd like to show your appreciation (especially if I help you troubleshoot), consider getting me a coffee! I've shared this project in good faith—please don't take advantage of it.
+This is a solo passion project built entirely in my spare time. Every feature you see has been researched, coded, tested, and debugged by myself. As the feature set grows, so does the complexity of keeping everything working together. I do my best to keep things stable, but please be patient and kind if something isn't perfect as it's getting very time consuming to test each feature every time I update. If you'd like to show your appreciation (especially if I help you troubleshoot), consider getting me a coffee! I've shared this project in good faith—please don't take advantage of it.
 [paypal.me/c0wsaysmoo](https://paypal.me/c0wsaysmoo)
 
 Please please please reread the instructions carefully if you have any issues. Most issues are by not following them properly. If you absolutly can't figure it out shoot me a message. I am also on reddit under [Mediocre-Opposite225](https://old.reddit.com/user/Mediocre-Opposite225/)
@@ -250,6 +172,7 @@ Please please please reread the instructions carefully if you have any issues. M
 https://github.com/user-attachments/assets/854f535a-4aa3-4a97-8ee5-4d9e60f76eaf
 
 ![PXL_20241019_155956016](https://github.com/user-attachments/assets/91532d4f-3b6f-4a1b-9a26-43ffe5c6093d)
+<img width="4080" height="3072" alt="PXL_20260626_212416823" src="https://github.com/user-attachments/assets/53ea72ea-7153-4545-b03e-5affb98da00f" />
 ![PXL_20241019_165254031](https://github.com/user-attachments/assets/2e70bfcd-70ae-4acc-ba69-dde07c56a068)
 ![PXL_20241019_165305826](https://github.com/user-attachments/assets/5188780d-84ff-4111-8bde-9584d6a70df2)
 ![PXL_20241019_155500974](https://github.com/user-attachments/assets/5c3540e9-b699-41c8-8aef-32fb7a7f7b5d)
@@ -274,9 +197,11 @@ Map will show the top 3 (by default) farthest flights, and the top 3 closest pin
 
 The email
 
-<img width="1433" height="1862" alt="day" src="https://github.com/user-attachments/assets/5b513583-1b76-411f-8f5f-316a2ad11bbc" />
-<img width="1429" height="2319" alt="main" src="https://github.com/user-attachments/assets/f66e705c-f9d4-43c6-a0b8-70ee8b198782" />
-<img width="2553" height="704" alt="Screenshot 2026-06-14 085757" src="https://github.com/user-attachments/assets/ac85c1b3-cfd7-4d9f-a38e-bc6d1db9af0f" />
+<img width="1429" height="2204" alt="Screenshot 2026-06-26 163846" src="https://github.com/user-attachments/assets/76366f5c-b23c-48f9-9435-a2b594475180" />
+<img width="1421" height="2384" alt="Screenshot 2026-06-26 163811" src="https://github.com/user-attachments/assets/d3b50f84-aad3-48f2-a8c7-55d8dfab6eed" />
+<img width="1426" height="623" alt="Screenshot 2026-06-26 163740" src="https://github.com/user-attachments/assets/99a45a8b-41a2-489e-8717-82675771a243" />
+<img width="1797" height="742" alt="Screenshot 2026-06-26 163642" src="https://github.com/user-attachments/assets/9d6f1c3c-ff1c-4d90-b34d-7d54800bfc40" />
+
 
 
 The local webpage to track flights or to look at your maps/logs/stats. You can look at the overall stats or click on the dates at the bottom to look at stats for individual days
@@ -348,9 +273,9 @@ Once you get your Raspberry Pi up and running, you can follow [this guide](https
 
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** These instructions are for **Bookworm** AND **Trixie**
-When using the Imager make sure these settings are selected to enable SSH and make sure your WIFI information is typed in EXACTLY or else it won't connect when turned on.
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi OS 64-bit Lite** (the Pi Zero only supports 32-bit Lite). **Note:** These instructions are for **Bookworm** and **Trixie**.
 
+When using the Imager make sure these settings are selected to enable SSH and make sure your WiFi information is typed in EXACTLY or it won't connect when turned on.
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
 ![wifi](https://github.com/user-attachments/assets/0669de7a-cb9c-4c2a-9129-8b044c088f9f)
@@ -359,64 +284,95 @@ Make sure you select the correct timezone since that is what is displayed on the
 ![ssh](https://github.com/user-attachments/assets/67d6fa8f-5ae3-4bf9-9f47-fbf78017ad78)
 
 ### 2. Connect via SSH
-I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure. Can just open the files from there and edit them instead of through the cmd prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
+I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure and edit files directly without using the command prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
 
-### 3. Install the Adafruit Bonnet
-[Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/) by following the instructions provided by Adafruit.
+### 3. Install prerequisites and build the RGB Matrix library
 
-```
-curl https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/main/rgb-matrix.sh > rgb-matrix.sh
-sudo bash rgb-matrix.sh
-```
-
-You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge.
-
-# During the script:
- - Interface board type: Bonnet (Option 1)
- - Quality if soldered jumper, Convenience if not
-
-**Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
-
-```
-cd ~/rpi-rgb-led-matrix/examples-api-use/
+```bash
+sudo apt-get update
+sudo apt-get install -y git python3-dev python3-pip python3-pillow cython3 python3-setuptools build-essential
 ```
 
-If you DIDN'T solder 
+Clone and build hzeller's library:
 
+```bash
+git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
+cd rpi-rgb-led-matrix
+make
 ```
+### 4. Increase swap size (Pi 3 only)
+
+The wheel compilation requires more memory than the Pi 3's 1GB provides. Without this it will crash mid-install.
+
+```bash
+sudo apt-get install -y dphys-swapfile
+sudo dphys-swapfile swapoff
+sudo nano /etc/dphys-swapfile
+```
+
+Add this line:
+CONF_SWAPSIZE=512
+
+Save with `Ctrl+O`, Enter, `Ctrl+X`, then:
+
+```bash
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+```
+
+Verify with `free -h` — you should see ~512MB (or more) under Swap. You can disable swap after installation is complete to reduce SD card wear:
+
+```bash
+sudo dphys-swapfile swapoff
+sudo systemctl disable dphys-swapfile
+```
+
+### 5. Install the Adafruit RGB Matrix Bonnet
+
+Install the Python installer dependency and run the Adafruit setup script:
+
+```bash
+sudo pip3 install adafruit-python-shell --break-system-packages
+wget https://github.com/adafruit/Raspberry-Pi-Installer-Scripts/raw/main/rgb-matrix.py
+python3 -m venv --system-site-packages env
+source env/bin/activate
+sudo -E env PATH=$PATH python3 rgb-matrix.py
+```
+
+You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional — it will work without the bridge.
+
+**During the script:**
+- Interface board type: **Bonnet** (Option 1)
+- **Quality** if you soldered the jumper, **Convenience** if not
+
+After the script completes, copy the rgbmatrix module to system Python so it works without a venv:
+
+```bash
+sudo cp -r ~/env/lib/python3.13/site-packages/rgbmatrix /usr/lib/python3/dist-packages/
+python3 -c "import rgbmatrix; print('ok')"
+```
+
+You should see `ok` printed. If not, do not continue.
+  
+### 6. Test the panel
+
+**Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red (depending on the panel, instead of RGB it's RBG. You can fix this in the config page later if the colors are inverted). If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
+
+```bash
+cd ~/rpi-rgb-led-matrix/examples-api-use
+```
+
+If you did **not** solder:
+```bash
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat
 ```
 
-If you DID solder
-
-```
+If you **did** solder:
+```bash
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
-### 4. Install prerequisite software
-
-```
-cd ~
-sudo apt-get update
-sudo apt-get install -y \
-    git \
-    python3-pip \
-    python3-dev \
-    python3-setuptools \
-    cython3 \
-    build-essential \
-    libgraphicsmagick++-dev
-```
-
-### 5. Build and install Python bindings for RGB Matrix
-
-```
-cd ~/rpi-rgb-led-matrix/bindings/python
-make
-sudo pip install . --break-system-packages
-```
-
-### 6. Install Git and Git the tracker
+### 7. Git the tracker
 
 Clone the tracker:
 ```
@@ -434,7 +390,7 @@ mv ~/logo2/* ~/logos/
 rmdir ~/logo ~/logo2
 ```
 
-# 7. Install Python dependencies
+# 8. Install Python dependencies
 
 ```
 pip install pytz requests beautifulsoup4 folium selenium pillow flask --break-system-packages
@@ -450,19 +406,19 @@ If **Trixie**
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
-# 8. Make the Script Executable
+# 9. Make the Script Executable
 
 ```
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-# 9. Run the Script
+# 10. Run the Script
 Test the script manually by running
 
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-# 10. Find your project path
+# 11. Find your project path
 
 Open a terminal on your Pi and run:
 
@@ -475,7 +431,7 @@ Copy the path it shows — you'll need it in the next step. It will look somethi
 
 ---
 
-# 11. Create the service file
+# 12. Create the service file
 
 Run these commands **from inside your project folder** (after the `cd` above):
 
@@ -501,7 +457,7 @@ EOF
 
 ---
 
-# 12. Install and start the service
+# 13. Install and start the service
 
 ```bash
 sudo cp /tmp/its-a-plane.service /etc/systemd/system/
@@ -521,11 +477,11 @@ You should see `Active: active (running)` in green. If it shows an error, jump t
 ---
 
 
-# 13. Fill in the Config file.
+# 14. Fill in the Config file.
 
 You can only do so **IF** the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
 
-# 14. Enable the web UI restart button
+# 15. Enable the web UI restart button
 
 If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
 
@@ -537,6 +493,9 @@ This opens a text editor. Scroll to the very bottom and add this line (replace `
 
 ```
 pi ALL=(ALL) NOPASSWD: /bin/systemctl restart its-a-plane
+# nmcli (NetworkManager / Raspberry Pi OS Bookworm+)
+pi ALL=(ALL) NOPASSWD: /usr/bin/nmcli
+
 ```
 
 Save and exit (ctrl x, y, enter). Now the web UI restart button will work.

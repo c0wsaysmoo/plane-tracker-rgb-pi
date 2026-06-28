@@ -130,6 +130,42 @@
   }
   .info-bar span { color: var(--amber-bright); }
 
+  .zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--amber-dim);
+  }
+  .zoom-bar label { color: var(--amber-dim); white-space: nowrap; }
+  .zoom-bar span  { color: var(--amber-bright); min-width: 3ch; text-align: right; }
+  #zoom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 200px;
+    height: 4px;
+    background: var(--amber-dim);
+    outline: none;
+    cursor: pointer;
+  }
+  #zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--amber);
+    cursor: pointer;
+  }
+  #zoom-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--amber);
+    border: none;
+    cursor: pointer;
+  }
+
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -180,17 +216,67 @@
 
   <div class="info-bar" id="info-bar">LOADING...</div>
 
+  <div class="zoom-bar">
+    <label>ZOOM</label>
+    <input id="zoom-slider" type="range" min="3" max="20" value="10" step="1">
+    <span id="zoom-label">10×</span>
+    <button id="pip-clock" type="button" style="margin-left:16px;cursor:pointer;
+      background:#1a1a1a;color:#ffae42;border:1px solid #ffae42;border-radius:4px;
+      font-family:inherit;font-size:12px;padding:4px 10px;letter-spacing:1px;">
+      ⧉ POP OUT</button>
+  </div>
+
 </div>
 
 <script>
 // ── Display dimensions ──────────────────────────────────────────────────────────
-const COLS = 64, ROWS = 32, SCALE = 10;
-const CW = COLS * SCALE, CH = ROWS * SCALE;
+const COLS = 64, ROWS = 32;
+let SCALE = 10;
+let CW = COLS * SCALE, CH = ROWS * SCALE;
 
 const canvas = document.getElementById('matrix-canvas');
 canvas.width  = CW;
 canvas.height = CH;
 const ctx = canvas.getContext('2d');
+
+const zoomSlider = document.getElementById('zoom-slider');
+const zoomLabel  = document.getElementById('zoom-label');
+zoomSlider.addEventListener('input', () => {
+  SCALE = parseInt(zoomSlider.value, 10);
+  CW = COLS * SCALE;
+  CH = ROWS * SCALE;
+  canvas.width  = CW;
+  canvas.height = CH;
+  zoomLabel.textContent = `${SCALE}×`;
+});
+
+// ── Pop-out floating display (always-on-top) ────────────────────────────────────
+// Captures the matrix canvas as a video stream and uses the browser's native
+// Picture-in-Picture, which floats above all other apps (works in Firefox & Chrome).
+let pipVideo = null;
+document.getElementById('pip-clock').addEventListener('click', async () => {
+  try {
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+      return;
+    }
+    if (!pipVideo) {
+      const stream = canvas.captureStream(30);   // 30 fps live mirror
+      pipVideo = document.createElement('video');
+      pipVideo.muted = true;
+      pipVideo.playsInline = true;
+      pipVideo.srcObject = stream;
+      // Keep it in the DOM but out of view
+      pipVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
+      document.body.appendChild(pipVideo);
+    }
+    await pipVideo.play();
+    await pipVideo.requestPictureInPicture();
+  } catch (e) {
+    console.error('Pop-out failed:', e);
+    alert('Picture-in-Picture not available in this browser.');
+  }
+});
 
 // ── Colours (from colours.py) ───────────────────────────────────────────────────
 const C = {
@@ -335,6 +421,11 @@ function arrDelayColor(mins) {
 function preloadIcon(code) {
   if (code == null || iconCache[code]) return;
   const img = new Image();
+  // If a 5-digit day/night variant is missing, fall back to the 4-digit base code
+  img.onerror = () => {
+    const base = Math.floor(Number(code) / 10);
+    if (base >= 1000 && base !== code) img.src = `/icons/${base}.png`;
+  };
   img.src = `/icons/${code}.png`;
   iconCache[code] = img;
 }
@@ -404,7 +495,7 @@ function renderForecast() {
 
   const colW    = Math.floor(COLS / 3);  // 21
   const iconSz  = 10;                    // ICON_SIZE
-  const fntPx   = 42;                    // extrasmall at 10x
+  const fntPx   = px(4.2);              // extrasmall at 10x
 
   // Zone: matrix y=12..31 → canvas y=120..320
   const zoneTop = px(12);
@@ -474,14 +565,14 @@ function renderIdle(clkColor, clkStr, alert) {
   // ── Clock (left, x=0..39) ───────────────────────────────────────────────────
   if (alert) {
     // Small clock centred in x=0..39, baseline at y=6
-    const smallFnt = 52;
+    const smallFnt = px(5.2);
     const smallW   = measure(clkStr, smallFnt);
     const smallX   = (px(40) - smallW) / 2;
     drawText(clkStr, smallX, px(6), clkColor, smallFnt);
 
     // Scrolling alert text, baseline at y=12
     const aColor  = ALERT_COLOR_MAP[alert.color] || C.alertOrange;
-    const alertFnt = 42;
+    const alertFnt = px(4.2);
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, px(40), px(12)); ctx.clip();
     const atw    = measure(alert.text || '', alertFnt);
@@ -491,15 +582,15 @@ function renderIdle(clkColor, clkStr, alert) {
     ctx.restore();
   } else {
     // Big clock, centred in x=0..39, baseline at y=11
-    const clkW = measure(clkStr, 115);
+    const clkW = measure(clkStr, px(11.5));
     const clkX = (px(40) - clkW) / 2;
-    drawText(clkStr, clkX, px(11), clkColor, 115);
+    drawText(clkStr, clkX, px(11), clkColor, px(11.5));
   }
 
   // ── Temperature (right, x=40..63, baseline y=6) ─────────────────────────────
   if (state.temperature != null) {
     const tempStr  = `${Math.round(state.temperature)}°`;
-    const tempFnt  = 52;
+    const tempFnt  = px(5.2);
     const tempCol  = humidityColor(state.humidity);
     const tw  = measure(tempStr, tempFnt);
     const tx  = px(40) + (px(24) - tw) / 2;
@@ -509,7 +600,7 @@ function renderIdle(clkColor, clkStr, alert) {
   // ── Date (right, x=40..63, baseline y=11) ───────────────────────────────────
   const now     = new Date();
   const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-  const dateFnt = 40;
+  const dateFnt = px(4);
   const dw  = measure(dateStr, dateFnt);
   const dx  = px(40) + (px(24) - dw) / 2;
   const moonColors = moonGradientColors(state.moonPhase);
@@ -558,10 +649,10 @@ function renderFlight(clkColor, clkStr, f) {
   const rightMax = CW - arrowX2 - gap;  // max width for dest text
 
   // Auto-shrink font until both texts fit in their respective wings
-  let jFnt = 95;
+  let jFnt = px(9.5);
   ctx.font = `bold ${jFnt}px "Courier New", monospace`;
-  while (jFnt > 40 && (ctx.measureText(origin).width > leftMax || ctx.measureText(dest).width > rightMax)) {
-    jFnt -= 2;
+  while (jFnt > px(4) && (ctx.measureText(origin).width > leftMax || ctx.measureText(dest).width > rightMax)) {
+    jFnt -= Math.max(1, px(0.2));
     ctx.font = `bold ${jFnt}px "Courier New", monospace`;
   }
 
@@ -602,7 +693,7 @@ function renderFlight(clkColor, clkStr, f) {
 
   // ── Distances (y=16) ────────────────────────────────────────────────────────
   if (f.distance_origin != null && f.distance_destination != null) {
-    const dstFnt = 42;
+    const dstFnt = px(4.2);
     const halfW  = px(23);
     const doStr  = `${Math.round(f.distance_origin)}${dUnit}`;
     const ddStr  = `${Math.round(f.distance_destination)}${dUnit}`;
@@ -630,7 +721,7 @@ function renderFlight(clkColor, clkStr, f) {
     }
 
     if (label) {
-      const detFnt = 80;
+      const detFnt = px(8);
       ctx.font = `bold ${detFnt}px "Courier New", monospace`;
       const totalW = ctx.measureText(label).width;
       const gap    = px(8);
@@ -685,7 +776,7 @@ function renderFlight(clkColor, clkStr, f) {
     for (const ch of hdgStr)          parts.push([ch, C.planeDist]);
 
     if (parts.length) {
-      const detFnt  = 80;
+      const detFnt  = px(8);
       ctx.font      = `bold ${detFnt}px "Courier New", monospace`;
       const fullW   = ctx.measureText(parts.map(p => p[0]).join('')).width;
       const gap     = px(8);
@@ -734,6 +825,103 @@ function render() {
   alertCycleTick++;
 }
 
+// ── Hourly forecast bucketing (mirrors scenes/daysforecast.py) ──────────────────
+const HOURLY_PERIODS = [['Nite',0,5],['Morn',6,11],['Aft',12,17],['Eve',18,23]];
+function _periodIndex(h){
+  for (let i=0;i<HOURLY_PERIODS.length;i++){
+    const [,s,e]=HOURLY_PERIODS[i]; if (h>=s && h<=e) return i;
+  }
+  return 1;
+}
+// Parse an ISO timestamp's *station-local* wall clock from its UTC offset,
+// instead of the browser timezone. Returns {dateStr, hour, offsetMin, epoch}.
+function _stationParts(iso){
+  const m = String(iso).match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:Z|([+-]\d{2}):(\d{2}))?/);
+  if (!m){ const d=new Date(iso); return {dateStr:null, hour:d.getHours(), offsetMin:-d.getTimezoneOffset(), epoch:d.getTime()}; }
+  let offsetMin = 0;
+  if (m[7] != null){ const sign = m[7][0]==='-'?-1:1; offsetMin = sign*(Math.abs(+m[7])*60 + +m[8]); }
+  return { dateStr:`${m[1]}-${m[2]}-${m[3]}`, hour:+m[4], offsetMin, epoch:Date.parse(iso) };
+}
+
+function buildHourlySlots(intervals, dailyRaw){
+  if (!intervals || !intervals.length) return [];
+
+  // Station UTC offset taken from the data itself
+  const stationOffsetMin = _stationParts(intervals[0].startTime).offsetMin;
+
+  // Station "now": shift real epoch into the station's wall clock
+  const nowEpoch = Date.now();
+  const stationNow = new Date(nowEpoch + stationOffsetMin*60000);
+  const stationNowHour = stationNow.getUTCHours();
+  const stationToday   = stationNow.toISOString().slice(0,10);
+
+  // sun map keyed by station-local date -> {sunrise, sunset} (absolute epochs)
+  const sunMap = {};
+  for (const day of (dailyRaw||[])){
+    const sr=day.values?.sunriseTime, ss=day.values?.sunsetTime;
+    if (!sr || !ss) continue;
+    const dateStr = _stationParts(day.startTime).dateStr || _stationParts(sr).dateStr;
+    const srE=Date.parse(sr), ssE=Date.parse(ss);
+    if (!isNaN(srE) && !isNaN(ssE) && dateStr) sunMap[dateStr]={sunrise:srE,sunset:ssE};
+  }
+  const isDay = (epoch, dateStr, hour) => {
+    const s = sunMap[dateStr];
+    if (s) return epoch>=s.sunrise && epoch<=s.sunset;
+    return hour>=6 && hour<20;
+  };
+
+  // Drop hours before the top of the current hour (keep the in-progress hour
+  // so the current period stays until its true end, e.g. Aft until 18:00).
+  const _n = new Date(nowEpoch);
+  const cutoffEpoch = nowEpoch - (_n.getUTCMinutes()*60 + _n.getUTCSeconds())*1000 - _n.getUTCMilliseconds();
+
+  const buckets = {};
+  for (const entry of intervals){
+    const p = _stationParts(entry.startTime);
+    if (isNaN(p.epoch) || p.epoch < cutoffEpoch) continue;
+    const pi = _periodIndex(p.hour);
+    const key = `${p.dateStr}|${pi}`;
+    (buckets[key] = buckets[key] || []).push({ ...p, values: entry.values||{} });
+  }
+
+  const dateFor = off => {
+    const d = new Date(stationToday+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+off);
+    return d.toISOString().slice(0,10);
+  };
+
+  const currentPi = _periodIndex(stationNowHour);
+  const slots = [];
+  for (let off=0; off<3 && slots.length<3; off++){
+    const dateStr = dateFor(off);
+    for (let pi=0; pi<4 && slots.length<3; pi++){
+      if (off===0 && pi<currentPi) continue;
+      const list = buckets[`${dateStr}|${pi}`];
+      if (!list || !list.length) continue;
+
+      const temps = list.map(x=>x.values.temperature).filter(t=>t!=null);
+      const baseCodes = list.map(x=>x.values.weatherCode).filter(c=>c!=null).map(c=>parseInt(c));
+      let base=null, best=-1, cnt={};
+      for (const c of baseCodes){ cnt[c]=(cnt[c]||0)+1; if (cnt[c]>best){best=cnt[c]; base=c;} }
+
+      let dayVotes=0; for (const x of list) if (isDay(x.epoch, x.dateStr, x.hour)) dayVotes++;
+      const nightVotes=list.length-dayVotes;
+      const dayFlag = dayVotes!==nightVotes ? dayVotes>nightVotes : (pi===1||pi===2);
+
+      let code=null;
+      if (base!=null) code = base>=10000 ? base : base*10 + (dayFlag?0:1);
+
+      slots.push({
+        dayName: HOURLY_PERIODS[pi][0],
+        iconCode: code,
+        minTemp: temps.length?Math.min(...temps):0,
+        maxTemp: temps.length?Math.max(...temps):0,
+      });
+    }
+  }
+  return slots;
+}
+
 // ── Data fetch ──────────────────────────────────────────────────────────────────
 async function fetchData() {
   const [clock, overhead, weather, config] = await Promise.allSettled([
@@ -758,32 +946,57 @@ async function fetchData() {
     state.flights.forEach(f => preloadLogo(f.owner_icao));
   }
 
+  // Forecast mode comes from config — read it before parsing weather
+  let forecastMode = 'daily', hourlyStart = '05:00', hourlyEnd = '09:00';
+  if (config.status === 'fulfilled') {
+    const disp = config.value.config?.display || {};
+    forecastMode = disp.forecast_mode || 'daily';
+    hourlyStart  = disp.forecast_hourly_start || '05:00';
+    hourlyEnd    = disp.forecast_hourly_end   || '09:00';
+  }
+
   if (weather.status === 'fulfilled') {
     const w = weather.value;
     state.temperature = w.temperature ?? null;
     state.humidity    = w.humidity    ?? null;
     state.moonPhase   = w.moonPhase   ?? null;
 
-    // Parse forecast days
-    const raw   = w.forecast || [];
-    const today = new Date().toDateString();
-    const days  = [];
-    for (const entry of raw) {
-      if (days.length >= 3) break;
-      try {
-        const dt = new Date(entry.startTime);
-        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-        if (dt < todayStart) continue;
-        const code = entry.values?.weatherCodeFullDay ?? null;
-        days.push({
-          dayName:  dt.toLocaleDateString('en-US', { weekday: 'short' }),
-          iconCode: code,
-          minTemp:  entry.values?.temperatureMin ?? 0,
-          maxTemp:  entry.values?.temperatureMax ?? 0,
-        });
-        preloadIcon(code);
-      } catch (e) { /* skip malformed entry */ }
+    // Resolve "scheduled" to hourly/daily using the station's local time
+    let effMode = forecastMode;
+    if (forecastMode === 'scheduled') {
+      const ref = (w.hourly_forecast||[])[0]?.startTime || (w.forecast||[])[0]?.startTime;
+      const offMin = ref ? _stationParts(ref).offsetMin : -new Date().getTimezoneOffset();
+      const sNow = new Date(Date.now() + offMin*60000);
+      const cur = sNow.getUTCHours()*60 + sNow.getUTCMinutes();
+      const toMin = s => { const [h,m]=String(s).split(':'); return (+h)*60 + (+m||0); };
+      const a = toMin(hourlyStart), b = toMin(hourlyEnd);
+      const inWin = a <= b ? (cur >= a && cur < b) : (cur >= a || cur < b);
+      effMode = inWin ? 'hourly' : 'daily';
     }
+
+    let days = [];
+    if (effMode === 'hourly') {
+      // Time-of-day periods from hourly data, using daily forecast for sun times
+      days = buildHourlySlots(w.hourly_forecast || [], w.forecast || []);
+    } else {
+      // 3-day forecast
+      const raw = w.forecast || [];
+      for (const entry of raw) {
+        if (days.length >= 3) break;
+        try {
+          const dt = new Date(entry.startTime);
+          const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+          if (dt < todayStart) continue;
+          days.push({
+            dayName:  dt.toLocaleDateString('en-US', { weekday: 'short' }),
+            iconCode: entry.values?.weatherCodeFullDay ?? null,
+            minTemp:  entry.values?.temperatureMin ?? 0,
+            maxTemp:  entry.values?.temperatureMax ?? 0,
+          });
+        } catch (e) { /* skip malformed entry */ }
+      }
+    }
+    days.forEach(d => { if (d.iconCode != null) preloadIcon(d.iconCode); });
     state.forecast = days;
   }
 

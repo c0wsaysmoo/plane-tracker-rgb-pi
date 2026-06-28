@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logs — Flight Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+  :root{--bg:#0d0d0b;--board:#111108;--amber:#ffb300;--amber-dim:#7a5500;--amber-glow:rgba(255,179,0,0.1);--amber-bright:#ffd54f;--red:#ff3d00;--green:#69f0ae;--orange:#ff9800;--row-border:rgba(255,179,0,0.08)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--amber);font-family:'Share Tech Mono',monospace;min-height:100vh}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:1000}
+  .board-header{background:var(--amber);color:var(--bg);padding:10px 20px;display:flex;align-items:center;gap:12px}
+  .board-title{font-family:'VT323',monospace;font-size:32px;letter-spacing:4px;text-transform:uppercase}
+  .back{font-family:'VT323',monospace;font-size:20px;letter-spacing:2px;background:var(--bg);color:var(--amber);padding:2px 12px;text-decoration:none;margin-left:auto}
+  .col-headers{display:grid;grid-template-columns:85px 1fr 100px 80px 110px;padding:8px 16px;border-bottom:2px solid var(--amber-dim);background:rgba(255,179,0,0.04)}
+  .col-header{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--amber-dim)}
+  a.board-row{display:grid;grid-template-columns:85px 1fr 100px 80px 110px;padding:0 16px;border-bottom:1px solid var(--row-border);text-decoration:none;color:var(--amber);position:relative;overflow:hidden}
+  a.board-row::before{content:'';position:absolute;inset:0;background:var(--amber-glow);opacity:0;transition:opacity 0.15s}
+  a.board-row:hover::before{opacity:1}
+  .row-cell{padding:10px 8px;font-family:'VT323',monospace;font-size:20px;letter-spacing:1px;display:flex;align-items:center;position:relative;z-index:1}
+  .row-cell.time{color:var(--amber-bright);font-size:22px}
+  .row-cell.flight{color:var(--amber-dim);font-size:17px}
+  .row-cell.gate{color:var(--amber-dim);font-size:17px}
+  .status-data{color:var(--amber)}
+  .status-warn{color:var(--orange)}
+</style>
+</head>
+<body>
+<div class="board-header">
+  <span style="font-size:26px">✈</span>
+  <div class="board-title">Logs</div>
+  <a class="back" href="/">← BOARD</a>
+</div>
+<div class="col-headers">
+  <div class="col-header">Time</div>
+  <div class="col-header">Destination</div>
+  <div class="col-header">Flight No.</div>
+  <div class="col-header">Gate</div>
+  <div class="col-header">Remarks</div>
+</div>
+
+<a class="board-row" href="/closest/log">
+  <div class="row-cell time" id="t0">--:--</div>
+  <div class="row-cell">CLOSEST FLIGHT LOG</div>
+  <div class="row-cell flight">LOG01</div>
+  <div class="row-cell gate">--</div>
+  <div class="row-cell"><span class="status-data">DATA</span></div>
+</a>
+
+<a class="board-row" href="/farthest/log">
+  <div class="row-cell time" id="t1">--:--</div>
+  <div class="row-cell">FARTHEST FLIGHTS LOG</div>
+  <div class="row-cell flight">LOG02</div>
+  <div class="row-cell gate">--</div>
+  <div class="row-cell"><span class="status-data">DATA</span></div>
+</a>
+
+<a class="board-row" href="/counter/log">
+  <div class="row-cell time" id="t2">--:--</div>
+  <div class="row-cell">FLIGHT COUNTER LOG</div>
+  <div class="row-cell flight">LOG03</div>
+  <div class="row-cell gate">--</div>
+  <div class="row-cell"><span class="status-data">DATA</span></div>
+</a>
+
+<a class="board-row" href="/api_calls/log">
+  <div class="row-cell time" id="t3">--:--</div>
+  <div class="row-cell">API CALL LOG</div>
+  <div class="row-cell flight">LOG04</div>
+  <div class="row-cell gate">--</div>
+  <div class="row-cell"><span class="status-data">DATA</span></div>
+</a>
+
+<a class="board-row" href="/logs">
+  <div class="row-cell time" id="t4">--:--</div>
+  <div class="row-cell">SYSTEM LOGS</div>
+  <div class="row-cell flight">LOG05</div>
+  <div class="row-cell gate">--</div>
+  <div class="row-cell"><span class="status-data">DATA</span></div>
+</a>
+
+<script>
+  function updateClock() {
+    const now = new Date(), pad = n => String(n).padStart(2,'0');
+    const base = now.getHours() * 60 + now.getMinutes();
+    for (let i = 0; i < 5; i++) {
+      const m = base + i * 5;
+      const el = document.getElementById('t'+i);
+      if (el) el.textContent = `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+    }
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

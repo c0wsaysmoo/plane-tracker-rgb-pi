@@ -255,7 +255,7 @@ def _refresh():
             _cached_passes = disk
             _cached_ts = disk_ts
             _next_retry_after = disk_ts + _POLL_INTERVAL
-            logger.info("[ISS] Loaded from disk cache")
+            logger.debug("[ISS] Loaded from disk cache")
             if now < _next_retry_after:
                 return _cached_passes
 

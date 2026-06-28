@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from utilities.temperature import grab_forecast, _load_file_cache, _save_file_cache
 from utilities.animator import Animator
 from setup import colours, fonts, frames
@@ -110,8 +110,8 @@ class ClockScene(object):
         cached, ts = _load_file_cache(_SUN_CACHE_FILE)
         if cached is not None and (time.time() - ts) < _SUN_CACHE_TTL:
             try:
-                self.today_sunrise = datetime.strptime(cached['sunrise'], '%Y-%m-%dT%H:%M:%SZ')
-                self.today_sunset = datetime.strptime(cached['sunset'], '%Y-%m-%dT%H:%M:%SZ')
+                self.today_sunrise = datetime.strptime(cached['sunrise'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                self.today_sunset = datetime.strptime(cached['sunset'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
                 from datetime import datetime as _dt
                 self.last_fetch_date = _dt.fromtimestamp(ts).date()
             except Exception as e:
@@ -137,8 +137,8 @@ class ClockScene(object):
                 for day in forecast:
                     forecast_date = day['startTime'][:10]
                     if forecast_date == now.strftime('%Y-%m-%d'):
-                        utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ')
-                        utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ')
+                        utc_sunrise = datetime.strptime(day['values']['sunriseTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                        utc_sunset = datetime.strptime(day['values']['sunsetTime'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
                         self.today_sunrise = utc_sunrise
                         self.today_sunset = utc_sunset
@@ -207,7 +207,7 @@ class ClockScene(object):
         current_time = now.strftime(clock_format)
 
         utc_sunrise, utc_sunset = self.calculate_sunrise_sunset()
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc)
 
         if utc_sunrise is None or utc_sunset is None:
             clock_color = colours.RED
@@ -235,8 +235,11 @@ class ClockScene(object):
         needs_redraw = getattr(self, "_redraw_time", False)
 
         if mode_changed or needs_redraw:
-            # Clear entire left region on mode switch or scene re-entry
-            self.draw_square(0, 0, 40, 12, colours.BLACK)
+            # Clear only the clock zone (rows 0-11). draw_square's y1 is
+            # inclusive, so 11 keeps us out of the forecast zone (row 12+).
+            self.draw_square(0, 0, 40, 11, colours.BLACK)
+            # Repaint the forecast in case its top row was touched on transition
+            self._redraw_forecast = True
         elif time_changed:
             # Clear old clock text only
             if self._last_time:

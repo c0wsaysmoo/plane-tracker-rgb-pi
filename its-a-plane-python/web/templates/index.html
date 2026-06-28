@@ -369,40 +369,16 @@
     <div class="row-cell"><span class="status-open">OPEN</span></div>
   </a>
 
-  <a class="board-row" href="/closest/log">
+  <a class="board-row" href="/logs-hub">
     <div class="row-cell time" id="t3">--:--</div>
-    <div class="row-cell">CLOSEST FLIGHT LOGS</div>
-    <div class="row-cell flight">LOG01</div>
-    <div class="row-cell gate">--</div>
-    <div class="row-cell"><span class="status-data">DATA</span></div>
-  </a>
-
-  <a class="board-row" href="/farthest/log">
-    <div class="row-cell time" id="t4">--:--</div>
-    <div class="row-cell">FARTHEST FLIGHTS LOGS</div>
-    <div class="row-cell flight">LOG02</div>
-    <div class="row-cell gate">--</div>
-    <div class="row-cell"><span class="status-data">DATA</span></div>
-  </a>
-
-  <a class="board-row" href="/api_calls/log">
-    <div class="row-cell time" id="t5">--:--</div>
-    <div class="row-cell">API CALL LOG</div>
-    <div class="row-cell flight">LOG04</div>
-    <div class="row-cell gate">--</div>
-    <div class="row-cell"><span class="status-data">DATA</span></div>
-  </a>
-
-  <a class="board-row" href="/logs">
-    <div class="row-cell time" id="t6">--:--</div>
-    <div class="row-cell">SYSTEM LOGS</div>
-    <div class="row-cell flight">LOG05</div>
+    <div class="row-cell">LOGS</div>
+    <div class="row-cell flight">LOGS</div>
     <div class="row-cell gate">--</div>
     <div class="row-cell"><span class="status-data">DATA</span></div>
   </a>
 
   <a class="board-row" href="/config">
-    <div class="row-cell time" id="t7">--:--</div>
+    <div class="row-cell time" id="t4">--:--</div>
     <div class="row-cell">CONFIGURATION</div>
     <div class="row-cell flight">CFG</div>
     <div class="row-cell gate">--</div>
@@ -468,9 +444,10 @@
     document.getElementById('clock').textContent = timeStr;
     document.getElementById('date-display').textContent = `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()}`;
     const base = now.getHours() * 60 + now.getMinutes();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 5; i++) {
       const m = base + i * 5;
-      document.getElementById('t'+i).textContent = `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+      const el = document.getElementById('t'+i);
+      if (el) el.textContent = `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
     }
   }
   updateClock();
@@ -548,7 +525,7 @@
 
   async function selectFlight(f) {
     hidePicker();
-    await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
+    await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null, !!f.is_live);
     const dep = f.scheduled_departure
       ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
       : null;
@@ -574,7 +551,7 @@
         showPicker(data.flights);
       } else if (data.found) {
         const f = data.flight;
-        await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null);
+        await saveCallsign(f.callsign, f.cached_route || null, f.flight_id || "", f.scheduled_departure || null, !!f.is_live);
         const dep = f.scheduled_departure
           ? new Date(f.scheduled_departure * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
           : null;
@@ -603,11 +580,12 @@
 
   function cancelSave() { showConfirm(false); hidePicker(); setStatus("track-status","",""); pendingCallsign=""; pendingCachedRoute=null; }
 
-  async function saveCallsign(callsign, cached_route=null, flight_id="", scheduled_departure=null) {
+  async function saveCallsign(callsign, cached_route=null, flight_id="", scheduled_departure=null, is_live=false) {
     const body = {callsign};
     if (cached_route)        body.cached_route        = cached_route;
     if (flight_id)           body.flight_id           = flight_id;
     if (scheduled_departure) body.scheduled_departure = scheduled_departure;
+    if (is_live)             body.is_live             = true;
     await fetch("/tracked/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     loadCurrent();
   }
