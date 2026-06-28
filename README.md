@@ -273,9 +273,9 @@ Once you get your Raspberry Pi up and running, you can follow [this guide](https
 
 
 ### 1. Install Raspberry Pi OS Lite
-Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi 64 OS Lite** (the Pi Zero only supports Raspberry Pi 32 OS lite). **Note** These instructions are for **Bookworm** AND **Trixie**
-When using the Imager make sure these settings are selected to enable SSH and make sure your WIFI information is typed in EXACTLY or else it won't connect when turned on.
+Using the official Raspberry Pi Imager, go to `Other` and select **Raspberry Pi OS 64-bit Lite** (the Pi Zero only supports 32-bit Lite). **Note:** These instructions are for **Bookworm** and **Trixie**.
 
+When using the Imager make sure these settings are selected to enable SSH and make sure your WiFi information is typed in EXACTLY or it won't connect when turned on.
 
 ![edit](https://github.com/user-attachments/assets/3141a507-6746-4741-84ba-2c5a6f319004)
 ![wifi](https://github.com/user-attachments/assets/0669de7a-cb9c-4c2a-9129-8b044c088f9f)
@@ -284,64 +284,66 @@ Make sure you select the correct timezone since that is what is displayed on the
 ![ssh](https://github.com/user-attachments/assets/67d6fa8f-5ae3-4bf9-9f47-fbf78017ad78)
 
 ### 2. Connect via SSH
-I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure. Can just open the files from there and edit them instead of through the cmd prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
+I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure and edit files directly without using the command prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
 
-### 3. Install the Adafruit Bonnet
-[Install the bonnet](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/) by following the instructions provided by Adafruit.
+### 3. Install prerequisites and build the RGB Matrix library
 
+```bash
+sudo apt-get update
+sudo apt-get install -y git python3-dev python3-pip python3-pillow cython3 python3-setuptools build-essential
 ```
-curl https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/main/rgb-matrix.sh > rgb-matrix.sh
-sudo bash rgb-matrix.sh
+
+Clone and build hzeller's library:
+
+```bash
+git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
+cd rpi-rgb-led-matrix
+make
+```
+### 4. Install the Adafruit RGB Matrix Bonnet
+
+Install the Python installer dependency and run the Adafruit setup script:
+
+```bash
+sudo pip3 install adafruit-python-shell --break-system-packages
+wget https://github.com/adafruit/Raspberry-Pi-Installer-Scripts/raw/main/rgb-matrix.py
+python3 -m venv --system-site-packages env
+source env/bin/activate
+sudo -E env PATH=$PATH python3 rgb-matrix.py
 ```
 
-You can solder a bridge between the 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional as it will work without the bridge.
+You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flicker and smoother scrolling. It is optional — it will work without the bridge.
 
-# During the script:
- - Interface board type: Bonnet (Option 1)
- - Quality if soldered jumper, Convenience if not
+**During the script:**
+- Interface board type: **Bonnet** (Option 1)
+- **Quality** if you soldered the jumper, **Convenience** if not
+### 5. Test the panel
 
-**Test to make sure the panel works before you do anything else.** You're looking for "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or displaying parts in the wrong color than reattach the bonnet to the Pi. Do not continue unless it runs the test script perfectly.
+**Test to make sure the panel works before doing anything else.** You're looking for a "HELLO WORLD" yellow happy face, with HELLO in green and WORLD in red. If it's only partially displaying or showing colors in the wrong place, reattach the bonnet to the Pi. Do not continue unless the test runs perfectly.
 
-```
+```bash
 cd ~/rpi-rgb-led-matrix/examples-api-use/
 ```
 
-If you DIDN'T solder 
-
-```
+If you did **not** solder:
+```bash
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat
 ```
 
-If you DID solder
-
-```
+If you **did** solder:
+```bash
 sudo ./demo -D 1 runtext.ppm --led-rows=32 --led-cols=64 --led-limit-refresh=60 --led-slowdown-gpio=2 --led-gpio-mapping=adafruit-hat-pwm
 ```
 
-### 4. Install prerequisite software
+### 6. Build and install Python bindings
 
-```
-cd ~
-sudo apt-get update
-sudo apt-get install -y \
-    git \
-    python3-pip \
-    python3-dev \
-    python3-setuptools \
-    cython3 \
-    build-essential \
-    libgraphicsmagick++-dev
-```
-
-### 5. Build and install Python bindings for RGB Matrix
-
-```
+```bash
 cd ~/rpi-rgb-led-matrix/bindings/python
 make
-sudo pip install . --break-system-packages
+sudo pip3 install . --break-system-packages
 ```
 
-### 6. Install Git and Git the tracker
+### 7. Git the tracker
 
 Clone the tracker:
 ```
@@ -375,19 +377,19 @@ If **Trixie**
 sudo setcap 'cap_sys_nice=eip' /usr/bin/python3.13
 ```
 
-# 8. Make the Script Executable
+# 9. Make the Script Executable
 
 ```
 chmod +x ~/its-a-plane-python/its-a-plane.py
 ```
 
-# 9. Run the Script
+# 10. Run the Script
 Test the script manually by running
 
 ```
 ~/its-a-plane-python/its-a-plane.py
 ```
-# 10. Find your project path
+# 11. Find your project path
 
 Open a terminal on your Pi and run:
 
@@ -400,7 +402,7 @@ Copy the path it shows — you'll need it in the next step. It will look somethi
 
 ---
 
-# 11. Create the service file
+# 12. Create the service file
 
 Run these commands **from inside your project folder** (after the `cd` above):
 
@@ -426,7 +428,7 @@ EOF
 
 ---
 
-# 12. Install and start the service
+# 13. Install and start the service
 
 ```bash
 sudo cp /tmp/its-a-plane.service /etc/systemd/system/
@@ -446,11 +448,11 @@ You should see `Active: active (running)` in green. If it shows an error, jump t
 ---
 
 
-# 13. Fill in the Config file.
+# 14. Fill in the Config file.
 
 You can only do so **IF** the clock is running. So start it and then in a broswer connected to the network go to http://hostname.local:8080 and click on "Configuration" After you fill in the config file save and reboot. Remember that "hostname" is the name of your PI (not your username)
 
-# 14. Enable the web UI restart button
+# 15. Enable the web UI restart button
 
 If you want the **Restart App** button in the web config page to work, you need to allow your user to restart the service without a password:
 
@@ -462,6 +464,9 @@ This opens a text editor. Scroll to the very bottom and add this line (replace `
 
 ```
 pi ALL=(ALL) NOPASSWD: /bin/systemctl restart its-a-plane
+# nmcli (NetworkManager / Raspberry Pi OS Bookworm+)
+pi ALL=(ALL) NOPASSWD: /usr/bin/nmcli
+
 ```
 
 Save and exit (ctrl x, y, enter). Now the web UI restart button will work.
