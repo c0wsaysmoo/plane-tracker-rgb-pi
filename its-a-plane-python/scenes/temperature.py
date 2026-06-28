@@ -32,6 +32,7 @@ class TemperatureScene(object):
     @Animator.KeyFrame.add(frames.PER_SECOND * 1)
     def temperature(self, count):
         if getattr(self, '_iss_active', False):
+            self._redraw_temp = True
             return
         # Redraw at night start/end to adjust brightness
         now = datetime.now().replace(microsecond=0).time()
