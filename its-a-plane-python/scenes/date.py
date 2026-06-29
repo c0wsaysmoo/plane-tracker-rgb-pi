@@ -13,6 +13,7 @@ DATE_POSITION = (36, 11)
 TIDE_HIGH_COLOUR = graphics.Color(0, 255, 255)     # Cyan
 TIDE_LOW_COLOUR = graphics.Color(66, 164, 244)      # Light blue
 WATER_TEMP_COLOUR = graphics.Color(0, 200, 150)    # Teal
+WATER_TEMP_FALLBACK_COLOUR = graphics.Color(100, 160, 200)  # Blue-grey (fallback indicator)
 
 # Cycle timing: 5 seconds per item (called once per second)
 _CYCLE_SECONDS = 5
@@ -26,6 +27,7 @@ class DateScene(object):
         self.today_moonphase = None
         self.last_fetched_moonphase = None
         self._cycle_counter = 0  # increments each second
+        self._date_suppressed = False
         self._cached_tides = None
         self._tide_fetch_date = None
 
@@ -107,14 +109,13 @@ class DateScene(object):
             self._redraw_date = True
             return
 
-        # Keep rotation counter ticking even while suppressed, so when the
-        # date gets its turn back it shows the next item, not a stale one.
-        self._cycle_counter += 1
-
         # Suppress date when alert text overflows into date area.
         # _alert_overflow is the alert char count (0 = no overflow).
-        # Clear only date pixels PAST the alert end to avoid wiping alert text.
+        # Counter is PAUSED while suppressed so each item gets its full
+        # visibility window.  On the transition back to visible, snap to
+        # the next item boundary so a fresh item starts immediately.
         overflow_chars = getattr(self, '_alert_overflow', 0)
+        was_suppressed = getattr(self, '_date_suppressed', False)
         if overflow_chars > 0:
             if self._last_display_text:
                 alert_end_x = overflow_chars * 4
@@ -122,8 +123,16 @@ class DateScene(object):
                 if clear_start < 64:
                     self.draw_square(clear_start, 6, 64, 11, colours.BLACK)
                 self._last_display_text = None
+            self._date_suppressed = True
             self._redraw_date = True
             return
+
+        # Transition from suppressed → visible: advance to next item
+        if was_suppressed:
+            self._cycle_counter = ((self._cycle_counter // _CYCLE_SECONDS) + 1) * _CYCLE_SECONDS
+            self._date_suppressed = False
+
+        self._cycle_counter += 1
 
         now = datetime.now()
         current_date = now.strftime("%b %d")
@@ -142,11 +151,13 @@ class DateScene(object):
             if tides.get("low"):
                 items.append(("low", f"L{tides['low']}"))
             # Water temp after tides (same coastal context)
+            # Color shifts to blue-grey when reading is from a fallback station
             try:
-                from utilities.tides import get_water_temp
+                from utilities.tides import get_water_temp, is_water_temp_fallback
                 wt = get_water_temp()
                 if wt:
-                    items.append(("water", f"Sea {wt}\xb0"))
+                    wtype = "water_fb" if is_water_temp_fallback() else "water"
+                    items.append((wtype, f"Sea {wt}\xb0"))
             except Exception:
                 pass
 
@@ -196,5 +207,7 @@ class DateScene(object):
             graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], TIDE_LOW_COLOUR, display_text)
         elif item_type == "water":
             graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], WATER_TEMP_COLOUR, display_text)
+        elif item_type == "water_fb":
+            graphics.DrawText(self.canvas, DATE_FONT, DATE_POSITION[0], DATE_POSITION[1], WATER_TEMP_FALLBACK_COLOUR, display_text)
 
         self._redraw_date = False
