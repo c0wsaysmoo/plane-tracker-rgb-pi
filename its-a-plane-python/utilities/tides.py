@@ -39,6 +39,16 @@ except (ImportError, ModuleNotFoundError, NameError):
     WATER_TEMP_STATION = ""
 
 try:
+    from config import WATER_TEMP_FALLBACK_STATION
+except (ImportError, ModuleNotFoundError, NameError):
+    WATER_TEMP_FALLBACK_STATION = ""
+
+try:
+    from config import WATER_TEMP_FALLBACK_ENABLED
+except (ImportError, ModuleNotFoundError, NameError):
+    WATER_TEMP_FALLBACK_ENABLED = True
+
+try:
     from config import CLOCK_FORMAT
 except (ImportError, ModuleNotFoundError, NameError):
     CLOCK_FORMAT = "24hr"
@@ -182,29 +192,16 @@ def get_next_tides():
 
 _water_temp = None       # cached value (string like "62")
 _water_temp_ts = 0.0     # last fetch timestamp
+_water_temp_is_fallback = False  # True when using fallback station
 _WATER_TEMP_POLL = 1800  # refresh every 30 minutes
+_NDBC_URL = "https://www.ndbc.noaa.gov/data/realtime2"
 
 
-def get_water_temp():
-    """
-    Return current ocean water temperature as a string (e.g. "62") or None.
-
-    Uses NOAA CO-OPS water_temperature product. Station is configured via
-    WATER_TEMP_STATION in .env (e.g. "8510560" for Montauk).
-    """
-    global _water_temp, _water_temp_ts
-    from time import time
-
-    if not WATER_TEMP_STATION:
-        return None
-
-    now = time()
-    if _water_temp is not None and (now - _water_temp_ts) < _WATER_TEMP_POLL:
-        return _water_temp
-
+def _fetch_coops_temp(station):
+    """Fetch water temp from a CO-OPS station. Returns float or None."""
     try:
         r = requests.get(_BASE_URL, params={
-            "station": WATER_TEMP_STATION,
+            "station": station,
             "product": "water_temperature",
             "date": "latest",
             "time_zone": "lst_ldt",
@@ -216,13 +213,83 @@ def get_water_temp():
         data = r.json()
         readings = data.get("data", [])
         if readings:
-            val = float(readings[0]["v"])
+            return float(readings[0]["v"])
+    except Exception as e:
+        logger.error(f"[WaterTemp] CO-OPS fetch failed for {station}: {e}")
+    return None
+
+
+def _fetch_ndbc_temp(station):
+    """Fetch water temp from an NDBC buoy. Returns float or None.
+    NDBC reports in Celsius; converted to F if TEMPERATURE_UNITS != metric."""
+    try:
+        r = requests.get(f"{_NDBC_URL}/{station}.txt", timeout=(5, 15))
+        r.raise_for_status()
+        _log_api("ndbc_water")
+        lines = r.text.strip().split("\n")
+        if len(lines) >= 3:
+            header = lines[0].split()
+            data = lines[2].split()
+            if "WTMP" in header:
+                idx = header.index("WTMP")
+                val = data[idx] if idx < len(data) else "MM"
+                if val != "MM":
+                    temp_c = float(val)
+                    if TEMPERATURE_UNITS == "metric":
+                        return temp_c
+                    return temp_c * 9 / 5 + 32
+    except Exception as e:
+        logger.error(f"[WaterTemp] NDBC fetch failed for {station}: {e}")
+    return None
+
+
+def get_water_temp():
+    """
+    Return current ocean water temperature as a string (e.g. "62") or None.
+
+    Tries the primary CO-OPS station first; if it returns no data and a
+    fallback station is configured + enabled, tries the fallback (which
+    may be a CO-OPS station or an NDBC buoy).
+    """
+    global _water_temp, _water_temp_ts, _water_temp_is_fallback
+    from time import time
+
+    if not WATER_TEMP_STATION:
+        return None
+
+    now = time()
+    if _water_temp is not None and (now - _water_temp_ts) < _WATER_TEMP_POLL:
+        return _water_temp
+
+    # Try primary station (CO-OPS)
+    val = _fetch_coops_temp(WATER_TEMP_STATION)
+    if val is not None:
+        _water_temp = str(round(val))
+        _water_temp_ts = now
+        _water_temp_is_fallback = False
+        logger.info(f"[WaterTemp] {_water_temp}° from primary station {WATER_TEMP_STATION}")
+        return _water_temp
+
+    # Try fallback if configured and enabled
+    if WATER_TEMP_FALLBACK_STATION and WATER_TEMP_FALLBACK_ENABLED:
+        fb = WATER_TEMP_FALLBACK_STATION
+        # NDBC buoys are 5-digit numeric; CO-OPS stations are 7-digit
+        if len(fb) <= 5 and fb.isdigit():
+            val = _fetch_ndbc_temp(fb)
+        else:
+            val = _fetch_coops_temp(fb)
+
+        if val is not None:
             _water_temp = str(round(val))
             _water_temp_ts = now
-            logger.info(f"[WaterTemp] {_water_temp}° from station {WATER_TEMP_STATION}")
-        else:
-            logger.warning("[WaterTemp] No data returned")
-    except Exception as e:
-        logger.error(f"[WaterTemp] Fetch failed: {e}")
+            _water_temp_is_fallback = True
+            logger.info(f"[WaterTemp] {_water_temp}° from FALLBACK station {fb}")
+            return _water_temp
 
+    logger.warning("[WaterTemp] No data from primary or fallback")
     return _water_temp
+
+
+def is_water_temp_fallback():
+    """Return True if the current water temp reading is from the fallback station."""
+    return _water_temp_is_fallback
