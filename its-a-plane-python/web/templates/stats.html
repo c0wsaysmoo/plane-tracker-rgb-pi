@@ -281,8 +281,17 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Route Frequency</div><canvas id="routeFreqChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Route Deviation (top 12)</div><canvas id="deviationChart"></canvas></div>
       <div class="panel">
+        <div class="panel-title">▸ Next ISS Passes</div>
+        <div id="issPasses" class="day-table-wrap"><div class="loading" style="padding:20px">Loading…</div></div>
+      </div>
+
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
+        <div id="routeMap" class="route-map-wrap"></div>
+      </div>
+
+      <div class="panel chart-full">
         <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
-        <div class="day-table-wrap">
         <table class="day-table">
           <thead><tr><th>Date</th><th>Flights</th><th>First Seen</th><th>Last Seen</th><th class="bar-col"></th></tr></thead>
           <tbody>${sorted.map(d=>`
@@ -295,12 +304,6 @@ async function render() {
             </tr>`).join('')}
           </tbody>
         </table>
-        </div>
-      </div>
-
-      <div class="panel chart-full">
-        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
-        <div id="routeMap" class="route-map-wrap"></div>
       </div>
     </div>`;
 
@@ -410,6 +413,38 @@ async function render() {
 
   await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
   await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits, airportCode);
+  loadIssPasses();
+}
+
+// ── Next ISS Passes ─────────────────────────────────────────────────────────
+function fmtPassDuration(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}m ${s}s`;
+}
+
+async function loadIssPasses() {
+  const el = document.getElementById('issPasses');
+  if (!el) return;
+  let passes;
+  try { passes = await fetch('/api/iss-passes').then(r => r.json()); } catch(e) { passes = null; }
+  if (!passes || !passes.length) {
+    el.innerHTML = `<div class="loading" style="padding:20px">No upcoming passes</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="day-table"><thead><tr>
+      <th>When</th><th>Path</th><th>Max Angle</th><th>Duration</th>
+    </tr></thead><tbody>${passes.map(p => {
+      const rise = new Date(p.rise.time);
+      const when = rise.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'})
+        + ' ' + rise.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+      const elev = p.culmination?.elevation_deg ?? '?';
+      return `<tr>
+        <td style="color:var(--amber-bright)">${when}</td>
+        <td class="dim">${p.rise.compass} → ${p.set.compass}</td>
+        <td class="num">${elev}°</td>
+        <td class="dim">${fmtPassDuration(p.duration_sec)}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 // ── Route Deviation Table ─────────────────────────────────────────────────────
