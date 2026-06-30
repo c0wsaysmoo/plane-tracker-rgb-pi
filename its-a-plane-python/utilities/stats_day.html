@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Stats — Day Detail</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+  :root {
+    --bg: #0d0d0b; --amber: #ffb300; --amber-dim: #7a5500;
+    --amber-glow: rgba(255,179,0,0.08); --amber-bright: #ffd54f;
+    --green: #69f0ae; --red: #ff3d00; --orange: #ff9800;
+    --row-border: rgba(255,179,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--amber);
+    font-family: 'Share Tech Mono', monospace; min-height: 100vh; padding-bottom: 24px;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none; z-index: 1000;
+  }
+  .board-header {
+    background: var(--amber); color: var(--bg);
+    padding: 10px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .board-title { font-family: 'VT323', monospace; font-size: 32px; letter-spacing: 4px; text-transform: uppercase; }
+  .board-sub { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.6; margin-left: 4px; font-family: 'Share Tech Mono', monospace; }
+  .nav-links { margin-left: auto; display: flex; gap: 8px; }
+  .back { font-family: 'VT323', monospace; font-size: 20px; letter-spacing: 2px;
+          background: var(--bg); color: var(--amber); padding: 2px 12px; text-decoration: none; }
+
+  .content { padding: 0 16px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 8px; margin-bottom: 16px; }
+  .stat-card { border: 1px solid var(--amber-dim); border-top: 2px solid var(--amber); padding: 12px 14px; background: rgba(255,179,0,0.03); }
+  .stat-label { font-family: 'VT323', monospace; font-size: 18px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 4px; }
+  .stat-value { font-family: 'VT323', monospace; font-size: 32px; color: var(--amber-bright); line-height: 1; }
+  .stat-sub { font-size: 13px; color: var(--amber); margin-top: 2px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chart-full { grid-column: 1 / -1; }
+
+  .panel { border: 1px solid var(--amber-dim); padding: 16px; background: rgba(255,179,0,0.02); }
+  .panel-title { font-family: 'VT323', monospace; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--amber-dim); }
+
+  canvas { max-height: 200px; }
+
+  .flight-table { width: 100%; border-collapse: collapse; font-family: 'VT323', monospace; font-size: 20px; }
+  .flight-table th { text-align: left; padding: 5px 8px; color: var(--amber-bright); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid var(--amber-dim); font-family: 'VT323', monospace; }
+  .flight-table td { padding: 5px 8px; border-bottom: 1px solid var(--row-border); }
+  .flight-table tr:last-child td { border-bottom: none; }
+  .callsign { color: var(--amber-bright); }
+  .dim { color: var(--amber-dim); }
+
+  .loading { text-align: center; padding: 60px; color: var(--amber-dim); font-family: 'VT323', monospace; font-size: 24px; letter-spacing: 3px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+  .route-map-wrap { height: 680px; position: relative; }
+  .route-map-wrap .leaflet-container { background: #0a0a08; }
+  .route-tip { background: #1a1a15 !important; border: 1px solid var(--amber-dim) !important; color: var(--amber) !important; font-family: 'Share Tech Mono', monospace !important; font-size: 12px !important; padding: 4px 8px !important; box-shadow: none !important; }
+  .route-tip::before { display: none !important; }
+  .rp .leaflet-popup-content-wrapper { background: #1a1a15; border: 1px solid var(--amber-dim); color: var(--amber); font-family: 'Share Tech Mono', monospace; font-size: 12px; box-shadow: none; border-radius: 0; padding: 6px 10px; }
+  .rp .leaflet-popup-content { margin: 0; line-height: 1.5; }
+  .rp .leaflet-popup-tip-container { display: none; }
+  .rp .leaflet-popup-close-button { color: var(--amber) !important; top: 4px !important; right: 6px !important; }
+  @media (max-width: 600px) { .route-map-wrap { height: 280px; } }
+</style>
+</head>
+<body>
+<div class="board-header">
+  <span style="font-size:26px">✈</span>
+  <div>
+    <span class="board-title" id="page-title">Loading...</span>
+    <span class="board-sub" id="page-sub"></span>
+  </div>
+  <div class="nav-links">
+    <a class="back" href="/stats">← STATS</a>
+    <a class="back" href="/">← BOARD</a>
+  </div>
+</div>
+
+<div class="content">
+  <div id="content"><div class="loading">Loading flight data...</div></div>
+</div>
+
+<script>
+let AIRLINE_NAMES = {};
+let AIRCRAFT_NAMES = {};
+const COLOURS = ['#ffb300','#ff6b35','#69f0ae','#ffd54f','#ff69b4','#9b59b6','#1abc9c','#e74c3c','#3498db','#f39c12','#00b894','#fd79a8'];
+
+const CHART_OPT = {
+  responsive:true, maintainAspectRatio:true,
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}}},
+    y:{grid:{color:'rgba(122,85,0,0.4)'},ticks:{color:'#7a5500',font:{family:'Share Tech Mono',size:10}},beginAtZero:true}
+  }
+};
+
+const date = window.location.pathname.split('/').pop();
+let AIRPORT_CODE = 'ORD';
+
+function localVsFlyover(flights, airportCode) {
+  let departing = 0, arriving = 0, flyover = 0, unknown = 0;
+  flights.forEach(f => {
+    const origin = (f.origin || '').toUpperCase();
+    const dest   = (f.dest   || '').toUpperCase();
+    const code   = airportCode.toUpperCase();
+    const hasUnknown = origin.includes('?') || dest.includes('?');
+    if (hasUnknown)            { unknown++;   }
+    else if (!origin && !dest) { unknown++;   }
+    else if (origin === code)  { departing++; }
+    else if (dest === code)    { arriving++;  }
+    else                       { flyover++;   }
+  });
+  return {departing, arriving, flyover, unknown};
+}
+
+function airlineBreakdown(flights) {
+  const tally={};
+  flights.forEach(f=>{const p=f.callsign.replace(/[0-9]/g,'').slice(0,3);tally[p]=(tally[p]||0)+1;});
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
+// Build a tally where each route key is ordered by dominant direction.
+function buildRouteTally(flights) {
+  const dir = {};
+  flights.forEach(f => {
+    if (f.origin && f.dest) {
+      const k = `${f.origin}→${f.dest}`;
+      dir[k] = (dir[k] || 0) + 1;
+    }
+  });
+  const tally = {};
+  Object.entries(dir).forEach(([k, count]) => {
+    const [o, d] = k.split('→');
+    const rev = `${d}→${o}`;
+    const revCount = dir[rev] || 0;
+    const key = count >= revCount ? `${o}↔${d}` : `${d}↔${o}`;
+    tally[key] = (tally[key] || 0) + count;
+  });
+  return tally;
+}
+
+function routeBreakdown(flights) {
+  const tally = buildRouteTally(flights);
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
+function aircraftBreakdown(flights) {
+  const tally={};
+  flights.forEach(f=>{ if(f.aircraft) tally[f.aircraft]=(tally[f.aircraft]||0)+1; });
+  return Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+
+function haversineDist(lat1, lon1, lat2, lon2, units) {
+  const R = units === 'nautical' ? 3440.065 : units === 'metric' ? 6371 : 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distLabel(dist, units) {
+  const d = Math.round(dist);
+  if (units === 'nautical') return `${d}nm`;
+  if (units === 'metric')   return `${d}km`;
+  return `${d}mi`;
+}
+
+async function render() {
+  try {
+    const ac = await fetch('/airport-code').then(r=>r.json());
+    AIRPORT_CODE = ac.code || 'ORD';
+  } catch(e) {}
+  let distUnits = 'imperial';
+  let homeLat = null, homeLon = null, zone = null;
+  try {
+    const cfg = await fetch('/api/config').then(r=>r.json());
+    distUnits = cfg.config?.location?.distance_units || 'imperial';
+    const homeCoords = cfg.config?.location?.location_home || [];
+    homeLat = homeCoords[0] ?? null;
+    homeLon = homeCoords[1] ?? null;
+    zone = cfg.config?.location?.zone_home || null;
+  } catch(e) {}
+  try { AIRLINE_NAMES = await fetch('/api/airlines').then(r=>r.json()); } catch(e) {}
+  try { AIRCRAFT_NAMES = await fetch('/api/aircraft-types').then(r=>r.json()); } catch(e) {}
+  const resp = await fetch('/counter');
+  const log  = await resp.json();
+  const day  = log[date] || null;
+
+  if (!day) {
+    document.getElementById('content').innerHTML=`<div class="loading">No data found for ${date}</div>`;
+    document.getElementById('page-title').textContent=date;
+    return;
+  }
+
+  const flights = day.flights || [];
+  const byHour  = new Array(24).fill(0);
+  flights.forEach(f=>byHour[f.hour]++);
+  const maxHourVal = Math.max(...byHour); const peakHours = new Set(byHour.map((v,i)=>v===maxHourVal?i:-1).filter(i=>i>=0)); const peakHour = [...peakHours][0];
+  const airlines = airlineBreakdown(flights);
+  const airports = routeBreakdown(flights);
+  const aircraft = aircraftBreakdown(flights);
+  const allRouteTally = routeTallyFromFlights(flights);
+  const totalUniqueRoutes = Object.keys(allRouteTally).length;
+
+  const d = new Date(date+'T12:00:00');
+  const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+
+  document.getElementById('page-title').textContent = date;
+  document.getElementById('page-sub').textContent = ` / ${dayName}`;
+
+  document.getElementById('content').innerHTML=`
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Flights</div><div class="stat-value">${day.count}</div><div class="stat-sub">unique callsigns</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Hour</div><div class="stat-value">${[...peakHours].map(h=>h+':00').join(', ')}</div><div class="stat-sub">${byHour[peakHour]} flights</div></div>
+      <div class="stat-card"><div class="stat-label">Unique Routes</div><div class="stat-value">${totalUniqueRoutes}</div><div class="stat-sub">unique routes</div></div>
+      <div class="stat-card"><div class="stat-label">First Seen</div><div class="stat-value" style="font-size:24px">${day.first_seen}</div><div class="stat-sub">${flights[0]?.callsign||''}</div></div>
+      <div class="stat-card"><div class="stat-label">Last Seen</div><div class="stat-value" style="font-size:24px">${day.last_seen}</div><div class="stat-sub">${flights[flights.length-1]?.callsign||''}</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="panel chart-full"><div class="panel-title">▸ Flights by Hour</div><canvas id="hourChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Top Aircraft (Top 12)</div><canvas id="aircraftChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
+      <div class="panel"><div class="panel-title">▸ Route Deviation (top 12)</div><canvas id="deviationChart"></canvas></div>
+      <div class="panel">
+        <div class="panel-title">▸ All Flights — ${day.count} total</div>
+        <div style="max-height:280px;overflow-y:auto">
+          <table class="flight-table">
+            <thead><tr><th>#</th><th>Callsign</th><th>Aircraft</th><th>Route</th><th>Time</th></tr></thead>
+            <tbody>${flights.map((f,i)=>{const route=(f.origin&&f.dest)?`${f.origin}→${f.dest}`:(f.origin||f.dest||'—');return`<tr><td class="dim">${i+1}</td><td class="callsign">${f.callsign}</td><td class="dim">${f.aircraft||'—'}</td><td class="dim">${route}</td><td class="dim">${f.time}</td></tr>`;}).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
+        <div id="routeMap" class="route-map-wrap"></div>
+      </div>
+    </div>`;
+
+  // Local vs flyover pie
+  const lf = localVsFlyover(flights, AIRPORT_CODE);
+  new Chart(document.getElementById('localFlyoverChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: [`Departing (${AIRPORT_CODE}→)`, 'Flyover', `Arriving (→${AIRPORT_CODE})`, 'Unknown'],
+      datasets: [{
+        data: [lf.departing, lf.flyover, lf.arriving, lf.unknown],
+        backgroundColor: ['#ff6b3599','#69f0ae99','#ffb30099','#aaaaaa99'],
+        borderColor:     ['#ff6b35',  '#69f0ae',  '#ffb300',  '#aaaaaa'],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          const pct = total ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+          return ` ${ctx.label} — ${ctx.parsed} (${pct}%)`;
+        }}}
+      }
+    }
+  });
+
+  new Chart(document.getElementById('hourChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:Array.from({length:24},(_,i)=>`${i}:00`),datasets:[{data:byHour,
+      backgroundColor:byHour.map((_,i)=>peakHours.has(i)?'rgba(255,107,53,0.4)':'rgba(255,179,0,0.2)'),
+      borderColor:byHour.map((_,i)=>peakHours.has(i)?'#ff6b35':'#ffb300'),
+      borderWidth:1,borderRadius:2}]},options:CHART_OPT});
+
+  new Chart(document.getElementById('airlineChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airlines.map(([k])=>k),datasets:[{data:airlines.map(([,v])=>v),
+      backgroundColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),
+      borderColor:airlines.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
+      tooltip:{callbacks:{label:ctx=>{const n=AIRLINE_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+    }}});
+
+  const _routeCodes = new Set();
+  airports.forEach(([r]) => { const [o,d]=r.split('↔'); if(o)_routeCodes.add(o); if(d)_routeCodes.add(d); });
+  let _apInfo = {};
+  try { _apInfo = await fetch(`/api/airport-coords?codes=${[..._routeCodes].join(',')}`).then(r=>r.json()); } catch(e) {}
+  const routeApLabel = code => { const n=_apInfo[code]?.name; return n ? `${n} (${code})` : code; };
+
+  new Chart(document.getElementById('airportChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:airports.map(([k])=>k),datasets:[{data:airports.map(([,v])=>v),
+      backgroundColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),
+      borderColor:airports.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+      legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
+      tooltip:{callbacks:{label:ctx=>{
+        const [o,d]=ctx.label.split('↔');
+        const t=ctx.dataset.data.reduce((a,b)=>a+b,0);
+        const oc=_apInfo[o], dc=_apInfo[d];
+        const dist = oc && dc ? ' · ' + distLabel(haversineDist(oc.lat,oc.lon,dc.lat,dc.lon,distUnits),distUnits) : '';
+        const sno = shortName(oc?.name) || o;
+        const snd = shortName(dc?.name) || d;
+        return [
+          ` ${sno} ↔ ${snd}`,
+          ` ${ctx.parsed} flight${ctx.parsed>1?'s':''} (${((ctx.parsed/t)*100).toFixed(1)}%)${dist}`,
+        ];
+      }}}
+    }}});
+
+  if (aircraft.length) {
+    new Chart(document.getElementById('aircraftChart').getContext('2d'),{
+      type:'doughnut',
+      data:{labels:aircraft.map(([k])=>k),datasets:[{data:aircraft.map(([,v])=>v),
+        backgroundColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]+'99'),
+        borderColor:aircraft.map((_,i)=>COLOURS[i%COLOURS.length]),borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{
+        legend:{display:true,labels:{color:'#ffb300',font:{family:'VT323',size:16},padding:8}},
+        tooltip:{callbacks:{label:ctx=>{const n=AIRCRAFT_NAMES[ctx.label]||ctx.label;const t=ctx.dataset.data.reduce((a,b)=>a+b,0);return ` ${n} — ${ctx.parsed} (${((ctx.parsed/t)*100).toFixed(1)}%)`;}}}
+      }}});
+  }
+
+  await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
+  await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits, AIRPORT_CODE);
+}
+
+// ── Route Deviation Table ─────────────────────────────────────────────────────
+async function buildDeviationTable(canvasId, tally, zone, distUnits, homeCode) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !zone || !zone.tl_y) return;
+
+  const zoneLat = (zone.tl_y + zone.br_y) / 2;
+  const zoneLon = (zone.tl_x + zone.br_x) / 2;
+
+  const codes = new Set();
+  Object.keys(tally).forEach(r => { const [o,d]=r.split('↔'); if(o)codes.add(o); if(d)codes.add(d); });
+
+  let coords = {};
+  try { coords = await fetch(`/api/airport-coords?codes=${[...codes].join(',')}`).then(r=>r.json()); } catch(e) {}
+
+  const apLabel = code => { const n=coords[code]?.name; return n ? `${n} (${code})` : code; };
+
+  const rows = [];
+  Object.entries(tally).forEach(([route, count]) => {
+    const [o, d] = route.split('↔');
+    const oc = coords[o], dc = coords[d];
+    if (!oc || !dc) return;
+    if (homeCode && (o === homeCode || d === homeCode)) return;
+    const direct  = haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits);
+    const viaZone = haversineDist(oc.lat, oc.lon, zoneLat, zoneLon, distUnits) +
+                    haversineDist(zoneLat, zoneLon, dc.lat, dc.lon, distUnits);
+    if (direct < 75) return;
+    const deviationPct = ((viaZone / direct) - 1) * 100;
+    rows.push({ route, o, d, direct, viaZone, deviationPct, count });
+  });
+
+  rows.sort((a, b) => b.deviationPct - a.deviationPct);
+  const top = rows.slice(0, 12);
+  if (!top.length) return;
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: top.map(r => `${r.o}↔${r.d}`),
+      datasets: [{
+        data: top.map(r => +r.deviationPct.toFixed(1)),
+        backgroundColor: top.map((_, i) => COLOURS[i % COLOURS.length] + '99'),
+        borderColor:     top.map((_, i) => COLOURS[i % COLOURS.length]),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const r = top[ctx.dataIndex];
+          const sno = shortName(coords[r.o]?.name) || r.o;
+          const snd = shortName(coords[r.d]?.name) || r.d;
+          return [
+            ` ${sno} ↔ ${snd}`,
+            ` +${r.deviationPct.toFixed(1)}% detour · ${distLabel(r.direct, distUnits)} direct · ${r.count} flight${r.count>1?'s':''}`,
+          ];
+        }}}
+      }
+    }
+  });
+}
+
+// ── Route Heat Map ────────────────────────────────────────────────────────────
+function routeTallyFromFlights(flights) {
+  return buildRouteTally(flights);
+}
+
+function gcPoints(lat1, lon1, lat2, lon2, steps=60) {
+  const R = Math.PI / 180;
+  const φ1=lat1*R, λ1=lon1*R, φ2=lat2*R, λ2=lon2*R;
+  const a = Math.sin((φ2-φ1)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin((λ2-λ1)/2)**2;
+  const Δ = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  if (Δ < 0.001) return [[lat1,lon1],[lat2,lon2]];
+  const pts = [];
+  for (let i=0; i<=steps; i++) {
+    const f=i/steps, A=Math.sin((1-f)*Δ)/Math.sin(Δ), B=Math.sin(f*Δ)/Math.sin(Δ);
+    const x=A*Math.cos(φ1)*Math.cos(λ1)+B*Math.cos(φ2)*Math.cos(λ2);
+    const y=A*Math.cos(φ1)*Math.sin(λ1)+B*Math.cos(φ2)*Math.sin(λ2);
+    const z=A*Math.sin(φ1)+B*Math.sin(φ2);
+    pts.push([Math.atan2(z,Math.sqrt(x*x+y*y))/R, Math.atan2(y,x)/R]);
+  }
+  // Unwrap antimeridian crossings: keep longitudes continuous
+  for (let i=1; i<pts.length; i++) {
+    const dlon = pts[i][1] - pts[i-1][1];
+    if (dlon > 180) pts[i][1] -= 360;
+    else if (dlon < -180) pts[i][1] += 360;
+  }
+  // If the arc went east past the dateline (end lon > 180°), the algorithm chose the
+  // Pacific path going east, putting the destination on the eastern world-copy ghost.
+  // Shift everything −360° so it uses the western world copy instead — matching how
+  // the farthest map places Asian airports at e.g. lon −246° rather than +114°.
+  if (pts[pts.length-1][1] > 180) {
+    for (let i=0; i<pts.length; i++) pts[i][1] -= 360;
+  }
+  return pts;
+}
+
+function heatColor(t) {
+  if (t < 0.5) {
+    const s = t*2;
+    return `rgb(${Math.round(105+150*s)},${Math.round(240-61*s)},${Math.round(174*(1-s))})`;
+  }
+  const s = (t-0.5)*2;
+  return `rgb(255,${Math.round(179*(1-s))},0)`;
+}
+
+function shortName(name) {
+  if (!name) return '';
+  return name
+    .replace(/\bInternational\b/gi, 'Intl')
+    .replace(/ Intl Airport$/i, '')
+    .replace(/ Airport$/i, '')
+    .replace(/ Airfield$/i, '')
+    .replace(/ Regional$/i, '')
+    .replace(/ Municipal$/i, '')
+    .trim();
+}
+
+let _routeMap = null;
+async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, zone) {
+  // Sort descending to tally all routes, but draw ascending so hot routes paint on top
+  const entries = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,300);
+  if (!entries.length) return;
+
+  const codes = new Set();
+  entries.forEach(([r]) => { const [o,d]=r.split('↔'); codes.add(o); codes.add(d); });
+
+  let coords = {};
+  try {
+    const r = await fetch(`/api/airport-coords?codes=${[...codes].join(',')}`);
+    coords = await r.json();
+  } catch(e) { return; }
+
+  const valid = entries.filter(([r]) => { const [o,d]=r.split('↔'); return coords[o] && coords[d]; });
+  if (!valid.length) return;
+
+  if (_routeMap) { _routeMap.remove(); _routeMap = null; }
+  const map = L.map(mapId, { zoomControl: true, attributionControl: false });
+  _routeMap = map;
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18
+  }).addTo(map);
+
+  const sub = subId && document.getElementById(subId);
+  const total = Object.keys(tally).length;
+  if (sub) sub.textContent = valid.length < total ? `— ${valid.length} of ${total} drawn` : `— ${valid.length} drawn`;
+
+  const maxCount = valid[0][1];
+  const bounds = [];
+  const popupOpts = { className: 'rp', maxWidth: 240 };
+
+  // Draw rarest first so most-frequent routes paint on top and stay visible.
+  // Collect actual normalized arc endpoints for dot placement — pts[0]/pts[last]
+  // already have the world-copy-adjusted longitude (e.g. HKG at −246° not +114°).
+  const actualPos = {};
+  [...valid].reverse().forEach(([route, count]) => {
+    const [o,d] = route.split('↔');
+    const oc = coords[o], dc = coords[d];
+    const t = count / maxCount;
+    const pts = gcPoints(oc.lat, oc.lon, dc.lat, dc.lon);
+    bounds.push([oc.lat, oc.lon], [dc.lat, dc.lon]);
+    if (!actualPos[o]) actualPos[o] = pts[0];
+    if (!actualPos[d]) actualPos[d] = pts[pts.length-1];
+    const dist = distLabel(haversineDist(oc.lat, oc.lon, dc.lat, dc.lon, distUnits), distUnits);
+    const sn_o = shortName(oc.name) || o;
+    const sn_d = shortName(dc.name) || d;
+    const html = `<b>${o} ↔ ${d}</b><br>${sn_o} ↔ ${sn_d}<br>${dist} — ${count} flight${count>1?'s':''}`;
+    L.polyline(pts, {
+      color: heatColor(t),
+      weight: Math.max(1, 1 + t * 4),
+      opacity: 0.2 + t * 0.7,
+      interactive: false,
+    }).addTo(map);
+    // Wide transparent hit zone so routes are easy to tap on touch screens
+    L.polyline(pts, { color: 'transparent', weight: 20, opacity: 0.001 })
+      .bindPopup(html, popupOpts).addTo(map);
+  });
+
+  Object.entries(actualPos).forEach(([code, pos]) => {
+    const apCoord = coords[code];
+    const sn = shortName(apCoord?.name) || code;
+    const homeDist = (homeLat != null && homeLon != null && apCoord)
+      ? '<br>' + distLabel(haversineDist(homeLat, homeLon, apCoord.lat, apCoord.lon, distUnits), distUnits) + ' from home'
+      : '';
+    L.circleMarker(pos, {
+      radius: 5, fillColor: '#ffb300', fillOpacity: 0.9, stroke: false
+    }).bindPopup(`<b>${code}</b><br>${sn}${homeDist}`, popupOpts).addTo(map);
+  });
+
+  if (homeLat != null && homeLon != null) {
+    L.circleMarker([homeLat, homeLon], {
+      radius: 6, fillColor: '#ff3d00', fillOpacity: 0.95, color: '#ff9800', weight: 1.5
+    }).bindTooltip('Home', { permanent: false, className: 'route-tip' }).addTo(map);
+  }
+
+  if (zone && zone.tl_y && zone.tl_x && zone.br_y && zone.br_x) {
+    L.rectangle([[zone.tl_y, zone.tl_x], [zone.br_y, zone.br_x]], {
+      color: '#69f0ae', weight: 1.5, fill: false, dashArray: '4 4', opacity: 0.7
+    }).bindTooltip('Watch zone', { permanent: false, className: 'route-tip' }).addTo(map);
+  }
+
+  if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
+
+  addIssOverlay(map, distUnits);
+}
+
+// Live ISS position marker + ground track.
+let _issMarker = null, _issTrackLayers = [], _issTimer = null, _issTrackTimer = null;
+function _wrapLon(lon, ref) { while (lon - ref > 180) lon -= 360; while (ref - lon > 180) lon += 360; return lon; }
+
+async function updateIssTrack(map) {
+  let data;
+  try { data = await fetch('/api/iss-groundtrack').then(r => r.json()); } catch(e) { return; }
+  if (!data || !data.points || !data.points.length) return;
+  const pts = data.points.map(p => [p[0], p[1]]);
+  const ci = data.current_index;
+  // Unwrap antimeridian crossings so longitudes are continuous
+  for (let i = 1; i < pts.length; i++) {
+    const dlon = pts[i][1] - pts[i-1][1];
+    if (dlon > 180) pts[i][1] -= 360;
+    else if (dlon < -180) pts[i][1] += 360;
+  }
+  // Shift entire track so the current position lands on the correct world copy
+  const offset = _wrapLon(pts[ci][1], map.getCenter().lng) - pts[ci][1];
+  for (let i = 0; i < pts.length; i++) pts[i][1] += offset;
+  _issTrackLayers.forEach(l => map.removeLayer(l));
+  _issTrackLayers = [
+    L.polyline(pts.slice(0, ci + 1), { color: '#1565c0', weight: 2, opacity: 0.5, interactive: false }).addTo(map),
+    L.polyline(pts.slice(ci),        { color: '#00e5ff', weight: 2, opacity: 0.75, dashArray: '5 5', interactive: false }).addTo(map),
+  ];
+}
+
+async function addIssOverlay(map, units) {
+  if (_issTimer) { clearInterval(_issTimer); _issTimer = null; }
+  if (_issTrackTimer) { clearInterval(_issTrackTimer); _issTrackTimer = null; }
+  _issMarker = null; _issTrackLayers = [];
+
+  async function tickDot() {
+    let p;
+    try { p = await fetch('/api/iss-position').then(r => r.json()); } catch(e) { return; }
+    if (!p || p.lat == null || p.lon == null) return;
+    const lon = _wrapLon(p.lon, map.getCenter().lng);
+    const pos = [p.lat, lon];
+    const alt = units === 'nautical' ? p.alt_km * 0.539957
+              : units === 'imperial' ? p.alt_km * 0.621371
+              : p.alt_km;
+    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up`;
+    if (!_issMarker) {
+      _issMarker = L.circleMarker(pos, {
+        radius: 6, fillColor: '#00e5ff', fillOpacity: 0.95, color: '#fff', weight: 1.5, zIndexOffset: 1000,
+      }).bindTooltip('ISS', { permanent: true, direction: 'right', className: 'route-tip' })
+        .bindPopup(popup, { className: 'rp', maxWidth: 240 }).addTo(map);
+    } else {
+      _issMarker.setLatLng(pos).setPopupContent(popup);
+    }
+  }
+
+  await updateIssTrack(map);
+  await tickDot();
+  _issTrackTimer = setInterval(() => updateIssTrack(map), 30000);
+  _issTimer = setInterval(tickDot, 5000);
+}
+
+render().catch(e=>{document.getElementById('content').innerHTML=`<div class="loading">Error: ${e.message}</div>`;});
+</script>
+</body>
+</html>
