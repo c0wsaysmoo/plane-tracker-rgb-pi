@@ -384,6 +384,33 @@ def get_iss_position():
         return None
 
 
+def get_iss_passes(limit=5):
+    """Return the next upcoming ISS passes over the home location.
+
+    Each item matches the cached pass schema:
+        {"rise": {"time", "compass"}, "set": {"time", "compass"},
+         "culmination": {"elevation_deg"}, "duration_sec"}
+    Passes that have already ended are filtered out.
+    """
+    passes = _refresh()
+    if not passes:
+        return []
+    now = datetime.now(timezone.utc)
+    upcoming = []
+    for p in passes:
+        try:
+            set_str = p.get("set", {}).get("time", "")
+            if not set_str:
+                continue
+            set_time = datetime.fromisoformat(set_str.replace("Z", "+00:00"))
+            if set_time < now:
+                continue
+            upcoming.append(p)
+        except (KeyError, ValueError, TypeError):
+            continue
+    return upcoming[:limit]
+
+
 def get_iss_alert():
     """Return alert dict if an ISS pass is within 10 minutes, else None.
 
@@ -470,5 +497,8 @@ if _MASTER_TRACKER:
 
     def get_iss_position():
         return _fetch_slave().get("position")
+
+    def get_iss_passes(limit=5):
+        return _fetch_slave().get("passes", [])[:limit]
 
     logger.info(f"[ISS] Slave mode — polling master at {_slave_url('')}")
