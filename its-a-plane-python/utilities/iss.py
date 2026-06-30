@@ -1,9 +1,15 @@
 """
 iss.py — ISS overhead pass predictions.
 
-Uses the free Pollux Labs ISS API (no key required).
-Polls every 30 minutes for upcoming visible passes.
-Shows alert when a visible pass is within 10 minutes.
+Computes passes locally using TLE orbital data from CelesTrak + the
+ephem library.  No external pass-prediction API needed.  TLE is refreshed
+every 12 hours (or on first run); pass computation runs every 30 minutes
+and takes <1 second on a Pi Zero.
+
+Reports ALL passes above 10 degrees max elevation (not just eye-visible
+ones) — so you get an alert whenever the ISS is overhead, day or night.
+
+Requires:  pip install ephem
 
 Usage:
     from utilities.iss import get_iss_alert
@@ -13,52 +19,186 @@ Usage:
 
 import json
 import logging
+import math
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import requests
 
+try:
+    import ephem
+except ImportError:
+    ephem = None
+
 logger = logging.getLogger(__name__)
 
-_API_URL = "https://iss-api.polluxlabs.io/iss-pass"
+_TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache")
 _CACHE_FILE = os.path.join(_CACHE_DIR, "iss.json")
-_POLL_INTERVAL = 1800  # 30 minutes
-_ALERT_WINDOW = 600    # show alert 10 minutes before pass
+_TLE_CACHE_FILE = os.path.join(_CACHE_DIR, "iss_tle.json")
+_POLL_INTERVAL = 1800      # recompute passes every 30 minutes
+_TLE_REFRESH = 43200       # refresh TLE every 12 hours
+_ALERT_WINDOW = 600        # show alert 10 minutes before pass
+_MIN_ELEVATION = 10        # minimum max-elevation to include a pass (degrees)
+_PREDICT_HOURS = 24        # how far ahead to predict
 
-# In-memory cache
+# Compass direction from azimuth
+_COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+
+def _az_to_compass(az_rad):
+    """Convert azimuth in radians to 16-point compass direction."""
+    deg = math.degrees(float(az_rad)) % 360
+    idx = int((deg + 11.25) / 22.5) % 16
+    return _COMPASS[idx]
+
+
+# ── TLE management ──────────────────────────────────────────────────────────
+
+_tle_lines = None   # (name, line1, line2)
+_tle_ts = 0.0
+
+
+def _load_tle_cache():
+    """Load TLE from disk cache if fresh enough."""
+    global _tle_lines, _tle_ts
+    try:
+        with open(_TLE_CACHE_FILE, "r") as f:
+            obj = json.load(f)
+        if time.time() - obj.get("ts", 0) < _TLE_REFRESH * 2:
+            _tle_lines = (obj["name"], obj["line1"], obj["line2"])
+            _tle_ts = obj["ts"]
+            return True
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return False
+
+
+def _fetch_tle():
+    """Download current TLE from CelesTrak."""
+    global _tle_lines, _tle_ts
+    try:
+        r = requests.get(_TLE_URL, timeout=(5, 15))
+        r.raise_for_status()
+        lines = r.text.strip().split("\n")
+        if len(lines) >= 3:
+            name = lines[0].strip()
+            line1 = lines[1].strip()
+            line2 = lines[2].strip()
+            _tle_lines = (name, line1, line2)
+            _tle_ts = time.time()
+            os.makedirs(_CACHE_DIR, exist_ok=True)
+            with open(_TLE_CACHE_FILE, "w") as f:
+                json.dump({"ts": _tle_ts, "name": name,
+                           "line1": line1, "line2": line2}, f)
+            logger.info(f"[ISS] TLE updated: {name}")
+            return True
+    except Exception as e:
+        logger.error(f"[ISS] TLE fetch failed: {e}")
+    return False
+
+
+def _ensure_tle():
+    """Make sure we have a TLE, fetching if needed."""
+    if _tle_lines and (time.time() - _tle_ts) < _TLE_REFRESH:
+        return True
+    if _load_tle_cache():
+        if (time.time() - _tle_ts) < _TLE_REFRESH:
+            return True
+    return _fetch_tle()
+
+
+# ── Pass computation ────────────────────────────────────────────────────────
+
+def _compute_passes(lat, lon):
+    """Compute ISS passes for the next _PREDICT_HOURS hours using ephem.
+
+    Returns list of dicts matching the same schema the rest of the code expects:
+        [{"rise": {"time": "...", "compass": "NW"},
+          "set":  {"time": "...", "compass": "SE"},
+          "culmination": {"elevation_deg": 45.2},
+          "duration_sec": 340}, ...]
+    """
+    if ephem is None:
+        logger.error("[ISS] ephem not installed — pip install ephem")
+        return None
+    if not _ensure_tle():
+        return None
+
+    name, line1, line2 = _tle_lines
+    iss = ephem.readtle(name, line1, line2)
+
+    obs = ephem.Observer()
+    obs.lat = str(lat)
+    obs.lon = str(lon)
+    obs.elevation = 10
+    obs.horizon = "0"   # compute from true horizon; filter by max_elev later
+    obs.pressure = 0    # disable atmospheric refraction modeling (satellite work)
+
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)  # ephem wants naive UTC
+    obs.date = ephem.Date(now_utc)
+    end_date = ephem.Date(now_utc + timedelta(hours=_PREDICT_HOURS))
+
+    passes = []
+    for _ in range(30):  # safety cap
+        try:
+            info = obs.next_pass(iss)
+            rise_time, rise_az, max_time, max_alt, set_time, set_az = info
+            if rise_time is None or rise_time > end_date:
+                break
+            # At polar latitudes ephem may return None for set/max fields
+            if set_time is None or max_alt is None:
+                obs.date = (rise_time or obs.date) + ephem.minute
+                continue
+
+            max_elev = math.degrees(float(max_alt))
+            if max_elev < _MIN_ELEVATION:
+                obs.date = set_time + ephem.minute
+                continue
+
+            rise_dt = ephem.Date(rise_time).datetime().replace(tzinfo=timezone.utc)
+            set_dt = ephem.Date(set_time).datetime().replace(tzinfo=timezone.utc)
+            duration = (set_dt - rise_dt).total_seconds()
+
+            passes.append({
+                "rise": {
+                    "time": rise_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "compass": _az_to_compass(rise_az),
+                },
+                "set": {
+                    "time": set_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "compass": _az_to_compass(set_az),
+                },
+                "culmination": {
+                    "elevation_deg": round(max_elev, 1),
+                },
+                "duration_sec": int(duration),
+            })
+            obs.date = set_time + ephem.minute
+        except Exception as e:
+            logger.error(f"[ISS] Pass computation error: {e}")
+            break
+
+    # Cache to disk
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+    with open(_CACHE_FILE, "w") as f:
+        json.dump({"ts": time.time(), "passes": passes}, f)
+
+    logger.debug(f"[ISS] Computed {len(passes)} passes (>={_MIN_ELEVATION}°) "
+                 f"for next {_PREDICT_HOURS}h")
+    return passes
+
+
+# ── Caching & threading ─────────────────────────────────────────────────────
+
 _cached_passes = None
 _cached_ts = 0.0
-_next_retry_after = 0.0  # absolute timestamp; 0 = retry immediately
+_next_retry_after = 0.0
 _consecutive_failures = 0
 _lock = threading.Lock()
-
-
-def _fetch(lat, lon):
-    """Fetch upcoming visible ISS passes."""
-    try:
-        r = requests.get(_API_URL, params={
-            "lat": lat,
-            "lon": lon,
-            "visible_only": "true",
-        }, timeout=(5, 15))
-        r.raise_for_status()
-        data = r.json()
-        passes = data.get("passes", [])
-
-        os.makedirs(_CACHE_DIR, exist_ok=True)
-        with open(_CACHE_FILE, "w") as f:
-            json.dump({"ts": time.time(), "passes": passes}, f)
-
-        visible_count = len(passes)
-        logger.debug(f"[ISS] Fetched {visible_count} visible passes")
-        return passes
-
-    except Exception as e:
-        logger.error(f"[ISS] Fetch failed: {e}")
-        return None
 
 
 def _load_cache():
@@ -74,12 +214,12 @@ def _load_cache():
     return None, 0
 
 
-def _background_refresh(lat, lon):
-    """Run the blocking fetch off the caller's thread. Releases _lock when done."""
+def _background_compute(lat, lon):
+    """Compute ISS passes in a background thread. Releases _lock when done."""
     global _cached_passes, _cached_ts, _next_retry_after, _consecutive_failures
     try:
+        passes = _compute_passes(lat, lon)
         now = time.time()
-        passes = _fetch(lat, lon)
         if passes is not None:
             _cached_passes = passes
             _cached_ts = now
@@ -87,7 +227,6 @@ def _background_refresh(lat, lon):
             _next_retry_after = now + _POLL_INTERVAL
         else:
             _consecutive_failures += 1
-            # Exponential backoff: 60m, 120m, max 4h
             backoff = min(_POLL_INTERVAL * (2 ** _consecutive_failures), 14400)
             _next_retry_after = now + backoff
             logger.warning(f"[ISS] Backing off, next retry in {backoff // 60:.0f}m")
@@ -96,12 +235,11 @@ def _background_refresh(lat, lon):
 
 
 def _refresh():
-    """Return cached passes immediately; kick off a background fetch if stale.
+    """Return cached data immediately; kick off background compute if stale.
 
-    Never blocks on the network. If a refresh is already in flight (or we're
-    in a backoff window), callers just get the current cached passes — this
-    is what prevents thread pileup on the Flask server when the ISS API or
-    DNS is degraded.
+    Never blocks on the network or on computation.  If a compute is already
+    in flight (or we're in a backoff window), callers just get the current
+    cached passes.
     """
     global _cached_passes, _cached_ts, _next_retry_after
 
@@ -114,26 +252,27 @@ def _refresh():
     if _cached_passes is not None and now < _next_retry_after:
         return _cached_passes
 
+    # Cold start: try disk cache (non-blocking)
     if _cached_passes is None:
         disk, disk_ts = _load_cache()
         if disk is not None:
             _cached_passes = disk
             _cached_ts = disk_ts
             _next_retry_after = disk_ts + _POLL_INTERVAL
-            logger.debug("[ISS] Loaded from disk cache")
+            logger.info("[ISS] Loaded from disk cache")
             if now < _next_retry_after:
                 return _cached_passes
 
-    # Stale (and past backoff) — try to claim the refresh slot without blocking.
+    # Stale (and past backoff) — try to claim the compute slot without blocking.
     if now >= _next_retry_after and _lock.acquire(blocking=False):
         threading.Thread(
-            target=_background_refresh, args=(location[0], location[1]), daemon=True
+            target=_background_compute, args=(location[0], location[1]), daemon=True
         ).start()
-    # else: a refresh is already in flight elsewhere, or we're still in a
-    # backoff window — fall through and return whatever we've got.
 
     return _cached_passes or []
 
+
+# ── Public API ──────────────────────────────────────────────────────────────
 
 def _find_active_pass(passes):
     """Find a pass that is currently in progress. Returns (pass_dict, seconds_since_rise) or (None, 0)."""
@@ -185,8 +324,68 @@ def get_iss_pass_data():
     }
 
 
+def get_iss_groundtrack(past_minutes=30, future_minutes=65, step_minutes=2):
+    """Return the ISS ground track from past to future as a list of [lat, lon] points.
+
+    Returns {"points": [[lat, lon], ...], "current_index": int} where current_index
+    is the index of "now" — everything before it is past, everything after is future.
+    """
+    if ephem is None:
+        return None
+    if not _tle_lines:
+        _load_tle_cache()
+    if not _tle_lines:
+        return None
+    try:
+        name, line1, line2 = _tle_lines
+        iss = ephem.readtle(name, line1, line2)
+        now = ephem.now()
+        current_index = int(past_minutes / step_minutes)
+        total_steps = int((past_minutes + future_minutes) / step_minutes)
+        points = []
+        for i in range(total_steps + 1):
+            t = now + (i - current_index) * step_minutes * ephem.minute
+            iss.compute(t)
+            points.append([
+                round(math.degrees(float(iss.sublat)), 3),
+                round(math.degrees(float(iss.sublong)), 3),
+            ])
+        return {"points": points, "current_index": current_index}
+    except Exception as e:
+        logger.debug(f"[ISS] groundtrack compute failed: {e}")
+        return None
+
+
+def get_iss_position():
+    """Return the ISS current sub-satellite point, or None.
+
+    Returns {"lat": <deg>, "lon": <deg>, "alt_km": <float>}.  Computed locally
+    from the cached TLE — never triggers a network fetch, so it's safe to call
+    from a web request handler at high frequency.
+    """
+    if ephem is None:
+        return None
+    # Use whatever TLE we already have (memory or disk); don't block on network.
+    if not _tle_lines:
+        _load_tle_cache()
+    if not _tle_lines:
+        return None
+    try:
+        name, line1, line2 = _tle_lines
+        iss = ephem.readtle(name, line1, line2)
+        iss.compute(ephem.now())
+        return {
+            "lat": round(math.degrees(float(iss.sublat)), 3),
+            "lon": round(math.degrees(float(iss.sublong)), 3),
+            "alt_km": round(float(iss.elevation) / 1000.0, 1),
+        }
+    except Exception as e:
+        logger.debug(f"[ISS] position compute failed: {e}")
+        return None
+
+
 def get_iss_alert():
-    """Return alert dict if a visible ISS pass is within 10 minutes, else None.
+    """Return alert dict if an ISS pass is within 10 minutes, else None.
 
     Returns {"text": "ISS 3m", "color": "white"} or None.
     When the pass is actively overhead, returns None (takeover scene handles it).
@@ -268,5 +467,8 @@ if _MASTER_TRACKER:
 
     def get_iss_pass_data():
         return _fetch_slave().get("pass_data")
+
+    def get_iss_position():
+        return _fetch_slave().get("position")
 
     logger.info(f"[ISS] Slave mode — polling master at {_slave_url('')}")
