@@ -438,10 +438,11 @@ def clock_json():
 def iss_json():
     """Serve computed ISS alert and pass data to slave Pis."""
     try:
-        from utilities.iss import get_iss_alert, get_iss_pass_data, get_iss_position
+        from utilities.iss import get_iss_alert, get_iss_pass_data, get_iss_position, get_iss_passes
         return jsonify({"alert": get_iss_alert(),
                         "pass_data": get_iss_pass_data(),
-                        "position": get_iss_position()})
+                        "position": get_iss_position(),
+                        "passes": get_iss_passes()})
     except Exception:
         return jsonify({"alert": None, "pass_data": None, "position": None})
 
@@ -451,6 +452,15 @@ def iss_position():
     try:
         from utilities.iss import get_iss_position
         return jsonify(get_iss_position())
+    except Exception:
+        return jsonify(None)
+
+@app.get("/api/iss-passes")
+def iss_passes():
+    """Upcoming ISS passes over the home location, for the stats page."""
+    try:
+        from utilities.iss import get_iss_passes
+        return jsonify(get_iss_passes())
     except Exception:
         return jsonify(None)
 
