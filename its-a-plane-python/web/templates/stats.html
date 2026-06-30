@@ -63,12 +63,14 @@
   }
   canvas { max-height: 200px; max-width: 100%; }
 
+  .day-table-wrap { max-height: 220px; overflow-y: auto; }
   .day-table { width: 100%; border-collapse: collapse; font-family: 'VT323', monospace; font-size: 20px; table-layout: fixed; }
   .day-table .bar-col { width: 70px; overflow: hidden; padding-right: 4px; }
   .day-table th {
     text-align: left; padding: 5px 10px; color: var(--amber-bright);
     font-size: 14px; letter-spacing: 2px; text-transform: uppercase;
     border-bottom: 1px solid var(--amber-dim); font-family: 'VT323', monospace;
+    position: sticky; top: 0; background: var(--bg);
   }
   .day-table td { padding: 6px 10px; border-bottom: 1px solid var(--row-border); }
   .day-table tr:hover td { background: var(--amber-glow); cursor: pointer; }
@@ -278,13 +280,9 @@ async function render() {
       <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Route Frequency</div><canvas id="routeFreqChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Route Deviation (top 12)</div><canvas id="deviationChart"></canvas></div>
-      <div class="panel chart-full">
-        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
-        <div id="routeMap" class="route-map-wrap"></div>
-      </div>
-
-      <div class="panel chart-full">
+      <div class="panel">
         <div class="panel-title">▸ Daily Flight Log — click a date for details</div>
+        <div class="day-table-wrap">
         <table class="day-table">
           <thead><tr><th>Date</th><th>Flights</th><th>First Seen</th><th>Last Seen</th><th class="bar-col"></th></tr></thead>
           <tbody>${sorted.map(d=>`
@@ -297,6 +295,12 @@ async function render() {
             </tr>`).join('')}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      <div class="panel chart-full">
+        <div class="panel-title">▸ Route Heat Map<span id="routeMapSub" style="font-size:14px;letter-spacing:1px;color:var(--amber-dim);margin-left:12px"></span></div>
+        <div id="routeMap" class="route-map-wrap"></div>
       </div>
     </div>`;
 
@@ -614,7 +618,7 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
 
-  addIssOverlay(map, distUnits);
+  addIssOverlay(map, distUnits, homeLat, homeLon);
 }
 
 // Live ISS position marker + ground track.
@@ -643,7 +647,7 @@ async function updateIssTrack(map) {
   ];
 }
 
-async function addIssOverlay(map, units) {
+async function addIssOverlay(map, units, homeLat, homeLon) {
   if (_issTimer) { clearInterval(_issTimer); _issTimer = null; }
   if (_issTrackTimer) { clearInterval(_issTrackTimer); _issTrackTimer = null; }
   _issMarker = null; _issTrackLayers = [];
@@ -657,7 +661,10 @@ async function addIssOverlay(map, units) {
     const alt = units === 'nautical' ? p.alt_km * 0.539957
               : units === 'imperial' ? p.alt_km * 0.621371
               : p.alt_km;
-    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up`;
+    const homeDist = (homeLat != null && homeLon != null)
+      ? '<br>' + distLabel(haversineDist(homeLat, homeLon, p.lat, p.lon, units), units) + ' from home'
+      : '';
+    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up${homeDist}`;
     if (!_issMarker) {
       _issMarker = L.circleMarker(pos, {
         radius: 6, fillColor: '#00e5ff', fillOpacity: 0.95, color: '#fff', weight: 1.5, zIndexOffset: 1000,

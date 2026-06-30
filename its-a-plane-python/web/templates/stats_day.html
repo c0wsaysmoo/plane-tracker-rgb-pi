@@ -539,7 +539,7 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
 
-  addIssOverlay(map, distUnits);
+  addIssOverlay(map, distUnits, homeLat, homeLon);
 }
 
 // Live ISS position marker + ground track.
@@ -568,7 +568,7 @@ async function updateIssTrack(map) {
   ];
 }
 
-async function addIssOverlay(map, units) {
+async function addIssOverlay(map, units, homeLat, homeLon) {
   if (_issTimer) { clearInterval(_issTimer); _issTimer = null; }
   if (_issTrackTimer) { clearInterval(_issTrackTimer); _issTrackTimer = null; }
   _issMarker = null; _issTrackLayers = [];
@@ -582,7 +582,10 @@ async function addIssOverlay(map, units) {
     const alt = units === 'nautical' ? p.alt_km * 0.539957
               : units === 'imperial' ? p.alt_km * 0.621371
               : p.alt_km;
-    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up`;
+    const homeDist = (homeLat != null && homeLon != null)
+      ? '<br>' + distLabel(haversineDist(homeLat, homeLon, p.lat, p.lon, units), units) + ' from home'
+      : '';
+    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up${homeDist}`;
     if (!_issMarker) {
       _issMarker = L.circleMarker(pos, {
         radius: 6, fillColor: '#00e5ff', fillOpacity: 0.95, color: '#fff', weight: 1.5, zIndexOffset: 1000,
