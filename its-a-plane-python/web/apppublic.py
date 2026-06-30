@@ -438,10 +438,30 @@ def clock_json():
 def iss_json():
     """Serve computed ISS alert and pass data to slave Pis."""
     try:
-        from utilities.iss import get_iss_alert, get_iss_pass_data
-        return jsonify({"alert": get_iss_alert(), "pass_data": get_iss_pass_data()})
+        from utilities.iss import get_iss_alert, get_iss_pass_data, get_iss_position
+        return jsonify({"alert": get_iss_alert(),
+                        "pass_data": get_iss_pass_data(),
+                        "position": get_iss_position()})
     except Exception:
-        return jsonify({"alert": None, "pass_data": None})
+        return jsonify({"alert": None, "pass_data": None, "position": None})
+
+@app.get("/api/iss-position")
+def iss_position():
+    """Current ISS sub-satellite point for the route maps. {lat, lon, alt_km} or null."""
+    try:
+        from utilities.iss import get_iss_position
+        return jsonify(get_iss_position())
+    except Exception:
+        return jsonify(None)
+
+@app.get("/api/iss-groundtrack")
+def iss_groundtrack():
+    """ISS ground track for the route maps. {points, current_index} or null."""
+    try:
+        from utilities.iss import get_iss_groundtrack
+        return jsonify(get_iss_groundtrack())
+    except Exception:
+        return jsonify(None)
 
 @app.get("/nws/json")
 def nws_json():
