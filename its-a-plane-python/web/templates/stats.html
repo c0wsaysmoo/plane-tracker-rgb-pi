@@ -613,6 +613,65 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
   }
 
   if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
+
+  addIssOverlay(map, distUnits);
+}
+
+// Live ISS position marker + ground track.
+let _issMarker = null, _issTrackLayers = [], _issTimer = null, _issTrackTimer = null;
+function _wrapLon(lon, ref) { while (lon - ref > 180) lon -= 360; while (ref - lon > 180) lon += 360; return lon; }
+
+async function updateIssTrack(map) {
+  let data;
+  try { data = await fetch('/api/iss-groundtrack').then(r => r.json()); } catch(e) { return; }
+  if (!data || !data.points || !data.points.length) return;
+  const pts = data.points.map(p => [p[0], p[1]]);
+  const ci = data.current_index;
+  // Unwrap antimeridian crossings so longitudes are continuous
+  for (let i = 1; i < pts.length; i++) {
+    const dlon = pts[i][1] - pts[i-1][1];
+    if (dlon > 180) pts[i][1] -= 360;
+    else if (dlon < -180) pts[i][1] += 360;
+  }
+  // Shift entire track so the current position lands on the correct world copy
+  const offset = _wrapLon(pts[ci][1], map.getCenter().lng) - pts[ci][1];
+  for (let i = 0; i < pts.length; i++) pts[i][1] += offset;
+  _issTrackLayers.forEach(l => map.removeLayer(l));
+  _issTrackLayers = [
+    L.polyline(pts.slice(0, ci + 1), { color: '#1565c0', weight: 2, opacity: 0.5, interactive: false }).addTo(map),
+    L.polyline(pts.slice(ci),        { color: '#00e5ff', weight: 2, opacity: 0.75, dashArray: '5 5', interactive: false }).addTo(map),
+  ];
+}
+
+async function addIssOverlay(map, units) {
+  if (_issTimer) { clearInterval(_issTimer); _issTimer = null; }
+  if (_issTrackTimer) { clearInterval(_issTrackTimer); _issTrackTimer = null; }
+  _issMarker = null; _issTrackLayers = [];
+
+  async function tickDot() {
+    let p;
+    try { p = await fetch('/api/iss-position').then(r => r.json()); } catch(e) { return; }
+    if (!p || p.lat == null || p.lon == null) return;
+    const lon = _wrapLon(p.lon, map.getCenter().lng);
+    const pos = [p.lat, lon];
+    const alt = units === 'nautical' ? p.alt_km * 0.539957
+              : units === 'imperial' ? p.alt_km * 0.621371
+              : p.alt_km;
+    const popup = `<b>ISS</b><br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<br>${distLabel(alt, units)} up`;
+    if (!_issMarker) {
+      _issMarker = L.circleMarker(pos, {
+        radius: 6, fillColor: '#00e5ff', fillOpacity: 0.95, color: '#fff', weight: 1.5, zIndexOffset: 1000,
+      }).bindTooltip('ISS', { permanent: true, direction: 'right', className: 'route-tip' })
+        .bindPopup(popup, { className: 'rp', maxWidth: 240 }).addTo(map);
+    } else {
+      _issMarker.setLatLng(pos).setPopupContent(popup);
+    }
+  }
+
+  await updateIssTrack(map);
+  await tickDot();
+  _issTrackTimer = setInterval(() => updateIssTrack(map), 30000);
+  _issTimer = setInterval(tickDot, 5000);
 }
 
 render().catch(e=>{document.getElementById('content').innerHTML=`<div class="loading">Error: ${e.message}</div>`;});
