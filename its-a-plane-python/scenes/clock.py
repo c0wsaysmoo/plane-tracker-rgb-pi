@@ -204,7 +204,8 @@ class ClockScene(object):
             except Exception:
                 iss = None
         if iss:
-            items.append((iss["text"], _ALERT_COLOURS.get(iss["color"], colours.WHITE)))
+            iss_color = colours.WHITE if iss.get("visible", False) else graphics.Color(60, 80, 140)
+            items.append((iss["text"], iss_color))
 
         # UV index alert
         try:

@@ -51,6 +51,22 @@ def _az_to_compass(az_rad):
     return _COMPASS[idx]
 
 
+def _is_visible(obs, iss_body, dt):
+    """Check if ISS is visible: observer in twilight/night AND ISS sunlit.
+
+    Visibility requires two conditions:
+    1. Sun is below -6° for the observer (at least civil twilight)
+    2. ISS is NOT in Earth's shadow (still catching sunlight)
+    """
+    obs.date = ephem.Date(dt)
+    sun = ephem.Sun(obs)
+    iss_body.compute(obs)
+    sun_alt_deg = math.degrees(float(sun.alt))
+    if sun_alt_deg > -6.0:
+        return False
+    return not iss_body.eclipsed
+
+
 # ── TLE management ──────────────────────────────────────────────────────────
 
 _tle_lines = None   # (name, line1, line2)
@@ -157,6 +173,14 @@ def _compute_passes(lat, lon):
             set_dt = ephem.Date(set_time).datetime().replace(tzinfo=timezone.utc)
             duration = (set_dt - rise_dt).total_seconds()
 
+            # Check visibility at culmination (fresh copies to avoid
+            # mutating the iteration observer)
+            vis_obs = ephem.Observer()
+            vis_obs.lat, vis_obs.lon = obs.lat, obs.lon
+            vis_obs.elevation = obs.elevation
+            vis_iss = ephem.readtle(name, line1, line2)
+            visible = _is_visible(vis_obs, vis_iss, max_time)
+
             passes.append({
                 "rise": {
                     "time": rise_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -170,6 +194,7 @@ def _compute_passes(lat, lon):
                     "elevation_deg": round(max_elev, 1),
                 },
                 "duration_sec": int(duration),
+                "visible": visible,
             })
             obs.date = set_time + ephem.minute
         except Exception as e:
@@ -181,8 +206,9 @@ def _compute_passes(lat, lon):
     with open(_CACHE_FILE, "w") as f:
         json.dump({"ts": time.time(), "passes": passes}, f)
 
-    logger.info(f"[ISS] Computed {len(passes)} passes (>={_MIN_ELEVATION}°) "
-                f"for next {_PREDICT_HOURS}h")
+    vis_count = sum(1 for p in passes if p.get("visible"))
+    logger.info(f"[ISS] Computed {len(passes)} passes (>={_MIN_ELEVATION}°, "
+                f"{vis_count} visible) for next {_PREDICT_HOURS}h")
     return passes
 
 
@@ -287,7 +313,8 @@ def get_iss_pass_data():
 
     Returns dict with keys:
         rise_time, set_time, rise_compass, set_compass, max_elevation,
-        duration_sec, progress (0.0-1.0), time_remaining_sec, is_active
+        duration_sec, progress (0.0-1.0), time_remaining_sec, is_active,
+        visible
     """
     passes = _refresh()
     if not passes:
@@ -311,13 +338,14 @@ def get_iss_pass_data():
         "progress": progress,
         "time_remaining_sec": time_remaining,
         "is_active": True,
+        "visible": active_pass.get("visible", False),
     }
 
 
 def get_iss_alert():
     """Return alert dict if an ISS pass is within 10 minutes, else None.
 
-    Returns {"text": "ISS 3m", "color": "white"} or None.
+    Returns {"text": "ISS 3m", "color": "white", "visible": bool} or None.
     When the pass is actively overhead, returns None (takeover scene handles it).
     """
     passes = _refresh()
@@ -343,10 +371,29 @@ def get_iss_alert():
 
             if seconds_until <= _ALERT_WINDOW:
                 mins = max(1, int(seconds_until / 60))
-                return {"text": f"ISS {mins}m", "color": "white"}
+                visible = p.get("visible", False)
+                return {"text": f"ISS {mins}m", "color": "white",
+                        "visible": visible}
 
         except (KeyError, ValueError, TypeError) as e:
             logger.debug(f"[ISS] Skipping pass with parse error: {e}")
             continue
 
     return None
+
+
+def is_iss_visible_now(lat, lon):
+    """Real-time visibility check for active pass display.
+
+    Returns True if the ISS is currently visible (observer in twilight/night
+    and ISS is sunlit).  Cheap — single ephem computation, <1ms.
+    """
+    if ephem is None or not _ensure_tle():
+        return False
+    name, line1, line2 = _tle_lines
+    iss = ephem.readtle(name, line1, line2)
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+    obs.elevation = 10
+    now = datetime.now(timezone.utc)
+    return _is_visible(obs, iss, now)

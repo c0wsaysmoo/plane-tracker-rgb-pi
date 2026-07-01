@@ -30,15 +30,28 @@ TITLE_FONT = fonts.extrasmall       # 4x6
 INFO_FONT = fonts.extrasmall        # 4x6
 COUNTDOWN_FONT = fonts.small        # 5x8
 
-# Colours
-TITLE_COLOUR = colours.WHITE
-TITLE_DIM = colours.LIGHT_GREY
-TRAIL_COLOUR = graphics.Color(60, 50, 20)   # dim gold
-FLOWN_COLOUR = colours.LIMEGREEN
-REMAINING_COLOUR = colours.LIGHT_BLUE
-MARKER_COLOUR = colours.WHITE
-INFO_COLOUR = colours.LIGHT_ORANGE
-COUNTDOWN_COLOUR = colours.YELLOW
+# Colour themes — warm (visible) vs cool (not visible)
+THEME_VISIBLE = {
+    "title": colours.WHITE,
+    "title_dim": colours.LIGHT_GREY,
+    "trail": graphics.Color(60, 50, 20),        # gold
+    "flown": colours.LIMEGREEN,
+    "remaining": colours.LIGHT_BLUE,
+    "marker": colours.WHITE,
+    "info": colours.LIGHT_ORANGE,
+    "countdown": colours.YELLOW,
+}
+
+THEME_DIM = {
+    "title": graphics.Color(100, 130, 180),      # steel blue
+    "title_dim": graphics.Color(50, 65, 90),      # dark blue
+    "trail": graphics.Color(30, 35, 60),           # dim navy
+    "flown": graphics.Color(40, 100, 100),         # dim teal
+    "remaining": graphics.Color(60, 60, 70),       # dark grey
+    "marker": graphics.Color(140, 140, 160),       # muted white
+    "info": graphics.Color(120, 120, 130),          # slate grey
+    "countdown": graphics.Color(80, 160, 170),      # dim cyan
+}
 
 # Layout positions
 TITLE_Y = 5           # baseline for "ISS OVERHEAD"
@@ -119,12 +132,19 @@ class ISSPassScene(object):
         progress = iss["progress"]
         time_remaining = iss["time_remaining_sec"]
 
-        # --- 1. "ISS OVERHEAD" blinking title (rows 0-4) ---
+        # Real-time visibility check (warm theme if visible, cool if not)
+        from utilities.iss import is_iss_visible_now
+        import config as cfg
+        visible = is_iss_visible_now(cfg.LOCATION_HOME[0], cfg.LOCATION_HOME[1])
+        theme = THEME_VISIBLE if visible else THEME_DIM
+
+        # --- 1. Title (rows 0-4) ---
         # Blink: bright 1s, dim 1s (count ticks every frame at 10fps)
-        title_colour = TITLE_COLOUR if ((count // int(frames.PER_SECOND)) % 2 == 0) else TITLE_DIM
-        title_text = "ISS OVERHEAD"
-        # Center: 12 chars * 4px = 48px, offset = (64-48)/2 = 8
-        graphics.DrawText(self.canvas, TITLE_FONT, 8, TITLE_Y, title_colour, title_text)
+        title_colour = theme["title"] if ((count // int(frames.PER_SECOND)) % 2 == 0) else theme["title_dim"]
+        title_text = "ISS VISIBLE" if visible else "ISS OVERHEAD"
+        title_width = len(title_text) * 4
+        title_x = max(0, (screen.WIDTH - title_width) // 2)
+        graphics.DrawText(self.canvas, TITLE_FONT, title_x, TITLE_Y, title_colour, title_text)
 
         # --- 2. ISS sprite moving left-to-right (rows 5-12) ---
         pixels, sprite_w, sprite_h = _load_iss_sprite()
@@ -133,9 +153,10 @@ class ISSPassScene(object):
         sprite_x = max(0, min(usable_width, sprite_x))
 
         # Draw trail dots behind sprite
+        trail = theme["trail"]
         for tx in range(0, sprite_x, 2):
             self.canvas.SetPixel(tx, SPRITE_MID_Y,
-                                 TRAIL_COLOUR.red, TRAIL_COLOUR.green, TRAIL_COLOUR.blue)
+                                 trail.red, trail.green, trail.blue)
 
         # Draw ISS sprite
         if pixels:
@@ -153,7 +174,7 @@ class ISSPassScene(object):
         # Center the text
         info_width = len(info_text) * 4
         info_x = max(0, (screen.WIDTH - info_width) // 2)
-        graphics.DrawText(self.canvas, INFO_FONT, info_x, INFO_Y, INFO_COLOUR, info_text)
+        graphics.DrawText(self.canvas, INFO_FONT, info_x, INFO_Y, theme["info"], info_text)
 
         # --- 4. Progress bar (rows 22-24) ---
         bar_width = screen.WIDTH - 4  # leave 2px margin each side
@@ -163,9 +184,9 @@ class ISSPassScene(object):
         for x in range(bar_width):
             bx = bar_start + x
             if x < flown_px:
-                colour = FLOWN_COLOUR
+                colour = theme["flown"]
             else:
-                colour = REMAINING_COLOUR
+                colour = theme["remaining"]
             # Dashed line: draw every other 2px group
             if (x // 2) % 2 == 0:
                 self.canvas.SetPixel(bx, PROGRESS_Y,
@@ -173,7 +194,7 @@ class ISSPassScene(object):
 
         # + marker at current position
         marker_x = bar_start + min(flown_px, bar_width - 1)
-        _draw_plus_marker(self.canvas, marker_x, PROGRESS_Y, MARKER_COLOUR)
+        _draw_plus_marker(self.canvas, marker_x, PROGRESS_Y, theme["marker"])
 
         # --- 5. Countdown (rows 27-31) ---
         mins = time_remaining // 60
@@ -183,4 +204,4 @@ class ISSPassScene(object):
         countdown_width = len(countdown_text) * 5
         countdown_x = max(0, (screen.WIDTH - countdown_width) // 2)
         graphics.DrawText(self.canvas, COUNTDOWN_FONT, countdown_x, COUNTDOWN_Y,
-                          COUNTDOWN_COLOUR, countdown_text)
+                          theme["countdown"], countdown_text)
