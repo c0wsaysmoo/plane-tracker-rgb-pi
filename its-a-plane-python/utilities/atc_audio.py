@@ -52,8 +52,19 @@ _OUTPUT_CACHE = os.path.join(_DATA_DIR, "atc_outputs.json")
 # Overhead traffic feed — written by utilities/overhead.py at the project root.
 _OVERHEAD_FILE = os.path.join(_BASE_DIR, "current_overhead.json")
 
-# LiveATC direct stream host (load-balanced elsewhere; hlisten.php redirects).
-_LIVEATC_LISTEN = "https://www.liveatc.net/hlisten.php?mount="
+# LiveATC direct stream host. d.liveatc.net 302s to a load-balanced icecast
+# edge (sN-xxx.liveatc.net) serving audio/mpeg. Do NOT use www.liveatc.net's
+# hlisten.php — that is an HTML player page behind a Cloudflare challenge and
+# an <audio> element pointed at it gets a 403 page, not a stream.
+_LIVEATC_LISTEN = "https://d.liveatc.net/"
+
+# The edges 403 the default python-requests User-Agent, and aggressive
+# probing gets the source IP banned outright (observed live) — hence the
+# browser UA below and the probe cooldown circuit breaker.
+_UA_HEADERS = {"User-Agent": ("Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")}
+_PROBE_COOLDOWN_SEC = 900     # stop all probing this long after any 403
+_DEAD_FEED_TTL = 6 * 3600     # re-check a dead feed after 6h
 
 # Auto-tune tuning (roadmap O1 "Auto" mode).
 _MIN_DWELL_SEC = 180          # 3-minute minimum before switching stations
@@ -149,6 +160,11 @@ class ATCAudioManager:
         self._outputs_cache = None
         self._outputs_ts = 0.0
 
+        # Probe circuit breaker + runtime dead-feed memory (see _probe_feed).
+        self._probe_cooldown_until = 0.0
+        self._dead_feeds = {}                          # feed_code -> ts marked dead
+        self._station_checked = 0.0                    # last current-station verify
+
         # Config snapshot (refreshed each tick from config module).
         self._home = (0.0, 0.0)
         self._quiet = ("22:00", "06:00")
@@ -205,28 +221,48 @@ class ATCAudioManager:
         return _LIVEATC_LISTEN + feed_code if feed_code else ""
 
     def _probe_feed(self, feed_code, timeout=2.0):
-        """Return True if the feed appears live. Cheap HEAD first, then a
-        ranged GET (icecast often 200s on GET but 404/hangs on HEAD)."""
+        """Probe a mount with ONE ranged GET. Returns True (alive), False
+        (definitely dead: 404 etc.), or None (unknown — probing is in the
+        post-403 cooldown; do not treat as dead and do not cache).
+        No HEAD attempt: icecast HEAD is unreliable and every extra request
+        raises the ban risk."""
         if requests is None or not feed_code:
             return False
+        if _now() < self._probe_cooldown_until:
+            return None
         url = self._stream_url(feed_code)
-        # 1) cheap HEAD
-        try:
-            r = requests.head(url, timeout=timeout, allow_redirects=True)
-            if r.status_code < 300 and "audio" in (r.headers.get("Content-Type", "")):
-                return True
-        except Exception:
-            pass
-        # 2) ranged GET — the authoritative check
         try:
             r = requests.get(url, timeout=timeout, allow_redirects=True,
-                             headers={"Range": "bytes=0-256"}, stream=True)
+                             headers={**_UA_HEADERS, "Range": "bytes=0-256"},
+                             stream=True)
+            sc = r.status_code
             ct = r.headers.get("Content-Type", "")
-            ok = (200 <= r.status_code < 300) and ("audio" in ct or "ogg" in ct or "mpeg" in ct)
             r.close()
-            return ok
+            if sc == 403:
+                # Rate limit / edge ban — stop ALL probing for a while.
+                self._probe_cooldown_until = _now() + _PROBE_COOLDOWN_SEC
+                return None
+            return (200 <= sc < 300) and ("audio" in ct or "ogg" in ct or "mpeg" in ct)
         except Exception:
             return False
+
+    def _feed_ok(self, code):
+        """Gate a candidate feed before tuning to it. Definitely-dead feeds
+        are remembered for _DEAD_FEED_TTL; unknown (cooldown) is optimistic —
+        never block playback on an unverifiable probe. The current station is
+        trusted without a re-probe."""
+        if not code:
+            return False
+        ts = self._dead_feeds.get(code)
+        if ts and (_now() - ts) < _DEAD_FEED_TTL:
+            return False
+        if code == self._station:
+            return True
+        v = self._probe_feed(code)
+        if v is False:
+            self._dead_feeds[code] = _now()
+            return False
+        return True
 
     def _feeds_for_airport(self, icao):
         """Return {twr, app, ...} feed dict for an airport: seed first, then
@@ -244,6 +280,10 @@ class ATCAudioManager:
             ttl = 30 * 86400 if cached.get("feeds") else 86400
             if (_now() - cached.get("ts", 0)) < ttl:
                 return cached.get("feeds", {})
+        # During the post-403 cooldown, don't probe and — critically — don't
+        # cache an empty result as "no feeds": we simply can't know right now.
+        if _now() < self._probe_cooldown_until:
+            return {}
         # Probe common suffixes. LiveATC mounts are usually the lowercase ICAO
         # (kbos_twr) but sometimes drop the K. Our K-prefix guess from a 3-letter
         # code is wrong for Alaska/Hawaii (PANC/PHNL, not KANC/KHNL), so a
@@ -256,10 +296,15 @@ class ATCAudioManager:
         for suffix in _PROBE_SUFFIXES:
             for b in bases:
                 code = f"{b}{suffix}"
-                if self._probe_feed(code):
+                v = self._probe_feed(code)
+                if v:
                     kind = "app" if "app" in suffix or "dep" in suffix else "twr"
                     found.setdefault(kind, code)
                     break
+                if v is None:
+                    # Hit the 403 cooldown mid-sweep: results are incomplete —
+                    # return what we have but cache nothing.
+                    return found
         self._discovered[icao] = {"feeds": found, "ts": _now()}
         _atomic_write(_DISCOVERED_CACHE, self._discovered)
         return found
@@ -284,15 +329,17 @@ class ATCAudioManager:
         icao = _to_icao(self._home_code)
         if icao:
             feeds = self._feeds_for_airport(icao)
-            code = feeds.get("twr") or feeds.get("app") or ""
-            if code:
-                return code, icao
+            for kind in ("twr", "app"):
+                code = feeds.get(kind, "")
+                if code and self._feed_ok(code):
+                    return code, icao
         near, dist = self._nearest_seed_airport()
         if near and dist <= 150:
             feeds = self._seed.get(near, {}).get("feeds", {})
-            code = feeds.get("twr") or feeds.get("app") or ""
-            if code:
-                return code, near
+            for kind in ("twr", "app"):
+                code = feeds.get(kind, "")
+                if code and self._feed_ok(code):
+                    return code, near
         return "", None
 
     # ── Auto-tune ────────────────────────────────────────────────────────
@@ -335,18 +382,19 @@ class ATCAudioManager:
             return self._fallback_station_locked()
 
         # Try airports in score order — the top scorer may have no LiveATC
-        # feed at all (e.g. a small GA field or heliport); fall
-        # through to the next-best, then to the location fallback.
+        # feed at all (e.g. a small GA/heliport field); fall through to the
+        # next-best, then to the location fallback. Every candidate passes
+        # _feed_ok so a stale/wrong mount name self-heals instead of tuning
+        # the player to a 404.
         for icao in sorted(scores, key=scores.get, reverse=True):
             feeds = self._feeds_for_airport(icao)
             if not feeds:
                 continue
-            if prefer_app.get(icao):
-                code = feeds.get("app") or feeds.get("twr") or ""
-            else:
-                code = feeds.get("twr") or feeds.get("app") or ""
-            if code:
-                return code, icao
+            order = ("app", "twr") if prefer_app.get(icao) else ("twr", "app")
+            for kind in order:
+                code = feeds.get(kind, "")
+                if code and self._feed_ok(code):
+                    return code, icao
         return self._fallback_station_locked()
 
     def _station_airport(self):
@@ -610,6 +658,16 @@ class ATCAudioManager:
                 return
 
             if self._mode == "auto":
+                # Re-verify the current station every 10 min — a persisted or
+                # previously-picked mount can be dead (or die mid-listen);
+                # clearing it lets the next pick self-heal. _feed_ok trusts
+                # the current station, so this is the only recovery path.
+                if self._station and (_now() - self._station_checked) > 600:
+                    self._station_checked = _now()
+                    if self._probe_feed(self._station) is False:
+                        self._dead_feeds[self._station] = _now()
+                        self._station = ""
+
                 # Quiet hours gate — auto mode must not start audio at 2am.
                 # A start() during the window sets _quiet_override, so "play
                 # again" wins until the window ends or an explicit stop().
