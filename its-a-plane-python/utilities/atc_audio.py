@@ -335,7 +335,7 @@ class ATCAudioManager:
             return self._fallback_station_locked()
 
         # Try airports in score order — the top scorer may have no LiveATC
-        # feed at all (e.g. a small GA/heliport field like KHTO); fall
+        # feed at all (e.g. a small GA field or heliport); fall
         # through to the next-best, then to the location fallback.
         for icao in sorted(scores, key=scores.get, reverse=True):
             feeds = self._feeds_for_airport(icao)
