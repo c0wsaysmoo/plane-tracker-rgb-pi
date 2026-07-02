@@ -1023,10 +1023,14 @@ def atc_outputs():
 
 @app.get("/api/atc/stations")
 def atc_stations():
+    """Full station list; ?nearby=1 returns distance-ordered airport/feed
+    groups (passive — never probes) for building selector UIs."""
     try:
+        if request.args.get("nearby") in ("1", "true", "yes"):
+            return jsonify({"nearby": _atc().nearby_stations()})
         return jsonify({"stations": _atc().stations()})
     except Exception as e:
-        return jsonify({"stations": [], "error": str(e)})
+        return jsonify({"stations": [], "nearby": [], "error": str(e)})
 
 @app.post("/api/atc/start")
 def atc_start():

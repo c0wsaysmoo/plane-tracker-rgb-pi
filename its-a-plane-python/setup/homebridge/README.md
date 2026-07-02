@@ -16,7 +16,7 @@ sudo chmod +x /var/lib/homebridge/scripts/atc-*.sh
 
 If Homebridge runs on a DIFFERENT host than the tracker, edit the scripts and
 replace `localhost:8080` with the tracker Pi's address (e.g.
-`http://192.168.1.50:8080`).
+`http://<tracker-pi>:8080`).
 
 ## homebridge-script2 accessory (matches the nightlight setup)
 
@@ -30,6 +30,34 @@ replace `localhost:8080` with the tracker Pi's address (e.g.
     "on_value": "true"
 }
 ```
+
+## Matter exposure (Google Home + Apple Home)
+
+The same on/off switch can also be exposed as a **Matter device**: define a
+RESTful switch in Home Assistant pointing at `/api/atc/start|stop|status`,
+then bridge it with [Matterbridge](https://github.com/Luligu/matterbridge)'s
+`matterbridge-hass` plugin (entity whitelist) — Google Home and Apple Home
+both pair to it natively. The scripts below are the plain-Homebridge
+alternative for HomeKit-only setups.
+
+## Recommended switch semantics
+
+**The switch plays out of the tracker's OWN speaker** (the Pi's USB speaker):
+
+```json
+"on": "/var/lib/homebridge/scripts/atc-on.sh usb"
+```
+
+That makes the tile deterministic — ON always means "the tracker starts
+talking", regardless of what output someone last picked in the web UI.
+Browser/Chromecast/AirPlay listening stays a web-UI choice (mirror bar icons
+or config page).
+
+`atc-on.sh` accepts any output id (see `GET /api/atc/outputs`), so per-room
+switches ("ATC Pool Room" → `atc-on.sh 'chromecast:<uuid>'`) are POSSIBLE —
+but with one shared radio they get clunky (last one wins, all tiles show ON
+together), so the deliberate setup is: one switch = own speaker, everything
+else via the web UI.
 
 ## Alternative: homebridge-http-switch (no scripts needed)
 
