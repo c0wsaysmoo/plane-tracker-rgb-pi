@@ -992,5 +992,121 @@ def api_logs():
         return jsonify({"lines": [], "error": str(e)})
 
 
+# ---- ATC radio (LiveATC audio auto-tuned to overhead traffic) ----
+# Reads current_overhead.json (written by utilities/overhead.py). Clients pull
+# the LiveATC stream directly — nothing is proxied or rebroadcast here.
+
+def _atc():
+    """Lazily get the ATC audio manager singleton (never fails hard)."""
+    from utilities.atc_audio import get_manager
+    return get_manager()
+
+@app.get("/api/atc/status")
+def atc_status():
+    try:
+        return jsonify(_atc().status())
+    except Exception as e:
+        return jsonify({"error": str(e), "enabled": False, "mode": "off"}), 200
+
+@app.get("/api/atc/outputs")
+def atc_outputs():
+    """Unified output discovery: [{id, name, type}]. ?rescan=1 forces a fresh
+    mDNS/AirPlay scan."""
+    try:
+        force = request.args.get("rescan") in ("1", "true", "yes")
+        return jsonify({"outputs": _atc().list_outputs(force_rescan=force)})
+    except Exception as e:
+        return jsonify({"outputs": [
+            {"id": "browser", "name": "This browser", "type": "browser"},
+            {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
+        ], "error": str(e)})
+
+@app.get("/api/atc/stations")
+def atc_stations():
+    try:
+        return jsonify({"stations": _atc().stations()})
+    except Exception as e:
+        return jsonify({"stations": [], "error": str(e)})
+
+@app.post("/api/atc/start")
+def atc_start():
+    try:
+        return jsonify(_atc().start())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/stop")
+def atc_stop():
+    try:
+        return jsonify(_atc().stop())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/mode")
+def atc_mode():
+    data = request.get_json(force=True) or {}
+    mode = (data.get("mode") or "").strip().lower()
+    try:
+        return jsonify(_atc().set_mode(mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/station")
+def atc_station():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(_atc().set_station(data.get("station", "")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/volume")
+def atc_volume():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(_atc().set_volume(data.get("volume", 70)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/select-output")
+def atc_select_output():
+    data = request.get_json(force=True) or {}
+    out = (data.get("output") or "").strip()
+    if not out:
+        return jsonify({"error": "output required"}), 400
+    try:
+        return jsonify(_atc().select_output(out))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ATC auto-tune background thread — advances the auto-tuner off the LED display
+# hot loop. Reads current_overhead.json; spawns/tears down Pi-side audio
+# backends (mpv/Chromecast/AirPlay) only when a non-browser output is playing.
+_atc_ticker_started = False
+
+
+def _start_atc_ticker():
+    global _atc_ticker_started
+    if _atc_ticker_started:
+        return
+    _atc_ticker_started = True
+    import threading as _t
+
+    def _loop():
+        while True:
+            try:
+                _atc().tick()
+            except Exception:
+                pass
+            time.sleep(5)
+
+    try:
+        t = _t.Thread(target=_loop, name="atc-ticker", daemon=True)
+        t.start()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
+    _start_atc_ticker()
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)

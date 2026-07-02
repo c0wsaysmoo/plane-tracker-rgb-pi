@@ -141,6 +141,32 @@
   }
   .zoom-bar label { color: var(--amber-dim); white-space: nowrap; }
   .zoom-bar span  { color: var(--amber-bright); min-width: 3ch; text-align: right; }
+
+  .atc-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--amber-dim);
+  }
+  .atc-bar label { color: var(--amber-dim); white-space: nowrap; }
+  .atc-bar .atc-icon { font-size: 18px; }
+  .atc-bar .atc-label { color: var(--amber-bright); }
+  .atc-bar button {
+    cursor: pointer;
+    background: #1a1a1a;
+    color: var(--amber-bright);
+    border: 1px solid var(--amber);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 16px;
+    padding: 3px 12px;
+    letter-spacing: 1px;
+  }
+  .atc-bar #atc-volume { width: 120px; height: 4px; accent-color: var(--amber); }
   #zoom-slider {
     -webkit-appearance: none;
     appearance: none;
@@ -224,6 +250,19 @@
       background:#1a1a1a;color:#ffae42;border:1px solid #ffae42;border-radius:4px;
       font-family:inherit;font-size:12px;padding:4px 10px;letter-spacing:1px;">
       ⧉ POP OUT</button>
+  </div>
+
+  <!-- ATC radio bar — plays LiveATC audio for the airport most relevant to
+       overhead traffic. Browser output plays the stream directly here; the
+       Pi-side outputs (USB / Chromecast / AirPlay) are driven server-side via
+       /api/atc/*. The bar hides itself unless ATC is enabled in config. -->
+  <div class="atc-bar" id="atc-bar" style="display:none">
+    <span class="atc-icon">📻</span>
+    <button id="atc-toggle" type="button">PLAY</button>
+    <span id="atc-label" class="atc-label">—</span>
+    <label style="margin-left:auto">VOL</label>
+    <input id="atc-volume" type="range" min="0" max="100" value="70" step="1">
+    <audio id="atc-audio" preload="none" crossorigin="anonymous"></audio>
   </div>
 
 </div>
@@ -1023,9 +1062,78 @@ function updateInfoBar() {
   }
 }
 
+// ── ATC radio ─────────────────────────────────────────────────────────────────────
+// Polls /api/atc/status and, when browser output is selected, plays the LiveATC
+// stream directly in this tab's <audio> element. Play/stop/volume are proxied to
+// the server so the state stays consistent with the config UI and HomeKit switch.
+const atcBar    = document.getElementById('atc-bar');
+const atcAudio  = document.getElementById('atc-audio');
+const atcToggle = document.getElementById('atc-toggle');
+const atcLabel  = document.getElementById('atc-label');
+const atcVolume = document.getElementById('atc-volume');
+let atcState = { output: 'browser', stream_url: '', playing: false, station: '' };
+let atcUserGesture = false;   // browsers block autoplay until the user clicks
+
+function atcApplyAudio() {
+  const wantBrowser = atcState.output === 'browser';
+  const url = atcState.stream_url || '';
+  if (wantBrowser && atcState.playing && url) {
+    if (atcAudio.src !== url) { atcAudio.src = url; }
+    atcAudio.volume = Math.max(0, Math.min(1, (parseInt(atcVolume.value, 10) || 70) / 100));
+    if (atcAudio.paused && atcUserGesture) {
+      atcAudio.play().catch(() => {});
+    }
+  } else if (!atcAudio.paused) {
+    atcAudio.pause();
+  }
+}
+
+async function fetchAtc() {
+  let s;
+  try { s = await fetch('/api/atc/status').then(r => r.json()); }
+  catch (e) { return; }
+  if (!s || s.enabled === false) { atcBar.style.display = 'none'; return; }
+  atcBar.style.display = 'flex';
+  atcState = {
+    output: s.output || 'browser',
+    stream_url: s.stream_url || '',
+    playing: !!s.playing,
+    station: s.station || '',
+  };
+  atcVolume.value = (s.volume != null) ? s.volume : atcVolume.value;
+  const airport = s.station_airport ? s.station_airport + ' ' : '';
+  const modeTag = s.mode && s.mode !== 'off' ? s.mode.toUpperCase() : 'OFF';
+  atcLabel.textContent = atcState.station
+    ? `${airport}${atcState.station} [${modeTag}]`
+    : `— [${modeTag}]`;
+  atcToggle.textContent = atcState.playing ? 'STOP' : 'PLAY';
+  atcApplyAudio();
+}
+
+atcToggle.addEventListener('click', async () => {
+  atcUserGesture = true;   // this click satisfies the browser autoplay gate
+  const ep = atcState.playing ? '/api/atc/stop' : '/api/atc/start';
+  try { await fetch(ep, { method: 'POST' }); } catch (e) {}
+  fetchAtc();
+});
+
+atcVolume.addEventListener('change', async () => {
+  const v = parseInt(atcVolume.value, 10) || 0;
+  atcAudio.volume = Math.max(0, Math.min(1, v / 100));
+  try {
+    await fetch('/api/atc/volume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volume: v }),
+    });
+  } catch (e) {}
+});
+
 // ── Boot ────────────────────────────────────────────────────────────────────────
 fetchData();
+fetchAtc();
 setInterval(fetchData, 5000);
+setInterval(fetchAtc, 5000);
 setInterval(render, 67);   // ~15fps matches display frame rate
 </script>
 </body>
