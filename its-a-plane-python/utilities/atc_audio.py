@@ -11,8 +11,9 @@ airport most relevant to current overhead traffic. Output can be:
 
 Design constraints (see docs/Flight Tracker - Feature Roadmap.md, O1 review notes):
   * Quiet hours: auto mode never starts audio in the night window; manual may.
-  * Probing: ranged GET (Range: bytes=0-256, 2s) — icecast mounts often 200 on
-    GET but 404/hang on HEAD; HEAD is only the first cheap attempt.
+  * Probing: ONE ranged GET (Range: bytes=0-256, 2s) with a browser UA; 404 is
+    the only "dead" verdict, network errors are unknown, and any 403 opens a
+    15-min circuit breaker (LiveATC bans IPs that probe aggressively).
   * One poll: a compact atc dict is exposed via display_state() and folded into
     /api/display-state for the mirror; /api/atc/status stays for the config UI.
   * No proxying: clients are pointed straight at LiveATC (personal-use streaming).
@@ -147,12 +148,10 @@ class ATCAudioManager:
 
         # Auto-tune bookkeeping.
         self._current_since = 0.0
-        self._last_scores = {}                         # icao -> (score, ts)
 
         # Backend process handles (spawned on demand only).
         self._mpv_proc = None
         self._cast_device = None                       # pychromecast device
-        self._cast_thread_stop = None
         self._airplay_stop = None                      # threading.Event for RAOP
         self._airplay_thread = None
 
@@ -217,7 +216,7 @@ class ATCAudioManager:
     # ── Station discovery ────────────────────────────────────────────────
     def _stream_url(self, feed_code):
         """Client-facing stream URL. Clients (browser/cast/airplay) hit LiveATC
-        directly; we never proxy. hlisten.php redirects to a live edge mount."""
+        directly; we never proxy. d.liveatc.net 302s to the live icecast edge."""
         return _LIVEATC_LISTEN + feed_code if feed_code else ""
 
     def _probe_feed(self, feed_code, timeout=2.0):
@@ -242,9 +241,16 @@ class ATCAudioManager:
                 # Rate limit / edge ban — stop ALL probing for a while.
                 self._probe_cooldown_until = _now() + _PROBE_COOLDOWN_SEC
                 return None
-            return (200 <= sc < 300) and ("audio" in ct or "ogg" in ct or "mpeg" in ct)
+            if 200 <= sc < 300:
+                return "audio" in ct or "ogg" in ct or "mpeg" in ct
+            if sc == 404:
+                return False          # mount genuinely doesn't exist
+            return None               # 5xx/302-to-nowhere etc. — unknown
         except Exception:
-            return False
+            # Timeouts / connection-refused edges are NETWORK problems, not
+            # proof the mount is dead — post-ban flakiness wrongly dead-marked
+            # healthy feeds (incl. kjfk_twr) for 6h. Unknown, never False.
+            return None
 
     def _feed_ok(self, code):
         """Gate a candidate feed before tuning to it. Definitely-dead feeds
@@ -309,23 +315,14 @@ class ATCAudioManager:
         _atomic_write(_DISCOVERED_CACHE, self._discovered)
         return found
 
-    def _nearest_seed_airport(self):
-        """Nearest seed airport to HOME, with its distance in miles."""
-        best, best_d = None, 1e18
-        hlat, hlon = self._home
-        for icao, info in self._seed.items():
-            d = _haversine_mi(hlat, hlon, info.get("lat", 0), info.get("lon", 0))
-            if d < best_d:
-                best, best_d = icao, d
-        return best, best_d
-
     def _fallback_station_locked(self):
         """Default station when no overhead traffic drives the choice.
         Location-based, in order: (1) the HOME airport (JOURNEY_CODE_SELECTED)
         — probing covers airports outside the seed file, so this works
-        anywhere LiveATC has a feed; (2) the nearest seed airport, but only
-        within 150 mi — a tower 500 miles away is noise, not ambience.
-        Returns (feed_code, icao) or ("", None)."""
+        anywhere LiveATC has a feed; (2) seed airports within 150 mi tried in
+        DISTANCE ORDER — the single nearest may have no live feeds (KISP's
+        seed mounts don't exist), so keep walking outward. Beyond 150 mi a
+        tower is noise, not ambience. Returns (feed_code, icao) or ("", None)."""
         icao = _to_icao(self._home_code)
         if icao:
             feeds = self._feeds_for_airport(icao)
@@ -333,13 +330,18 @@ class ATCAudioManager:
                 code = feeds.get(kind, "")
                 if code and self._feed_ok(code):
                     return code, icao
-        near, dist = self._nearest_seed_airport()
-        if near and dist <= 150:
-            feeds = self._seed.get(near, {}).get("feeds", {})
+        hlat, hlon = self._home
+        by_dist = sorted(
+            (_haversine_mi(hlat, hlon, info.get("lat", 0), info.get("lon", 0)), icao2)
+            for icao2, info in self._seed.items())
+        for dist, icao2 in by_dist:
+            if dist > 150:
+                break
+            feeds = self._seed.get(icao2, {}).get("feeds", {})
             for kind in ("twr", "app"):
                 code = feeds.get(kind, "")
                 if code and self._feed_ok(code):
-                    return code, near
+                    return code, icao2
         return "", None
 
     # ── Auto-tune ────────────────────────────────────────────────────────
@@ -522,10 +524,14 @@ class ATCAudioManager:
         with self._lock:
             browser_cfg = self._output == "browser" and self._mode != "off"
             return {
+                "enabled": bool(self._enabled),
                 "mode": self._mode,
                 "station": self._station,
                 "stream_url": self._stream_url(self._station) if browser_cfg else "",
-                "playing": bool(browser_cfg and self._playing),
+                # True whenever the server is playing on ANY output — the
+                # mirror needs cast/usb state for its play button and LIVE tag
+                # (browser playback additionally requires stream_url above).
+                "playing": bool(self._playing and self._mode != "off"),
                 "in_quiet_hours": self._in_quiet_hours(),
                 "output": self._output,
                 "volume": self._volume,
@@ -899,6 +905,43 @@ class ATCAudioManager:
                 out.append({"code": code, "airport": icao,
                             "name": info.get("name", icao), "type": kind})
         return out
+
+    _KIND_LABELS = {"twr": "Tower", "app": "Approach"}
+
+    def nearby_stations(self, limit=8):
+        """Distance-ordered airport/feed list for the selector UI (O2).
+        PASSIVE: built from the seed, the discovery cache, and dead-feed
+        memory only — listing must never generate LiveATC traffic. Dead-marked
+        mounts are hidden so the dropdown never offers silence."""
+        with self._lock:
+            hlat, hlon = self._home
+            def alive(code):
+                ts = self._dead_feeds.get(code)
+                return not (ts and (_now() - ts) < _DEAD_FEED_TTL)
+            entries = []
+            # Home airport first when discovery has already found feeds for it.
+            home_icao = _to_icao(self._home_code)
+            if home_icao and home_icao not in self._seed:
+                cached = self._discovered.get(home_icao, {}).get("feeds", {})
+                if cached:
+                    entries.append((0.0, home_icao,
+                                    {"name": self._home_code, "feeds": cached}))
+            for icao, info in self._seed.items():
+                d = _haversine_mi(hlat, hlon, info.get("lat", 0), info.get("lon", 0))
+                entries.append((d, icao, info))
+            entries.sort(key=lambda t: t[0])
+            out = []
+            for d, icao, info in entries:
+                if d > 150 or len(out) >= limit:
+                    break
+                feeds = [{"kind": k, "code": c,
+                          "label": self._KIND_LABELS.get(k, k)}
+                         for k, c in info.get("feeds", {}).items()
+                         if c and alive(c)]
+                if feeds:
+                    out.append({"icao": icao, "name": info.get("name", icao),
+                                "dist_mi": int(round(d)), "feeds": feeds})
+            return out
 
 
 # ── Module-level helpers ────────────────────────────────────────────────
