@@ -992,5 +992,194 @@ def api_logs():
         return jsonify({"lines": [], "error": str(e)})
 
 
+# ---- ATC radio (LiveATC audio auto-tuned to overhead traffic) ----
+# Reads current_overhead.json (written by utilities/overhead.py). Clients pull
+# the LiveATC stream directly — nothing is proxied or rebroadcast here.
+
+def _atc():
+    """Lazily get the ATC audio manager singleton (never fails hard)."""
+    from utilities.atc_audio import get_manager
+    return get_manager()
+
+@app.get("/api/atc/status")
+def atc_status():
+    try:
+        return jsonify(_atc().status())
+    except Exception as e:
+        return jsonify({"error": str(e), "enabled": False, "mode": "off"}), 200
+
+@app.get("/api/atc/outputs")
+def atc_outputs():
+    """Unified output discovery: [{id, name, type}]. ?rescan=1 forces a fresh
+    mDNS/AirPlay scan."""
+    try:
+        force = request.args.get("rescan") in ("1", "true", "yes")
+        return jsonify({"outputs": _atc().list_outputs(force_rescan=force)})
+    except Exception as e:
+        return jsonify({"outputs": [
+            {"id": "browser", "name": "This browser", "type": "browser"},
+            {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
+        ], "error": str(e)})
+
+@app.get("/api/atc/stations")
+def atc_stations():
+    """Full station list; ?nearby=1 returns distance-ordered airport/feed
+    groups (passive — never probes) for building selector UIs."""
+    try:
+        if request.args.get("nearby") in ("1", "true", "yes"):
+            return jsonify({"nearby": _atc().nearby_stations()})
+        return jsonify({"stations": _atc().stations()})
+    except Exception as e:
+        return jsonify({"stations": [], "nearby": [], "error": str(e)})
+
+@app.post("/api/atc/start")
+def atc_start():
+    try:
+        return jsonify(_atc().start())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/stop")
+def atc_stop():
+    try:
+        return jsonify(_atc().stop())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/mode")
+def atc_mode():
+    data = request.get_json(force=True) or {}
+    mode = (data.get("mode") or "").strip().lower()
+    try:
+        return jsonify(_atc().set_mode(mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/station")
+def atc_station():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(_atc().set_station(data.get("station", "")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/atc/volume")
+def atc_volume():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(_atc().set_volume(data.get("volume", 70)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/atc/relay")
+def atc_relay():
+    """LOOPBACK-ONLY stream fetch adapter. pyatv (AirPlay) cannot set a
+    User-Agent and LiveATC's edges 403 library UAs; its decoder also cannot
+    init on a trickling live MP3 — so the Pi's own player fetches through
+    here (browser UA + WAV transcode via ffmpeg when available). NOT a
+    rebroadcast: any non-loopback client is refused."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return jsonify({"error": "loopback only"}), 403
+    code = (request.args.get("code") or "").strip()
+    if not code or not code.replace("_", "").isalnum():
+        return jsonify({"error": "bad code"}), 400
+    from flask import Response as _Resp
+    ua = ("Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+    import shutil as _sh
+    if _sh.which("ffmpeg"):
+        import subprocess as _sp
+        proc = _sp.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-user_agent", ua, "-i", f"https://d.liveatc.net/{code}",
+             "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+             "-f", "wav", "-"],
+            stdout=_sp.PIPE, stderr=_sp.DEVNULL)
+        def gen():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        return _Resp(gen(), content_type="audio/wav")
+    import requests as _rq
+    up = _rq.get(f"https://d.liveatc.net/{code}", stream=True, timeout=10,
+                 headers={"User-Agent": ua})
+    def gen():
+        try:
+            for chunk in up.iter_content(8192):
+                yield chunk
+        finally:
+            up.close()
+    return _Resp(gen(), status=up.status_code,
+                 content_type=up.headers.get("Content-Type", "audio/mpeg"))
+
+
+@app.post("/api/atc/airplay/pair")
+def atc_airplay_pair():
+    """One-time pairing for AirPlay devices that ask for a code:
+    {output: id} begins (device shows PIN) -> {pin: "1234"} finishes;
+    {cancel: true} aborts."""
+    data = request.get_json(force=True) or {}
+    try:
+        if data.get("cancel"):
+            return jsonify(_atc().airplay_pair_cancel())
+        if data.get("pin"):
+            return jsonify(_atc().airplay_pair_finish(data["pin"]))
+        out = (data.get("output") or "").strip()
+        if not out:
+            return jsonify({"ok": False, "error": "output required"}), 400
+        return jsonify(_atc().airplay_pair_begin(out))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.post("/api/atc/select-output")
+def atc_select_output():
+    data = request.get_json(force=True) or {}
+    out = (data.get("output") or "").strip()
+    if not out:
+        return jsonify({"error": "output required"}), 400
+    try:
+        return jsonify(_atc().select_output(out))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ATC auto-tune background thread — advances the auto-tuner off the LED display
+# hot loop. Reads current_overhead.json; spawns/tears down Pi-side audio
+# backends (mpv/Chromecast/AirPlay) only when a non-browser output is playing.
+_atc_ticker_started = False
+
+
+def _start_atc_ticker():
+    global _atc_ticker_started
+    if _atc_ticker_started:
+        return
+    _atc_ticker_started = True
+    import threading as _t
+
+    def _loop():
+        while True:
+            try:
+                _atc().tick()
+            except Exception:
+                pass
+            time.sleep(5)
+
+    try:
+        t = _t.Thread(target=_loop, name="atc-ticker", daemon=True)
+        t.start()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
+    _start_atc_ticker()
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
