@@ -37,6 +37,7 @@ def reload():
     global API_SOURCE_ORDER, API_SOURCE_ENABLED
     global AIRLABS_RESET_DAY, FLIGHTAWARE_RESET_DAY, FR24_RESET_DAY
     global STATS_LOG_DAYS
+    global ATC_ENABLED, ATC_QUIET_HOURS, ATC_AUTO_RESUME
     global TOMORROW_API_KEY, OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET
     global AIRLABS_API_KEYS, AIRLABS_API_KEY
     global FLIGHTAWARE_API_KEYS, FLIGHTAWARE_API_KEY, FLIGHTAWARE_MONTHLY_LIMIT
@@ -100,6 +101,15 @@ def reload():
     # Stats
     _stats = _cfg.get("stats", {})
     STATS_LOG_DAYS = _stats.get("stats_log_days") or 0
+
+    # ATC radio (LiveATC audio auto-tuned to overhead traffic).
+    # Master switch + policy only; mode/station/volume/output are runtime
+    # state owned by the ATC manager (atc_audio.json) and driven via /api/atc/*.
+    _atc = _cfg.get("atc", {})
+    ATC_ENABLED     = bool(_atc.get("enabled", False))
+    # Empty string => the manager falls back to the display night window.
+    ATC_QUIET_HOURS = _atc.get("quiet_hours", "")
+    ATC_AUTO_RESUME = bool(_atc.get("auto_resume", True))
 
     # API Sources
     _apis = _cfg.get("api_sources", {})
