@@ -120,7 +120,14 @@ class ATCAudioManager:
 
     def __init__(self):
         self._lock = threading.RLock()
-        self._seed = _load_json(_SEED_FILE, {}).get("airports", {})
+        _seed_raw = _load_json(_SEED_FILE, {})
+        self._seed_base = _seed_raw.get("airports", {})
+        self._seed = dict(self._seed_base)
+        self._custom_raw = None            # last-applied ATC_CUSTOM_FEEDS string
+        # ARTCC sector feeds ({id: {name, lat, lon, code}}) — used when the
+        # overhead traffic is all high-altitude overflights (center airspace).
+        self._centers_base = _seed_raw.get("centers", {})
+        self._centers = dict(self._centers_base)
         self._discovered = _load_json(_DISCOVERED_CACHE, {})  # icao -> {feeds, ts}
 
         # Persisted runtime state. First run (no state file yet): seed from
@@ -196,9 +203,45 @@ class ATCAudioManager:
             else:
                 self._quiet = night
             self._auto_resume = _cfg_bool(getattr(cfg, "ATC_AUTO_RESUME", True))
+            # User-added stations: "ICAO/kind/mount[/lat/lon]" comma list —
+            # merged over the seed so extra local feeds (or corrections) need
+            # no seed-file edit. kind: twr|app|ctr. Without lat/lon the entry
+            # ranks at distance 0 (top of the nearby list).
+            raw_extra = str(getattr(cfg, "ATC_CUSTOM_FEEDS", "") or "")
+            if raw_extra != self._custom_raw:
+                self._custom_raw = raw_extra
+                self._apply_custom_feeds(raw_extra)
         except Exception:
             self._enabled = False
             self._home_code = getattr(self, "_home_code", "")
+
+    def _apply_custom_feeds(self, raw):
+        merged = {k: dict(v, feeds=dict(v.get("feeds", {})))
+                  for k, v in self._seed_base.items()}
+        centers = dict(self._centers_base)
+        for ent in raw.split(","):
+            parts = [p.strip() for p in ent.strip().split("/") if p.strip()]
+            if len(parts) < 3:
+                continue
+            key, kind, mount = parts[0].upper(), parts[1].lower(), parts[2]
+            lat = lon = None
+            if len(parts) >= 5:
+                try:
+                    lat, lon = float(parts[3]), float(parts[4])
+                except ValueError:
+                    pass
+            if kind == "ctr":
+                centers[key] = {"name": key, "code": mount,
+                                "lat": lat if lat is not None else self._home[0],
+                                "lon": lon if lon is not None else self._home[1]}
+                continue
+            ap = merged.setdefault(key, {"name": key, "feeds": {},
+                                         "lat": self._home[0], "lon": self._home[1]})
+            ap.setdefault("feeds", {})[kind] = mount
+            if lat is not None:
+                ap["lat"], ap["lon"] = lat, lon
+        self._seed = merged
+        self._centers = centers
 
     def _in_quiet_hours(self, when=None):
         try:
@@ -351,23 +394,61 @@ class ATCAudioManager:
             return raw
         return raw.get("flights", [])
 
+    def _nearest_center_feed(self):
+        """Nearest ARTCC sector feed to HOME (within 250 mi), gated by
+        _feed_ok. Returns (code, center_id) or ("", None)."""
+        hlat, hlon = self._home
+        by_dist = sorted(
+            (_haversine_mi(hlat, hlon, c.get("lat", 0), c.get("lon", 0)), cid)
+            for cid, c in self._centers.items())
+        for dist, cid in by_dist:
+            if dist > 250:
+                break
+            code = self._centers[cid].get("code", "")
+            if code and self._feed_ok(code):
+                return code, cid
+        return "", None
+
     def _pick_station_auto(self):
         """Score by AIRPORT (not per-flight) to prevent thrashing. Returns a
         (feed_code, airport_icao) tuple, or (None, None)."""
         flights = self._read_overhead()
         scores = {}   # icao -> score
         prefer_app = {}  # icao -> bool (overhead traffic at altitude)
+        high_alt = low_alt = 0
+        hlat, hlon = self._home
         for f in flights:
             dest = (f.get("destination") or "").upper()
             orig = (f.get("origin") or "").upper()
             alt = f.get("altitude") or 0
+            if alt > _APP_ALT_MAX:
+                high_alt += 1
+            else:
+                low_alt += 1
             for code in (dest, orig):
                 icao = _to_icao(code)
                 if not icao:
                     continue
+                # Relevance filter: a flight overhead bound for an airport
+                # 1,000 mi away is NOT talking to that airport's tower — only
+                # facilities near HOME can be controlling what we see. Seed
+                # airports beyond 250 mi never score; non-seed airports (no
+                # coords) stay eligible — probing only finds local ones anyway.
+                info = self._seed.get(icao)
+                if info and _haversine_mi(hlat, hlon, info.get("lat", 0),
+                                          info.get("lon", 0)) > 250:
+                    continue
                 scores[icao] = scores.get(icao, 0) + (2 if code == dest else 1)
                 if _APP_ALT_MIN <= alt <= _APP_ALT_MAX:
                     prefer_app[icao] = True
+
+        # Pure-overflight situation (everything above the approach band):
+        # those crews are talking to the ARTCC, not any airport — tune the
+        # nearest center sector feed (an ARTCC sector from the seed).
+        if flights and high_alt > 0 and low_alt == 0 and self._centers:
+            code, cid = self._nearest_center_feed()
+            if code:
+                return code, cid
 
         # Decay + stickiness for the current airport.
         now = _now()
@@ -383,12 +464,18 @@ class ATCAudioManager:
         if not scores:
             return self._fallback_station_locked()
 
-        # Try airports in score order — the top scorer may have no LiveATC
-        # feed at all (e.g. a small GA/heliport field); fall through to the
-        # next-best, then to the location fallback. Every candidate passes
-        # _feed_ok so a stale/wrong mount name self-heals instead of tuning
-        # the player to a 404.
-        for icao in sorted(scores, key=scores.get, reverse=True):
+        # Try airports in score order, ties broken by distance from HOME (the
+        # nearer facility is the one actually working what we can see) — the
+        # top scorer may have no LiveATC feed at all (e.g. a small GA/heliport
+        # field); fall through to the next-best, then to the location
+        # fallback. Every candidate passes _feed_ok so a stale/wrong mount
+        # name self-heals instead of tuning the player to a 404.
+        def _dist(icao):
+            info = self._seed.get(icao)
+            if not info:
+                return 0.0   # non-seed = discovered near home
+            return _haversine_mi(hlat, hlon, info.get("lat", 0), info.get("lon", 0))
+        for icao in sorted(scores, key=lambda i: (-scores[i], _dist(i))):
             feeds = self._feeds_for_airport(icao)
             if not feeds:
                 continue
@@ -400,13 +487,16 @@ class ATCAudioManager:
         return self._fallback_station_locked()
 
     def _station_airport(self):
-        """Best-effort: which airport ICAO does the current station belong to?"""
+        """Best-effort: which airport/center does the current station belong to?"""
         st = self._station
         if not st:
             return None
         for icao, info in self._seed.items():
             if st in info.get("feeds", {}).values():
                 return icao
+        for cid, c in self._centers.items():
+            if st == c.get("code"):
+                return cid
         for icao, d in self._discovered.items():
             if st in d.get("feeds", {}).values():
                 return icao
@@ -415,25 +505,46 @@ class ATCAudioManager:
     # ── Output discovery (unified) ───────────────────────────────────────
     def list_outputs(self, force_rescan=False):
         """Return [{id, name, type}] — USB + browser always present; cast +
-        airplay from cached discovery (a rescan may briefly spawn a stack)."""
+        airplay from discovery. STALE-WHILE-REVALIDATE: a live mDNS sweep
+        takes ~8s, which made the mirror's output popover feel broken —
+        so an expired cache is served immediately while a background thread
+        refreshes it. rescan=1 still forces a blocking fresh sweep."""
         with self._lock:
-            fresh = self._outputs_cache is not None and \
+            cached = self._outputs_cache
+            fresh = cached is not None and \
                 (_now() - self._outputs_ts) < _OUTPUT_RESCAN_TTL
-            if fresh and not force_rescan:
-                return self._outputs_cache
+        if force_rescan:
+            return self._scan_outputs()
+        if cached is not None:
+            if not fresh:
+                threading.Thread(target=self._scan_outputs, daemon=True,
+                                 name="atc-output-rescan").start()
+            return cached
+        return self._scan_outputs()
 
-        outputs = [
-            {"id": "browser", "name": "This browser", "type": "browser"},
-            {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
-        ]
-        outputs.extend(self._discover_cast(force_rescan))
-        outputs.extend(self._discover_airplay(force_rescan))
-
+    def _scan_outputs(self):
         with self._lock:
-            self._outputs_cache = outputs
-            self._outputs_ts = _now()
-        _atomic_write(_OUTPUT_CACHE, {"outputs": outputs, "ts": _now()})
-        return outputs
+            if getattr(self, "_scanning_outputs", False):
+                return self._outputs_cache or [
+                    {"id": "browser", "name": "This browser", "type": "browser"},
+                    {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
+                ]
+            self._scanning_outputs = True
+        try:
+            outputs = [
+                {"id": "browser", "name": "This browser", "type": "browser"},
+                {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
+            ]
+            outputs.extend(self._discover_cast(True))
+            outputs.extend(self._discover_airplay(True))
+            with self._lock:
+                self._outputs_cache = outputs
+                self._outputs_ts = _now()
+            _atomic_write(_OUTPUT_CACHE, {"outputs": outputs, "ts": _now()})
+            return outputs
+        finally:
+            with self._lock:
+                self._scanning_outputs = False
 
     def _discover_cast(self, force):
         """mDNS Chromecast discovery (incl. speaker groups). Lazy-import; no-op
@@ -559,8 +670,17 @@ class ATCAudioManager:
         return self.status()
 
     def set_station(self, feed_code):
+        code = (feed_code or "").strip()
         with self._lock:
-            self._station = (feed_code or "").strip()
+            # Verify at selection time — a demonstrably dead mount gets a
+            # visible refusal instead of tuning the player to a 404 (stale
+            # UI lists can still offer since-removed mounts).
+            if code and self._probe_feed(code) is False:
+                self._dead_feeds[code] = _now()
+                st = self.status()
+                st["error"] = f"'{code}' is offline at LiveATC"
+                return st
+            self._station = code
             self._current_since = _now()
             self._mode = "manual" if self._station else self._mode
             # Re-point any Pi-side backend at the new station.
@@ -663,17 +783,21 @@ class ATCAudioManager:
                     self._stop_locked()
                 return
 
-            if self._mode == "auto":
-                # Re-verify the current station every 10 min — a persisted or
-                # previously-picked mount can be dead (or die mid-listen);
-                # clearing it lets the next pick self-heal. _feed_ok trusts
-                # the current station, so this is the only recovery path.
-                if self._station and (_now() - self._station_checked) > 600:
-                    self._station_checked = _now()
-                    if self._probe_feed(self._station) is False:
-                        self._dead_feeds[self._station] = _now()
-                        self._station = ""
+            # Re-verify the current station every 10 min — a persisted or
+            # previously-picked mount can be dead (or die mid-listen).
+            # _feed_ok trusts the current station, so this is the only
+            # recovery path. Applies to manual too: when a hand-picked feed
+            # dies we fall back to auto so the radio keeps working instead
+            # of ERRing forever.
+            if self._station and (_now() - self._station_checked) > 600:
+                self._station_checked = _now()
+                if self._probe_feed(self._station) is False:
+                    self._dead_feeds[self._station] = _now()
+                    self._station = ""
+                    if self._mode == "manual":
+                        self._mode = "auto"
 
+            if self._mode == "auto":
                 # Quiet hours gate — auto mode must not start audio at 2am.
                 # A start() during the window sets _quiet_override, so "play
                 # again" wins until the window ends or an explicit stop().
@@ -898,15 +1022,18 @@ class ATCAudioManager:
         self._stop_airplay_locked()
 
     def stations(self):
-        """Seed + discovered stations for the manual-select dropdown."""
+        """Seed + centers for the manual-select dropdown."""
         out = []
         for icao, info in sorted(self._seed.items()):
             for kind, code in info.get("feeds", {}).items():
                 out.append({"code": code, "airport": icao,
                             "name": info.get("name", icao), "type": kind})
+        for cid, c in sorted(self._centers.items()):
+            out.append({"code": c.get("code", ""), "airport": cid,
+                        "name": c.get("name", cid), "type": "ctr"})
         return out
 
-    _KIND_LABELS = {"twr": "Tower", "app": "Approach"}
+    _KIND_LABELS = {"twr": "Tower", "app": "Approach", "ctr": "Center"}
 
     def nearby_stations(self, limit=8):
         """Distance-ordered airport/feed list for the selector UI (O2).
@@ -929,6 +1056,12 @@ class ATCAudioManager:
             for icao, info in self._seed.items():
                 d = _haversine_mi(hlat, hlon, info.get("lat", 0), info.get("lon", 0))
                 entries.append((d, icao, info))
+            # ARTCC sector feeds rank alongside airports by distance.
+            for cid, c in self._centers.items():
+                d = _haversine_mi(hlat, hlon, c.get("lat", 0), c.get("lon", 0))
+                entries.append((d, cid,
+                                {"name": c.get("name", cid),
+                                 "feeds": {"ctr": c.get("code", "")}}))
             entries.sort(key=lambda t: t[0])
             out = []
             for d, icao, info in entries:

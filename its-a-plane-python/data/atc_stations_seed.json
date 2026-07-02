@@ -1,45 +1,355 @@
 {
-  "_comment": "Curated LiveATC.net feed codes for US airports. LiveATC mount naming is inconsistent and cannot be fully automated, so these were verified by hand. Each airport lists feeds by type: 'app' = approach/TRACON (preferred for overhead traffic at altitude), 'twr' = tower (preferred for low-altitude traffic). Stream URL pattern: https://s1-bos.liveatc.net/<mount> (LiveATC load-balances; the manager probes the returned mount). Re-probe/refresh monthly. Feed codes are the LiveATC mount identifiers.",
-  "_stream_base": "https://www.liveatc.net/hlisten.php?mount=",
-  "_direct_base": "https://s1-fmt2.liveatc.net/",
-  "airports": {
-    "KATL": {"name": "Atlanta Hartsfield-Jackson", "lat": 33.6367, "lon": -84.4281, "feeds": {"twr": "katl1_twr", "app": "katl_app"}},
-    "KJFK": {"name": "New York JFK", "lat": 40.6398, "lon": -73.7789, "feeds": {"twr": "kjfk_twr", "app": "kjfk_app_camrn"}},
-    "KLGA": {"name": "New York LaGuardia", "lat": 40.7772, "lon": -73.8726, "feeds": {"twr": "klga_twr", "app": "klga_app"}},
-    "KEWR": {"name": "Newark Liberty", "lat": 40.6925, "lon": -74.1687, "feeds": {"twr": "kewr_twr", "app": "kewr_app"}},
-    "KLAX": {"name": "Los Angeles Intl", "lat": 33.9425, "lon": -118.4081, "feeds": {"twr": "klax_twr", "app": "klax_socal_app"}},
-    "KORD": {"name": "Chicago O'Hare", "lat": 41.9742, "lon": -87.9073, "feeds": {"twr": "kord_twr", "app": "kord_app"}},
-    "KDFW": {"name": "Dallas-Fort Worth", "lat": 32.8998, "lon": -97.0403, "feeds": {"twr": "kdfw_twr", "app": "kdfw_app"}},
-    "KDEN": {"name": "Denver Intl", "lat": 39.8561, "lon": -104.6737, "feeds": {"twr": "kden_twr", "app": "kden_app"}},
-    "KSFO": {"name": "San Francisco Intl", "lat": 37.6213, "lon": -122.379, "feeds": {"twr": "ksfo_twr", "app": "knct_norcal_sfo"}},
-    "KSEA": {"name": "Seattle-Tacoma", "lat": 47.4502, "lon": -122.3088, "feeds": {"twr": "ksea_twr", "app": "ksea_app"}},
-    "KBOS": {"name": "Boston Logan", "lat": 42.3656, "lon": -71.0096, "feeds": {"twr": "kbos1_twr", "app": "kbos_app"}},
-    "KMIA": {"name": "Miami Intl", "lat": 25.7959, "lon": -80.287, "feeds": {"twr": "kmia_twr", "app": "kmia_app"}},
-    "KPHX": {"name": "Phoenix Sky Harbor", "lat": 33.4342, "lon": -112.0116, "feeds": {"twr": "kphx_twr", "app": "kphx_app"}},
-    "KLAS": {"name": "Las Vegas Harry Reid", "lat": 36.084, "lon": -115.1537, "feeds": {"twr": "klas_twr", "app": "klas_app"}},
-    "KIAH": {"name": "Houston Bush", "lat": 29.9902, "lon": -95.3368, "feeds": {"twr": "kiah_twr", "app": "kiah_app"}},
-    "KMCO": {"name": "Orlando Intl", "lat": 28.4312, "lon": -81.3081, "feeds": {"twr": "kmco_twr", "app": "kmco_app"}},
-    "KCLT": {"name": "Charlotte Douglas", "lat": 35.214, "lon": -80.9431, "feeds": {"twr": "kclt_twr", "app": "kclt_app"}},
-    "KMSP": {"name": "Minneapolis-St Paul", "lat": 44.8848, "lon": -93.2223, "feeds": {"twr": "kmsp_twr", "app": "kmsp_app"}},
-    "KDTW": {"name": "Detroit Metro", "lat": 42.2124, "lon": -83.3534, "feeds": {"twr": "kdtw_twr", "app": "kdtw_app"}},
-    "KPHL": {"name": "Philadelphia Intl", "lat": 39.8719, "lon": -75.2411, "feeds": {"twr": "kphl_twr", "app": "kphl_app"}},
-    "KSAN": {"name": "San Diego Intl", "lat": 32.7338, "lon": -117.1933, "feeds": {"twr": "ksan_twr", "app": "ksan_socal_app"}},
-    "KBWI": {"name": "Baltimore-Washington", "lat": 39.1754, "lon": -76.6684, "feeds": {"twr": "kbwi_twr", "app": "kbwi_app"}},
-    "KDCA": {"name": "Washington Reagan", "lat": 38.8512, "lon": -77.0402, "feeds": {"twr": "kdca1_twr", "app": "kdca_app"}},
-    "KIAD": {"name": "Washington Dulles", "lat": 38.9531, "lon": -77.4565, "feeds": {"twr": "kiad_twr", "app": "kiad_app"}},
-    "KTPA": {"name": "Tampa Intl", "lat": 27.9755, "lon": -82.5332, "feeds": {"twr": "ktpa_twr", "app": "ktpa_app"}},
-    "KPDX": {"name": "Portland Intl", "lat": 45.5887, "lon": -122.5975, "feeds": {"twr": "kpdx_twr", "app": "kpdx_app"}},
-    "KSLC": {"name": "Salt Lake City", "lat": 40.7884, "lon": -111.9778, "feeds": {"twr": "kslc_twr", "app": "kslc_app"}},
-    "KMDW": {"name": "Chicago Midway", "lat": 41.7868, "lon": -87.7522, "feeds": {"twr": "kmdw_twr", "app": "kmdw_app"}},
-    "KHOU": {"name": "Houston Hobby", "lat": 29.6454, "lon": -95.2789, "feeds": {"twr": "khou_twr", "app": "khou_app"}},
-    "KOAK": {"name": "Oakland Intl", "lat": 37.7213, "lon": -122.2207, "feeds": {"twr": "koak_twr", "app": "koak_norcal_app"}},
-    "KSJC": {"name": "San Jose Mineta", "lat": 37.3626, "lon": -121.929, "feeds": {"twr": "ksjc_twr", "app": "ksjc_app"}},
-    "KAUS": {"name": "Austin-Bergstrom", "lat": 30.1975, "lon": -97.6664, "feeds": {"twr": "kaus_twr", "app": "kaus_app"}},
-    "KBNA": {"name": "Nashville Intl", "lat": 36.1245, "lon": -86.6782, "feeds": {"twr": "kbna_twr", "app": "kbna_app"}},
-    "KMEM": {"name": "Memphis Intl", "lat": 35.0424, "lon": -89.9767, "feeds": {"twr": "kmem_twr", "app": "kmem_app"}},
-    "KRDU": {"name": "Raleigh-Durham", "lat": 35.8776, "lon": -78.7875, "feeds": {"twr": "krdu_twr", "app": "krdu_app"}},
-    "KHPN": {"name": "Westchester County", "lat": 41.067, "lon": -73.7076, "feeds": {"twr": "khpn_twr", "app": "khpn_n90_hpn"}},
-    "KTEB": {"name": "Teterboro", "lat": 40.8501, "lon": -74.0608, "feeds": {"twr": "kteb_twr", "app": "kteb_app"}},
-    "KISP": {"name": "Long Island MacArthur", "lat": 40.7952, "lon": -73.1002, "feeds": {"twr": "kisp_twr", "app": "kisp_app"}}
+ "_comment": "Curated LiveATC.net feed codes for US airports. LiveATC mount naming is inconsistent and cannot be fully automated, so these were verified by hand. Each airport lists feeds by type: 'app' = approach/TRACON (preferred for overhead traffic at altitude), 'twr' = tower (preferred for low-altitude traffic). Stream URL pattern: https://s1-bos.liveatc.net/<mount> (LiveATC load-balances; the manager probes the returned mount). Re-probe/refresh monthly. Feed codes are the LiveATC mount identifiers.",
+ "_stream_base": "https://www.liveatc.net/hlisten.php?mount=",
+ "_direct_base": "https://s1-fmt2.liveatc.net/",
+ "airports": {
+  "KATL": {
+   "name": "Atlanta Hartsfield-Jackson",
+   "lat": 33.6367,
+   "lon": -84.4281,
+   "feeds": {
+    "twr": "katl_twr",
+    "app": "katl_dep_n"
+   }
+  },
+  "KJFK": {
+   "name": "New York JFK",
+   "lat": 40.6398,
+   "lon": -73.7789,
+   "feeds": {
+    "twr": "kjfk_twr",
+    "app": "kjfk_dep"
+   }
+  },
+  "KLGA": {
+   "name": "New York LaGuardia",
+   "lat": 40.7772,
+   "lon": -73.8726,
+   "feeds": {
+    "twr": "klga_118_twr",
+    "app": "klga_118_dep_135350"
+   }
+  },
+  "KEWR": {
+   "name": "Newark Liberty",
+   "lat": 40.6925,
+   "lon": -74.1687,
+   "feeds": {
+    "twr": "kewr_twr",
+    "app": "kewr_dep"
+   }
+  },
+  "KLAX": {
+   "name": "Los Angeles Intl",
+   "lat": 33.9425,
+   "lon": -118.4081,
+   "feeds": {
+    "twr": "klax3",
+    "app": "klax7"
+   }
+  },
+  "KORD": {
+   "name": "Chicago O'Hare",
+   "lat": 41.9742,
+   "lon": -87.9073,
+   "feeds": {
+    "twr": "kord1n2_twr_n",
+    "app": "kord1s1_dep_126625"
+   }
+  },
+  "KDFW": {
+   "name": "Dallas-Fort Worth",
+   "lat": 32.8998,
+   "lon": -97.0403,
+   "feeds": {
+    "twr": "kdfw1_twr1_e",
+    "app": "kafw1_app_n"
+   }
+  },
+  "KSFO": {
+   "name": "San Francisco Intl",
+   "lat": 37.6213,
+   "lon": -122.379,
+   "feeds": {
+    "twr": "ksfo_twr",
+    "app": "ksfo_dep2"
+   }
+  },
+  "KSEA": {
+   "name": "Seattle-Tacoma",
+   "lat": 47.4502,
+   "lon": -122.3088,
+   "feeds": {
+    "twr": "ksea3_twr_west",
+    "app": "ksea3_app_se"
+   }
+  },
+  "KBOS": {
+   "name": "Boston Logan",
+   "lat": 42.3656,
+   "lon": -71.0096,
+   "feeds": {
+    "twr": "kbos1_twr",
+    "app": "kbos1_app_south"
+   }
+  },
+  "KMIA": {
+   "name": "Miami Intl",
+   "lat": 25.7959,
+   "lon": -80.287,
+   "feeds": {
+    "twr": "kmia3_twr",
+    "app": "kmia3_app_133775"
+   }
+  },
+  "KPHX": {
+   "name": "Phoenix Sky Harbor",
+   "lat": 33.4342,
+   "lon": -112.0116,
+   "feeds": {
+    "twr": "kphx_twr_n",
+    "app": "kphx_dep"
+   }
+  },
+  "KLAS": {
+   "name": "Las Vegas Harry Reid",
+   "lat": 36.084,
+   "lon": -115.1537,
+   "feeds": {
+    "twr": "klas4_twr",
+    "app": "klas4_app_ne"
+   }
+  },
+  "KIAH": {
+   "name": "Houston Bush",
+   "lat": 29.9902,
+   "lon": -95.3368,
+   "feeds": {
+    "twr": "kiah3_twr_9_27",
+    "app": "kiah2_app_120050"
+   }
+  },
+  "KMCO": {
+   "name": "Orlando Intl",
+   "lat": 28.4312,
+   "lon": -81.3081,
+   "feeds": {
+    "twr": "korl_kmco_twr_west",
+    "app": "korl_kmco_app_124800"
+   }
+  },
+  "KCLT": {
+   "name": "Charlotte Douglas",
+   "lat": 35.214,
+   "lon": -80.9431,
+   "feeds": {
+    "twr": "kclt7_twr_118100",
+    "app": "kclt7_dep_119000"
+   }
+  },
+  "KMSP": {
+   "name": "Minneapolis-St Paul",
+   "lat": 44.8848,
+   "lon": -93.2223,
+   "feeds": {
+    "twr": "kmsp3_twr_1735",
+    "app": "kmsp3_app_n_low"
+   }
+  },
+  "KDTW": {
+   "name": "Detroit Metro",
+   "lat": 42.2124,
+   "lon": -83.3534,
+   "feeds": {
+    "twr": "kdtw_twr",
+    "app": "kdtw_dep_132025"
+   }
+  },
+  "KPHL": {
+   "name": "Philadelphia Intl",
+   "lat": 39.8719,
+   "lon": -75.2411,
+   "feeds": {
+    "twr": "kphl_twr_east",
+    "app": "kphl_final"
+   }
+  },
+  "KSAN": {
+   "name": "San Diego Intl",
+   "lat": 32.7338,
+   "lon": -117.1933,
+   "feeds": {
+    "twr": "ksan1_twr",
+    "app": "ksan_app_nw"
+   }
+  },
+  "KBWI": {
+   "name": "Baltimore-Washington",
+   "lat": 39.1754,
+   "lon": -76.6684,
+   "feeds": {
+    "twr": "kbwi_es_twr",
+    "app": "kdmw2_app_125525"
+   }
+  },
+  "KDCA": {
+   "name": "Washington Reagan",
+   "lat": 38.8512,
+   "lon": -77.0402,
+   "feeds": {
+    "twr": "kdca1_twr",
+    "app": "kdca"
+   }
+  },
+  "KIAD": {
+   "name": "Washington Dulles",
+   "lat": 38.9531,
+   "lon": -77.4565,
+   "feeds": {
+    "twr": "kiad1_twr_1c19c_120250",
+    "app": "kmrb1_kiad_n_arr"
+   }
+  },
+  "KTPA": {
+   "name": "Tampa Intl",
+   "lat": 27.9755,
+   "lon": -82.5332,
+   "feeds": {
+    "twr": "ktpa2",
+    "app": "kpie1_app_118800"
+   }
+  },
+  "KPDX": {
+   "name": "Portland Intl",
+   "lat": 45.5887,
+   "lon": -122.5975,
+   "feeds": {
+    "twr": "kpdx3_twr",
+    "app": "kpdx_app_124350"
+   }
+  },
+  "KSLC": {
+   "name": "Salt Lake City",
+   "lat": 40.7884,
+   "lon": -111.9778,
+   "feeds": {
+    "twr": "kslc1_twr",
+    "app": "kslc1_app1"
+   }
+  },
+  "KMDW": {
+   "name": "Chicago Midway",
+   "lat": 41.7868,
+   "lon": -87.7522,
+   "feeds": {
+    "twr": "kmdw_1",
+    "app": "kmdw_2"
+   }
+  },
+  "KOAK": {
+   "name": "Oakland Intl",
+   "lat": 37.7213,
+   "lon": -122.2207,
+   "feeds": {
+    "app": "koak_app"
+   }
+  },
+  "KSJC": {
+   "name": "San Jose Mineta",
+   "lat": 37.3626,
+   "lon": -121.929,
+   "feeds": {
+    "twr": "ksjc6_twr",
+    "app": "ksjc_dep"
+   }
+  },
+  "KAUS": {
+   "name": "Austin-Bergstrom",
+   "lat": 30.1975,
+   "lon": -97.6664,
+   "feeds": {
+    "twr": "kaus3_twr",
+    "app": "kaus3_app_dep"
+   }
+  },
+  "KBNA": {
+   "name": "Nashville Intl",
+   "lat": 36.1245,
+   "lon": -86.6782,
+   "feeds": {
+    "twr": "kbna_twr",
+    "app": "kbna_app"
+   }
+  },
+  "KMEM": {
+   "name": "Memphis Intl",
+   "lat": 35.0424,
+   "lon": -89.9767,
+   "feeds": {
+    "twr": "kmem4_twr_118300",
+    "app": "kmem4_app_119100"
+   }
+  },
+  "KRDU": {
+   "name": "Raleigh-Durham",
+   "lat": 35.8776,
+   "lon": -78.7875,
+   "feeds": {
+    "twr": "krdu_twr",
+    "app": "krdu_app"
+   }
+  },
+  "KHPN": {
+   "name": "Westchester County",
+   "lat": 41.067,
+   "lon": -73.7076,
+   "feeds": {
+    "twr": "khpn_twr",
+    "app": "khpn2"
+   }
+  },
+  "KTEB": {
+   "name": "Teterboro",
+   "lat": 40.8501,
+   "lon": -74.0608,
+   "feeds": {
+    "twr": "kteb_es_twr_r"
+   }
+  },
+  "KISP": {
+   "name": "Long Island MacArthur",
+   "lat": 40.7952,
+   "lon": -73.1002,
+   "feeds": {
+    "twr": "kisp_gnd_twr",
+    "app": "kisp2"
+   }
   }
+ },
+ "centers": {
+  "ZBW-HTO31": {
+   "name": "Boston Center \u2014 Hampton 31 (eastern LI overflights)",
+   "lat": 40.9,
+   "lon": -72.35,
+   "code": "zbw_ccc2"
+  },
+  "ZBW-CLIPR32": {
+   "name": "Boston Center \u2014 CLIPR 32 (LI south shore)",
+   "lat": 40.55,
+   "lon": -72.95,
+   "code": "zbw_ccc1"
+  },
+  "ZNY-KEN56": {
+   "name": "New York Center \u2014 Kennedy 56",
+   "lat": 40.6,
+   "lon": -73.8,
+   "code": "zny_col_ken"
+  },
+  "ZNY-DIX67": {
+   "name": "New York Center \u2014 Dixie 67 (metro departures)",
+   "lat": 40.15,
+   "lon": -73.9,
+   "code": "zny_col_dix"
+  }
+ }
 }
