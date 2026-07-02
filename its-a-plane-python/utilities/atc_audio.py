@@ -16,7 +16,10 @@ Design constraints (see docs/Flight Tracker - Feature Roadmap.md, O1 review note
     15-min circuit breaker (LiveATC bans IPs that probe aggressively).
   * One poll: a compact atc dict is exposed via display_state() and folded into
     /api/display-state for the mirror; /api/atc/status stays for the config UI.
-  * No proxying: clients are pointed straight at LiveATC (personal-use streaming).
+  * No proxying: external clients (browser, Chromecast) pull straight from
+    LiveATC. Sole exception: the Pi's OWN players (pyatv, which cannot set a
+    User-Agent) fetch via a loopback-only relay in web/app.py that adds the
+    browser UA — self-fetch for local playback, never a rebroadcast.
   * On-demand AirPlay/Chromecast: the audio stack is spawned only when such an
     output is actively selected and torn down completely on stop/switch — idle
     state is zero processes.
@@ -50,6 +53,7 @@ _SEED_FILE = os.path.join(_BASE_DIR, "data", "atc_stations_seed.json")
 _STATE_FILE = os.path.join(_DATA_DIR, "atc_audio.json")
 _DISCOVERED_CACHE = os.path.join(_DATA_DIR, "atc_discovered.json")
 _OUTPUT_CACHE = os.path.join(_DATA_DIR, "atc_outputs.json")
+_AIRPLAY_CREDS = os.path.join(_DATA_DIR, "atc_airplay_creds.json")
 # Overhead traffic feed — written by utilities/overhead.py at the project root.
 _OVERHEAD_FILE = os.path.join(_BASE_DIR, "current_overhead.json")
 
@@ -161,6 +165,7 @@ class ATCAudioManager:
         self._cast_device = None                       # pychromecast device
         self._airplay_stop = None                      # threading.Event for RAOP
         self._airplay_thread = None
+        self._airplay_pairing = None                   # active PIN-pairing session
 
         # Output discovery cache.
         self._outputs_cache = None
@@ -855,6 +860,7 @@ class ATCAudioManager:
                 pass
             self._mpv_proc = subprocess.Popen(
                 ["mpv", "--no-video", "--no-terminal", "--idle=no",
+                 "--user-agent=" + _UA_HEADERS["User-Agent"],
                  f"--volume={self._volume}",
                  f"--input-ipc-server={self._MPV_IPC}", url],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -910,17 +916,49 @@ class ATCAudioManager:
         except Exception:
             return
         try:
-            casts, browser = pychromecast.get_listed_chromecasts(uuids=[uuid]) \
-                if hasattr(pychromecast, "get_listed_chromecasts") else ([], None)
+            # pychromecast matches UUID objects, not strings — a string uuid
+            # silently finds nothing (casts were never commanded). Try the
+            # UUID object first, then fall back to the friendly name from the
+            # outputs cache.
+            import uuid as _uuid_mod
+            browser = None
+            try:
+                casts, browser = pychromecast.get_listed_chromecasts(
+                    uuids=[_uuid_mod.UUID(uuid)])
+            except Exception:
+                casts = []
+            if not casts:
+                try:
+                    if browser:
+                        browser.stop_discovery()
+                except Exception:
+                    pass
+                name = next((o.get("name") for o in (self._outputs_cache or [])
+                             if o.get("id") == self._output), None)
+                if not name:
+                    return
+                casts, browser = pychromecast.get_listed_chromecasts(
+                    friendly_names=[name])
             dev = casts[0] if casts else None
             if dev is None:
                 return
             dev.wait(timeout=5)
+            # If another app owns the device (e.g. Pandora), media commands
+            # land on ITS session instead of launching ours — quit it first.
+            try:
+                if dev.status and dev.status.display_name and \
+                        dev.status.display_name not in ("Backdrop", None, ""):
+                    dev.quit_app()
+                    import time as _t
+                    _t.sleep(3)
+            except Exception:
+                pass
             dev.set_volume(self._volume / 100.0)
             mc = dev.media_controller
+            # play_media autoplays on load; an extra play() raises
+            # "no session" whenever the load failed — don't call it.
             mc.play_media(url, "audio/mpeg")
-            mc.block_until_active(timeout=5)
-            mc.play()
+            mc.block_until_active(timeout=8)
             self._cast_device = dev
             try:
                 if browser:
@@ -945,7 +983,11 @@ class ATCAudioManager:
         """Stream to an AirPlay receiver via pyatv RAOP. Spawned ONLY here, when
         an AirPlay output is active; torn down fully on stop. No resident
         PulseAudio / no resident process (brief Section 3)."""
-        url = self._stream_url(self._station)
+        # pyatv cannot set a User-Agent and LiveATC 403s library UAs, so the
+        # AirPlay fetch goes through the Pi's own loopback relay (adds a
+        # browser UA; refuses non-local clients — not a rebroadcast).
+        url = (f"http://127.0.0.1:8080/atc/relay?code={self._station}"
+               if self._station else "")
         ident = self._output.split(":", 1)[1] if ":" in self._output else ""
         if not url or not ident:
             return
@@ -965,7 +1007,16 @@ class ATCAudioManager:
                 results = await atv_scan(loop, identifier=ident, timeout=5)
                 if not results:
                     return
-                atv = await atv_connect(results[0], loop)
+                conf = results[0]
+                # Stored pairing credentials (devices that ask for a code).
+                stored = _load_json(_AIRPLAY_CREDS, {}).get(ident)
+                if stored:
+                    try:
+                        from pyatv.const import Protocol
+                        conf.set_credentials(Protocol.RAOP, stored)
+                    except Exception:
+                        pass
+                atv = await atv_connect(conf, loop)
                 try:
                     # stream_url pulls/pushes the URL to the receiver; it returns
                     # when playback ends. We poll stop_evt to allow teardown.
@@ -1000,6 +1051,94 @@ class ATCAudioManager:
             t.join(timeout=5)
         self._airplay_stop = None
         self._airplay_thread = None
+
+    # ── AirPlay pairing (devices that ask for a code) ────────────────────
+    # HomePods / passworded receivers require a one-time RAOP pairing: begin
+    # -> device shows a PIN -> finish(pin) -> credentials stored and used on
+    # every subsequent stream. Two HTTP calls bridge one async session via a
+    # dedicated thread + events.
+    def airplay_pair_begin(self, output_id):
+        ident = output_id.split(":", 1)[1] if ":" in output_id else output_id
+        try:
+            import pyatv  # noqa: F401
+        except Exception:
+            return {"ok": False, "error": "pyatv not installed"}
+        self.airplay_pair_cancel()
+        state = {"ident": ident, "stage": "starting", "error": "",
+                 "pin_event": threading.Event(), "pin": None,
+                 "done_event": threading.Event()}
+        self._airplay_pairing = state
+
+        def _run():
+            import asyncio
+            from pyatv import scan as atv_scan, pair as atv_pair
+            from pyatv.const import Protocol
+
+            async def _flow():
+                loop = asyncio.get_event_loop()
+                results = await atv_scan(loop, identifier=ident, timeout=6)
+                if not results:
+                    state.update(stage="error", error="device not found")
+                    return
+                pairing = await atv_pair(results[0], Protocol.RAOP, loop)
+                try:
+                    await pairing.begin()
+                    if pairing.device_provides_pin:
+                        state["stage"] = "awaiting_pin"   # PIN shows ON the device
+                        # Wait (in executor) for finish(pin) to supply it.
+                        ok = await loop.run_in_executor(
+                            None, state["pin_event"].wait, 120)
+                        if not ok:
+                            state.update(stage="error", error="PIN entry timed out")
+                            return
+                        pairing.pin(state["pin"])
+                    await pairing.finish()
+                    if pairing.has_paired:
+                        creds = _load_json(_AIRPLAY_CREDS, {})
+                        creds[ident] = pairing.service.credentials
+                        _atomic_write(_AIRPLAY_CREDS, creds)
+                        state["stage"] = "paired"
+                    else:
+                        state.update(stage="error", error="pairing not accepted")
+                finally:
+                    try:
+                        await pairing.close()
+                    except Exception:
+                        pass
+
+            try:
+                asyncio.new_event_loop().run_until_complete(_flow())
+            except Exception as e:
+                state.update(stage="error", error=str(e)[:120])
+            finally:
+                state["done_event"].set()
+
+        threading.Thread(target=_run, daemon=True, name="atc-airplay-pair").start()
+        # Give the flow a moment to reach the PIN stage for a useful response.
+        for _ in range(40):
+            if state["stage"] in ("awaiting_pin", "paired", "error"):
+                break
+            time.sleep(0.25)
+        return {"ok": state["stage"] != "error", "stage": state["stage"],
+                "error": state["error"]}
+
+    def airplay_pair_finish(self, pin):
+        state = self._airplay_pairing
+        if not state or state["stage"] != "awaiting_pin":
+            return {"ok": False, "error": "no pairing awaiting a PIN"}
+        state["pin"] = str(pin).strip()
+        state["pin_event"].set()
+        state["done_event"].wait(30)
+        return {"ok": state["stage"] == "paired", "stage": state["stage"],
+                "error": state["error"]}
+
+    def airplay_pair_cancel(self):
+        state = getattr(self, "_airplay_pairing", None)
+        if state:
+            state["pin_event"].set()
+            state["done_event"].wait(2)
+        self._airplay_pairing = None
+        return {"ok": True}
 
     # ── Backend dispatch ─────────────────────────────────────────────────
     def _start_backend_locked(self):

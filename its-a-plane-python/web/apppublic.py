@@ -1071,6 +1071,75 @@ def atc_volume():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/atc/relay")
+def atc_relay():
+    """LOOPBACK-ONLY stream fetch adapter. pyatv (AirPlay) cannot set a
+    User-Agent and LiveATC's edges 403 library UAs; its decoder also cannot
+    init on a trickling live MP3 — so the Pi's own player fetches through
+    here (browser UA + WAV transcode via ffmpeg when available). NOT a
+    rebroadcast: any non-loopback client is refused."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return jsonify({"error": "loopback only"}), 403
+    code = (request.args.get("code") or "").strip()
+    if not code or not code.replace("_", "").isalnum():
+        return jsonify({"error": "bad code"}), 400
+    from flask import Response as _Resp
+    ua = ("Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+    import shutil as _sh
+    if _sh.which("ffmpeg"):
+        import subprocess as _sp
+        proc = _sp.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-user_agent", ua, "-i", f"https://d.liveatc.net/{code}",
+             "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+             "-f", "wav", "-"],
+            stdout=_sp.PIPE, stderr=_sp.DEVNULL)
+        def gen():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        return _Resp(gen(), content_type="audio/wav")
+    import requests as _rq
+    up = _rq.get(f"https://d.liveatc.net/{code}", stream=True, timeout=10,
+                 headers={"User-Agent": ua})
+    def gen():
+        try:
+            for chunk in up.iter_content(8192):
+                yield chunk
+        finally:
+            up.close()
+    return _Resp(gen(), status=up.status_code,
+                 content_type=up.headers.get("Content-Type", "audio/mpeg"))
+
+
+@app.post("/api/atc/airplay/pair")
+def atc_airplay_pair():
+    """One-time pairing for AirPlay devices that ask for a code:
+    {output: id} begins (device shows PIN) -> {pin: "1234"} finishes;
+    {cancel: true} aborts."""
+    data = request.get_json(force=True) or {}
+    try:
+        if data.get("cancel"):
+            return jsonify(_atc().airplay_pair_cancel())
+        if data.get("pin"):
+            return jsonify(_atc().airplay_pair_finish(data["pin"]))
+        out = (data.get("output") or "").strip()
+        if not out:
+            return jsonify({"ok": False, "error": "output required"}), 400
+        return jsonify(_atc().airplay_pair_begin(out))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.post("/api/atc/select-output")
 def atc_select_output():
     data = request.get_json(force=True) or {}
