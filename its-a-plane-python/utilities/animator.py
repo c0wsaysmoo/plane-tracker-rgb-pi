@@ -1,4 +1,4 @@
-from time import sleep
+from time import sleep, monotonic
 
 DELAY_DEFAULT = 0.01
 
@@ -36,6 +36,10 @@ class Animator(object):
                 keyframe()
 
     def play(self):
+        # Drift-corrected pacing: a fixed sleep AFTER each frame's work makes
+        # the real period = delay + work, so scroll speed wobbles with scene
+        # workload and averages below the intended rate.
+        next_frame = monotonic()
         while True:
             for keyframe in self.keyframes:
                 # If divisor == 0 then only run once on first loop
@@ -59,7 +63,12 @@ class Animator(object):
 
             self._reset_scene = False
             self.frame += 1
-            sleep(self._delay)
+            next_frame += self._delay
+            now = monotonic()
+            if next_frame < now:
+                next_frame = now  # fell behind; don't burst to catch up
+            else:
+                sleep(next_frame - now)
 
     @property
     def delay(self):
