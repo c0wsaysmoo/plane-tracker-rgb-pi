@@ -122,6 +122,14 @@ def _atomic_write(path, data):
 class ATCAudioManager:
     """Singleton manager. Access via get_manager()."""
 
+    @staticmethod
+    def _pi_side(output):
+        """True for outputs whose backend WE run (usb / chromecast:<uuid> /
+        airplay:<id>) vs the browser playing client-side. NOTE: cast and
+        airplay ids carry suffixes — an exact `in (...)` match silently
+        never started their backends (start/tick/resume all had this bug)."""
+        return output == "usb" or output.startswith(("chromecast", "airplay"))
+
     def __init__(self):
         self._lock = threading.RLock()
         _seed_raw = _load_json(_SEED_FILE, {})
@@ -183,7 +191,7 @@ class ATCAudioManager:
         self._refresh_config()
 
         # If we were playing a Pi-side output on restart, honour auto-resume.
-        if self._auto_resume and self._playing and self._output in ("usb", "chromecast", "airplay"):
+        if self._auto_resume and self._playing and self._pi_side(self._output):
             # Defer actual spawn to first tick() so imports settle.
             self._resume_pending = True
         else:
@@ -449,7 +457,7 @@ class ATCAudioManager:
 
         # Pure-overflight situation (everything above the approach band):
         # those crews are talking to the ARTCC, not any airport — tune the
-        # nearest center sector feed (an ARTCC sector from the seed).
+        # nearest center sector feed (e.g. ZBW HTO31 over East Hampton).
         if flights and high_alt > 0 and low_alt == 0 and self._centers:
             code, cid = self._nearest_center_feed()
             if code:
@@ -689,7 +697,7 @@ class ATCAudioManager:
             self._current_since = _now()
             self._mode = "manual" if self._station else self._mode
             # Re-point any Pi-side backend at the new station.
-            if self._playing and self._output in ("usb", "chromecast", "airplay"):
+            if self._playing and self._pi_side(self._output):
                 self._stop_backend_locked()
                 self._start_backend_locked()
             self._persist()
@@ -737,7 +745,7 @@ class ATCAudioManager:
             # the auto-mode gate honours it until the window ends or stop().
             if self._in_quiet_hours():
                 self._quiet_override = True
-            if self._output in ("usb", "chromecast", "airplay"):
+            if self._pi_side(self._output):
                 self._start_backend_locked()
             self._persist()
         return self.status()
@@ -780,7 +788,7 @@ class ATCAudioManager:
         with self._lock:
             if self._resume_pending:
                 self._resume_pending = False
-                if self._playing and self._output in ("usb", "chromecast", "airplay"):
+                if self._playing and self._pi_side(self._output):
                     self._start_backend_locked()
 
             if not self._enabled or self._mode == "off":
@@ -828,14 +836,14 @@ class ATCAudioManager:
                     if changed and (dwell_ok or not self._station):
                         self._station = code
                         self._current_since = _now()
-                        if self._playing and self._output in ("usb", "chromecast", "airplay"):
+                        if self._playing and self._pi_side(self._output):
                             self._stop_backend_locked()
                             self._start_backend_locked()
                 # Arm playback only when there is actually a station — no
                 # point reporting "playing" silence when nothing resolved.
                 if self._station and not self._playing:
                     self._playing = True
-                    if self._output in ("usb", "chromecast", "airplay"):
+                    if self._pi_side(self._output):
                         self._start_backend_locked()
 
             # manual mode: station is user-locked; nothing to auto-advance.
@@ -989,16 +997,19 @@ class ATCAudioManager:
         url = (f"http://127.0.0.1:8080/atc/relay?code={self._station}"
                if self._station else "")
         ident = self._output.split(":", 1)[1] if ":" in self._output else ""
+        print(f"ATC airplay: begin ident={ident} url_ok={bool(url)}", flush=True)
         if not url or not ident:
             return
         try:
             import pyatv  # noqa: F401
-        except Exception:
+        except Exception as e:
+            print(f"ATC airplay: pyatv import failed: {e}", flush=True)
             return
         stop_evt = threading.Event()
         self._airplay_stop = stop_evt
 
         def _run():
+            print("ATC airplay: thread running", flush=True)
             import asyncio
             from pyatv import scan as atv_scan, connect as atv_connect
 
@@ -1006,6 +1017,7 @@ class ATCAudioManager:
                 loop = asyncio.get_event_loop()
                 results = await atv_scan(loop, identifier=ident, timeout=5)
                 if not results:
+                    print(f"ATC airplay: device {ident} not found in scan", flush=True)
                     return
                 conf = results[0]
                 # Stored pairing credentials (devices that ask for a code).
@@ -1023,6 +1035,8 @@ class ATCAudioManager:
                     task = asyncio.ensure_future(atv.stream.stream_file(url))
                     while not stop_evt.is_set() and not task.done():
                         await asyncio.sleep(0.25)
+                    if task.done() and task.exception():
+                        print(f"ATC airplay stream error: {task.exception()}", flush=True)
                     if not task.done():
                         task.cancel()
                         try:
@@ -1035,10 +1049,24 @@ class ATCAudioManager:
                     except Exception:
                         pass
 
+            # Reconnect loop: RAOP sessions end on their own (receiver-side
+            # drops, stream hiccups) — a one-shot stream left 'playing: True'
+            # with silence and no process. Keep re-establishing until an
+            # explicit stop; journald-visible either way.
             try:
-                asyncio.new_event_loop().run_until_complete(_stream())
-            except Exception:
-                pass
+                attempt = 0
+                while not stop_evt.is_set():
+                    asyncio.new_event_loop().run_until_complete(_stream())
+                    if stop_evt.is_set():
+                        break
+                    attempt += 1
+                    print(f"ATC airplay: stream ended — reconnect #{attempt} in 3s",
+                          flush=True)
+                    if stop_evt.wait(3):
+                        break
+            except Exception as e:
+                # journald-visible: silent failures cost hours of debugging.
+                print(f"ATC airplay error: {type(e).__name__}: {e}", flush=True)
 
         self._airplay_thread = threading.Thread(target=_run, daemon=True)
         self._airplay_thread.start()
