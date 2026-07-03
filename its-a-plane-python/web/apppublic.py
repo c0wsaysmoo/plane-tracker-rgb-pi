@@ -1073,30 +1073,88 @@ def atc_volume():
 
 @app.get("/atc/relay")
 def atc_relay():
-    """LOOPBACK-ONLY stream fetch adapter. pyatv (AirPlay) cannot set a
+    """LOCAL-ONLY stream fetch adapter. pyatv (AirPlay) cannot set a
     User-Agent and LiveATC's edges 403 library UAs; its decoder also cannot
     init on a trickling live MP3 — so the Pi's own player fetches through
-    here (browser UA + WAV transcode via ffmpeg when available). NOT a
-    rebroadcast: any non-loopback client is refused."""
-    if request.remote_addr not in ("127.0.0.1", "::1"):
-        return jsonify({"error": "loopback only"}), 403
+    here (browser UA + WAV transcode via ffmpeg when available).
+    Loopback (pyatv) and private-LAN clients (Chromecast pulls the relay
+    instead of hitting LiveATC with its own UA) are allowed; anything global
+    is refused — this serves the household's own receivers, it is not an
+    internet rebroadcast.
+    ?fmt=mp3 re-encodes at 128 kbps (cast startup buffers fill in seconds
+    instead of ~a minute at the 16 kbps source rate); ?fmt=raw proxies the
+    source MP3 untouched; default is the WAV transcode for pyatv."""
+    import ipaddress as _ipa
+    try:
+        _ip = _ipa.ip_address(request.remote_addr)
+        _ok = _ip.is_loopback or _ip.is_private
+    except ValueError:
+        _ok = False
+    if not _ok:
+        return jsonify({"error": "local clients only"}), 403
     code = (request.args.get("code") or "").strip()
     if not code or not code.replace("_", "").isalnum():
         return jsonify({"error": "bad code"}), 400
+    fmt = (request.args.get("fmt") or "").strip()
     from flask import Response as _Resp
     ua = ("Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
     import shutil as _sh
-    if _sh.which("ffmpeg"):
+    if fmt == "mp3" and _sh.which("ffmpeg"):
+        # Cast path: re-encode the 16 kbps trickle to 128 kbps MP3. Identical
+        # audio, 8x the bytes — the Chromecast receiver's startup buffer fills
+        # in seconds instead of the better part of a minute.
+        import subprocess as _sp
+        proc = _sp.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-user_agent", ua, "-i", f"https://d.liveatc.net/{code}",
+             "-vn", "-acodec", "libmp3lame", "-b:a", "128k",
+             "-ar", "44100", "-ac", "2",
+             "-map_metadata", "-1", "-bitexact",
+             "-f", "mp3", "-"],
+            stdout=_sp.PIPE, stderr=_sp.DEVNULL)
+        def gen():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        return _Resp(gen(), content_type="audio/mpeg")
+    if fmt != "raw" and _sh.which("ffmpeg"):
+        # -map_metadata -1 -bitexact is REQUIRED: without it ffmpeg inserts a
+        # LIST/INFO chunk between fmt and data; dr_wav skips chunks via
+        # seek-from-CURRENT, which pyatv's live source can't do, so the parser
+        # degenerates into an endless 4-byte scan of the stream — a healthy
+        # AirPlay session playing eternal silence.
         import subprocess as _sp
         proc = _sp.Popen(
             ["ffmpeg", "-hide_banner", "-loglevel", "error",
              "-user_agent", ua, "-i", f"https://d.liveatc.net/{code}",
              "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+             "-map_metadata", "-1", "-bitexact",
              "-f", "wav", "-"],
             stdout=_sp.PIPE, stderr=_sp.DEVNULL)
         def gen():
+            # On a pipe ffmpeg writes 0xFFFFFFFF for the RIFF and data chunk
+            # sizes (can't seek back to patch them). dr_wav then reads to EOF
+            # during INIT to learn the frame count — which never comes on a
+            # live stream. Rewrite both fields to a real, huge size (2 GB ≈
+            # 3.4 h of PCM); the AirPlay reconnect loop covers the rollover.
+            import struct as _st
+            data_size = 0x7FFF0000
             try:
+                head = proc.stdout.read(44)
+                if (len(head) == 44 and head[:4] == b"RIFF"
+                        and head[36:40] == b"data"):
+                    head = (head[:4] + _st.pack("<I", 36 + data_size)
+                            + head[8:40] + _st.pack("<I", data_size))
+                yield head
                 while True:
                     chunk = proc.stdout.read(8192)
                     if not chunk:
@@ -1130,6 +1188,8 @@ def atc_airplay_pair():
     try:
         if data.get("cancel"):
             return jsonify(_atc().airplay_pair_cancel())
+        if data.get("status"):
+            return jsonify(_atc().airplay_pair_status())
         if data.get("pin"):
             return jsonify(_atc().airplay_pair_finish(data["pin"]))
         out = (data.get("output") or "").strip()
