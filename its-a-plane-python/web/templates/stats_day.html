@@ -46,8 +46,10 @@
   .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .chart-full { grid-column: 1 / -1; }
 
-  .panel { border: 1px solid var(--amber-dim); padding: 16px; background: rgba(255,179,0,0.02); }
+  .panel { border: 1px solid var(--amber-dim); padding: 16px; background: rgba(255,179,0,0.02); min-width: 0; }
   .panel-title { font-family: 'VT323', monospace; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--amber-bright); margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--amber-dim); }
+  .panel-pair { display: flex; gap: 12px; min-width: 0; }
+  .panel-pair > .panel { flex: 1 1 0; min-width: 0; }
 
   canvas { max-height: 200px; }
 
@@ -61,7 +63,7 @@
   .loading { text-align: center; padding: 60px; color: var(--amber-dim); font-family: 'VT323', monospace; font-size: 24px; letter-spacing: 3px; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
-  @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } .panel-pair { flex-direction: column; } }
   .route-map-wrap { height: 680px; position: relative; }
   .route-map-wrap .leaflet-container { background: #0a0a08; }
   .route-tip { background: #1a1a15 !important; border: 1px solid var(--amber-dim) !important; color: var(--amber) !important; font-family: 'Share Tech Mono', monospace !important; font-size: 12px !important; padding: 4px 8px !important; box-shadow: none !important; }
@@ -143,7 +145,7 @@ function buildRouteTally(flights) {
     const [o, d] = k.split('→');
     const rev = `${d}→${o}`;
     const revCount = dir[rev] || 0;
-    const key = count >= revCount ? `${o}↔${d}` : `${d}↔${o}`;
+    const key = count > revCount ? `${o}↔${d}` : count < revCount ? `${d}↔${o}` : (o < d ? `${o}↔${d}` : `${d}↔${o}`);
     tally[key] = (tally[key] || 0) + count;
   });
   return tally;
@@ -229,7 +231,10 @@ async function render() {
 
     <div class="charts-grid">
       <div class="panel chart-full"><div class="panel-title">▸ Flights by Hour</div><canvas id="hourChart"></canvas></div>
-      <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+      <div class="panel-pair">
+        <div class="panel"><div class="panel-title">▸ Local vs Flyover</div><canvas id="localFlyoverChart"></canvas></div>
+        <div class="panel"><div class="panel-title">▸ Natural Zone Crossing</div><canvas id="zoneCrossChart"></canvas></div>
+      </div>
       <div class="panel"><div class="panel-title">▸ Airline Breakdown</div><canvas id="airlineChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Aircraft (Top 12)</div><canvas id="aircraftChart"></canvas></div>
       <div class="panel"><div class="panel-title">▸ Top Routes (Top 12)</div><canvas id="airportChart"></canvas></div>
@@ -333,6 +338,7 @@ async function render() {
 
   await buildRouteMap('routeMap', allRouteTally, 'routeMapSub', distUnits, homeLat, homeLon, zone);
   await buildDeviationTable('deviationChart', allRouteTally, zone, distUnits, AIRPORT_CODE);
+  await buildZoneCrossChart('zoneCrossChart', allRouteTally, zone);
 }
 
 // ── Route Deviation Table ─────────────────────────────────────────────────────
@@ -431,6 +437,107 @@ function gcPoints(lat1, lon1, lat2, lon2, steps=60) {
     for (let i=0; i<pts.length; i++) pts[i][1] -= 360;
   }
   return pts;
+}
+
+// Great-circle points normalized per-sample (no antimeridian continuity shift) —
+// used for zone-crossing geometry, not for map rendering.
+function gcPointsRaw(lat1, lon1, lat2, lon2, steps=60) {
+  const R = Math.PI / 180;
+  const φ1=lat1*R, λ1=lon1*R, φ2=lat2*R, λ2=lon2*R;
+  const a = Math.sin((φ2-φ1)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin((λ2-λ1)/2)**2;
+  const Δ = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  if (Δ < 0.001) return [[lat1,lon1],[lat2,lon2]];
+  const pts = [];
+  for (let i=0; i<=steps; i++) {
+    const f=i/steps, A=Math.sin((1-f)*Δ)/Math.sin(Δ), B=Math.sin(f*Δ)/Math.sin(Δ);
+    const x=A*Math.cos(φ1)*Math.cos(λ1)+B*Math.cos(φ2)*Math.cos(λ2);
+    const y=A*Math.cos(φ1)*Math.sin(λ1)+B*Math.cos(φ2)*Math.sin(λ2);
+    const z=A*Math.sin(φ1)+B*Math.sin(φ2);
+    pts.push([Math.atan2(z,Math.sqrt(x*x+y*y))/R, Math.atan2(y,x)/R]);
+  }
+  return pts;
+}
+
+// Liang-Barsky: does segment (x1,y1)-(x2,y2) intersect axis-aligned rect
+// [xmin,xmax]x[ymin,ymax]? Tests the whole segment, not just its endpoints,
+// so it still catches a chord that clips a box smaller than the sample spacing.
+function segIntersectsRect(x1,y1,x2,y2, xmin,xmax,ymin,ymax) {
+  let t0=0, t1=1;
+  const dx = x2-x1, dy = y2-y1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x1-xmin, xmax-x1, y1-ymin, ymax-y1];
+  for (let i=0; i<4; i++) {
+    if (p[i] === 0) {
+      if (q[i] < 0) return false;
+    } else {
+      const r = q[i]/p[i];
+      if (p[i] < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+      else { if (r < t0) return false; if (r < t1) t1 = r; }
+    }
+  }
+  return true;
+}
+
+// Would the straight great-circle path between these two points actually pass
+// through the watch zone box, as opposed to only the real (deviated) flight path?
+function gcCrossesZone(lat1, lon1, lat2, lon2, box) {
+  const pts = gcPointsRaw(lat1, lon1, lat2, lon2);
+  const xmin = box.tl_x, xmax = box.br_x, ymin = box.br_y, ymax = box.tl_y;
+  for (let i=0; i<pts.length-1; i++) {
+    const [la1, lo1] = pts[i], [la2, lo2] = pts[i+1];
+    if (segIntersectsRect(lo1, la1, lo2, la2, xmin, xmax, ymin, ymax)) return true;
+  }
+  return false;
+}
+
+// Of all tallied routes (each seen because a real flight crossed the watch zone),
+// what share would still cross it if flown as a straight great-circle line?
+async function buildZoneCrossChart(canvasId, tally, zone) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !zone || zone.tl_y == null || zone.tl_x == null || zone.br_y == null || zone.br_x == null) return;
+
+  const codes = new Set();
+  Object.keys(tally).forEach(r => { const [o,d]=r.split('↔'); if(o)codes.add(o); if(d)codes.add(d); });
+
+  let coords = {};
+  try { coords = await fetch(`/api/airport-coords?codes=${[...codes].join(',')}`).then(r=>r.json()); } catch(e) {}
+
+  // tally keys are already bidirectional (buildRouteTally merges A→B and B→A
+  // into one "A↔B" entry), so each entry here is one route regardless of direction.
+  let crossRoutes = 0, bypassRoutes = 0;
+  Object.entries(tally).forEach(([route]) => {
+    const [o, d] = route.split('↔');
+    const oc = coords[o], dc = coords[d];
+    if (!oc || !dc) return;
+    if (gcCrossesZone(oc.lat, oc.lon, dc.lat, dc.lon, zone)) crossRoutes++;
+    else bypassRoutes++;
+  });
+
+  const total = crossRoutes + bypassRoutes;
+  if (!total) return;
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: [`Crosses zone (${crossRoutes})`, `Bypasses zone (${bypassRoutes})`],
+      datasets: [{
+        data: [crossRoutes, bypassRoutes],
+        backgroundColor: ['#69f0ae99', '#ff6b3599'],
+        borderColor:     ['#69f0ae',   '#ff6b35'],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: {
+        legend: { display: true, labels: { color: '#ffb300', font: { family: 'VT323', size: 16 }, padding: 10 }},
+        tooltip: { callbacks: { label: ctx => {
+          const pct = ((ctx.parsed/total)*100).toFixed(1);
+          return ` ${ctx.label} — ${pct}%`;
+        }}}
+      }
+    }
+  });
 }
 
 function heatColor(t) {
@@ -589,8 +696,7 @@ async function addIssOverlay(map, units, homeLat, homeLon) {
     if (!_issMarker) {
       _issMarker = L.circleMarker(pos, {
         radius: 6, fillColor: '#00e5ff', fillOpacity: 0.95, color: '#fff', weight: 1.5, zIndexOffset: 1000,
-      }).bindTooltip('ISS', { permanent: true, direction: 'right', className: 'route-tip' })
-        .bindPopup(popup, { className: 'rp', maxWidth: 240 }).addTo(map);
+      }).bindPopup(popup, { className: 'rp', maxWidth: 240 }).addTo(map);
     } else {
       _issMarker.setLatLng(pos).setPopupContent(popup);
     }
