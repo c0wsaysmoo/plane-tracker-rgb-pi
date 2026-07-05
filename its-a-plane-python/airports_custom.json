@@ -1,14 +1,4 @@
 {
-  "MMV": {
-    "lat": 45.194401,
-    "lon": -123.136002,
-    "name": "McMinnville Municipal Airport"
-  },
-  "KMMV": {
-    "lat": 45.194401,
-    "lon": -123.136002,
-    "name": "McMinnville Municipal Airport"
-  },
   "QQA": {
     "lat": 45.14027777777778,
     "lon": -93.20611111111111,
@@ -444,6 +434,11 @@
     "lon": -76.44881,
     "name": "Hampton Roads Executive Airport"
   },
+  "PVG": {
+    "lat": 36.780391,
+    "lon": -76.44881,
+    "name": "Hampton Roads Executive Airport"
+  },
   "QQB": {
     "lat": 29.0557,
     "lon": -80.948898,
@@ -648,5 +643,50 @@
     "lat": 41.7517,
     "lon": -72.6253,
     "name": "Rentschler Field"
+  },
+  "QNK": {
+    "lat": 40.145027,
+    "lon": -111.667694,
+    "name": "Spanish Fork Municipal Airport"
+  },
+  "KSPK": {
+    "lat": 40.145027,
+    "lon": -111.667694,
+    "name": "Spanish Fork Municipal Airport"
+  },
+  "SPK": {
+    "lat": 40.145027,
+    "lon": -111.667694,
+    "name": "Spanish Fork Municipal Airport"
+  },
+  "QTR": {
+    "lat": 38.486801,
+    "lon": -121.102997,
+    "name": "Rancho Murieta Airport"
+  },
+  "KRIU": {
+    "lat": 38.486801,
+    "lon": -121.102997,
+    "name": "Rancho Murieta Airport"
+  },
+  "RIU": {
+    "lat": 38.486801,
+    "lon": -121.102997,
+    "name": "Rancho Murieta Airport"
+  },
+  "QQD": {
+    "lat": 33.202,
+    "lon": -97.1991,
+    "name": "Denton Enterprise Airport"
+  },
+  "KDTO": {
+    "lat": 33.202,
+    "lon": -97.1991,
+    "name": "Denton Enterprise Airport"
+  },
+  "DTO": {
+    "lat": 33.202,
+    "lon": -97.1991,
+    "name": "Denton Enterprise Airport"
   }
 }
