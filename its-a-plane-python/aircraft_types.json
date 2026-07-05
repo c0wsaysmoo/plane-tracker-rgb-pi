@@ -5,12 +5,6 @@
       "A4F"
     ]
   },
-  "A139": {
-    "name": "AgustaWestland AW139",
-    "short_codes": [
-      "A39"
-    ]
-  },
   "A140": {
     "name": "Antonov AN-140",
     "short_codes": [
@@ -247,6 +241,10 @@
     "short_codes": [
       "AN7"
     ]
+  },
+  "AS50": {
+    "name": "Airbus Helicopters AS350 Ecureuil",
+    "short_codes": []
   },
   "AT4": {
     "name": "ATR 42",
@@ -666,6 +664,10 @@
       "BNI"
     ]
   },
+  "BT36": {
+    "name": "Beechcraft A36TC/B36TC Bonanza",
+    "short_codes": []
+  },
   "C06T": {
     "name": "Cessna 206 Turbo Stationair",
     "short_codes": [
@@ -704,12 +706,6 @@
       "CN1"
     ]
   },
-  "C177": {
-    "name": "Cessna 177 Cardinal",
-    "short_codes": [
-      "C77"
-    ]
-  },
   "C182": {
     "name": "Cessna 182 Skylane",
     "short_codes": [
@@ -727,6 +723,10 @@
     "short_codes": [
       "CN1"
     ]
+  },
+  "C25A": {
+    "name": "Cessna 525A Citation CJ2",
+    "short_codes": []
   },
   "C25B": {
     "name": "Cessna Citation CJ2+",
@@ -746,11 +746,23 @@
       "CM2"
     ]
   },
+  "C30J": {
+    "name": "Lockheed Martin C-130J Super Hercules",
+    "short_codes": []
+  },
+  "C402": {
+    "name": "Cessna 402",
+    "short_codes": []
+  },
   "C408": {
     "name": "Cessna 408 SkyCourier",
     "short_codes": [
       "C408"
     ]
+  },
+  "C414": {
+    "name": "Cessna 414 Chancellor",
+    "short_codes": []
   },
   "C441": {
     "name": "Cessna Conquest II",
@@ -800,6 +812,10 @@
       "CJL"
     ]
   },
+  "C5M": {
+    "name": "Lockheed C-5M Super Galaxy",
+    "short_codes": []
+  },
   "C650": {
     "name": "Cessna Citation III/VI/VII",
     "short_codes": [
@@ -841,6 +857,10 @@
     "name": "Cessna 177 Cardinal RG",
     "short_codes": []
   },
+  "C82R": {
+    "name": "Cessna R182 Skylane RG",
+    "short_codes": []
+  },
   "C919": {
     "name": "COMAC C-919",
     "short_codes": []
@@ -865,12 +885,6 @@
     "name": "Bombardier Challenger 600",
     "short_codes": [
       "CCJ"
-    ]
-  },
-  "CL61": {
-    "name": "Bombardier Challenger 601/604/605",
-    "short_codes": [
-      "CRJ"
     ]
   },
   "CL64": {
@@ -1200,10 +1214,8 @@
     ]
   },
   "EC35": {
-    "name": "Eurocopter EC135",
-    "short_codes": [
-      "EC3"
-    ]
+    "name": "Airbus Helicopters EC135",
+    "short_codes": []
   },
   "EMER": {
     "name": "0-Engine Aircraft",
@@ -1250,6 +1262,10 @@
       "F50"
     ]
   },
+  "F5EX": {
+    "name": "Dassault Falcon 50EX",
+    "short_codes": []
+  },
   "F70": {
     "name": "Fokker 70",
     "short_codes": [
@@ -1261,6 +1277,10 @@
     "short_codes": [
       "DF9"
     ]
+  },
+  "F9DX": {
+    "name": "Dassault Falcon 900DX",
+    "short_codes": []
   },
   "F9EX": {
     "name": "Dassault Falcon 900EX",
@@ -1418,7 +1438,8 @@
   "H25B": {
     "name": "Hawker 800/800XP",
     "short_codes": [
-      "H25"
+      "H25",
+      "H750"
     ]
   },
   "H25C": {
@@ -1426,6 +1447,10 @@
     "short_codes": [
       "H25"
     ]
+  },
+  "H60": {
+    "name": "Sikorsky UH-60 Black Hawk",
+    "short_codes": []
   },
   "H900": {
     "name": "Hawker 900XP",
@@ -1505,6 +1530,10 @@
       "J41"
     ]
   },
+  "K35R": {
+    "name": "Boeing KC-135R Stratotanker",
+    "short_codes": []
+  },
   "L101": {
     "name": "Lockheed L-1011 TriStar",
     "short_codes": [
@@ -1548,6 +1577,10 @@
       "L35"
     ]
   },
+  "LJ36": {
+    "name": "Learjet 36",
+    "short_codes": []
+  },
   "LJ4": {
     "name": "Learjet 40",
     "short_codes": [
@@ -1581,6 +1614,10 @@
     "short_codes": [
       "LJ7"
     ]
+  },
+  "LJ75": {
+    "name": "Learjet 75",
+    "short_codes": []
   },
   "MD11": {
     "name": "McDonnell Douglas MD-11",
@@ -1643,7 +1680,7 @@
     ]
   },
   "P28B": {
-    "name": "Piper PA-28\u00c2\u00a0(above 200\u00c2\u00a0hp)",
+    "name": "Piper PA-28Â (above 200Â hp)",
     "short_codes": []
   },
   "P28R": {
@@ -1651,6 +1688,10 @@
     "short_codes": [
       "P2R"
     ]
+  },
+  "P3": {
+    "name": "Lockheed P-3 Orion",
+    "short_codes": []
   },
   "P68": {
     "name": "Partenavia P.68",
@@ -1702,6 +1743,10 @@
       "PL6"
     ]
   },
+  "PRM1": {
+    "name": "Hawker Beechcraft 390 Premier 1",
+    "short_codes": []
+  },
   "R135": {
     "name": "Boeing RC-135",
     "short_codes": [
@@ -1730,10 +1775,6 @@
     "name": "Single Rocket Landplane",
     "short_codes": []
   },
-  "RV6": {
-    "name": "Van's Aircraft RV-6",
-    "short_codes": []
-  },
   "RV8": {
     "name": "Van's Aircraft RV-8",
     "short_codes": []
@@ -1743,6 +1784,10 @@
     "short_codes": [
       "SR2"
     ]
+  },
+  "S2P": {
+    "name": "Grumman S-2 Tracker / Conair Firecat",
+    "short_codes": []
   },
   "S58T": {
     "name": "Sikorsky S-58T",
@@ -1791,12 +1836,6 @@
       "SFB"
     ]
   },
-  "SF50": {
-    "name": "Cirrus Vision SF50",
-    "short_codes": [
-      "SF5"
-    ]
-  },
   "SH33": {
     "name": "Shorts SD.330",
     "short_codes": [
@@ -1813,6 +1852,14 @@
     "name": "0-Engine Aircraft",
     "short_codes": []
   },
+  "SR20": {
+    "name": "Cirrus SR20",
+    "short_codes": []
+  },
+  "SR22": {
+    "name": "Cirrus SR22",
+    "short_codes": []
+  },
   "SS2": {
     "name": "Single Rocket Landplane",
     "short_codes": []
@@ -1821,12 +1868,6 @@
     "name": "Sukhoi Superjet 100-95",
     "short_codes": [
       "SU9"
-    ]
-  },
-  "SW4": {
-    "name": "Swearingen/Fairchild SA226/SA227 Metroliner",
-    "short_codes": [
-      "SWM"
     ]
   },
   "T134": {
