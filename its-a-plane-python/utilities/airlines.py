@@ -7,8 +7,11 @@ Source: https://github.com/rikgale/ICAOList
 """
 
 import json
+import logging
 import os
 import requests
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR   = os.path.dirname(os.path.dirname(__file__))
 CACHE_FILE = os.path.join(BASE_DIR, "airlines.json")
@@ -63,17 +66,20 @@ _OVERRIDES = {
     "VOE": "Volotea",               # European LCC (IATA: V7)
     "VTU": "Turpial Airlines",      # Venezuela
     "JRE": "flyExclusive",
+    "KMK": "Kamaka Air",
+    "KFB": "STAjets",
+    "KOW": "Baker Aviation",
+    "APZ": "Air Premia",
 }
 
 _db               = {}
-_icao_to_iata_map = {}   # 3-letter ICAO → 2-letter IATA, built lazily
 _loaded           = False
 _last_refresh     = 0.0      # epoch seconds of last successful download
 _REFRESH_COOLDOWN = 86400    # only re-download once per 24 hours on a miss
 
 
 def _download_and_build():
-    print("[Airlines] Downloading airline database...")
+    logger.info("[Airlines] Downloading airline database...")
     try:
         r = requests.get(CSV_URL, timeout=30)
         r.raise_for_status()
@@ -88,7 +94,7 @@ def _download_and_build():
             if icao and icao != "N/A" and len(icao) == 3:
                 db[icao] = _OVERRIDES.get(icao, name)
             if iata and iata != "-" and len(iata) == 2:
-                db[iata] = _OVERRIDES.get(iata, name)
+                db[iata] = _OVERRIDES.get(icao, name)
         # Apply overrides
         db.update(_OVERRIDES)
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
@@ -96,21 +102,11 @@ def _download_and_build():
         import time as _time
         global _last_refresh
         _last_refresh = _time.time()
-        print(f"[Airlines] Database built — {len(db)} entries cached")
+        logger.info(f"[Airlines] Database built — {len(db)} entries cached")
         return db
     except Exception as e:
-        print(f"[Airlines] Download failed: {e} — using built-in list")
+        logger.error(f"[Airlines] Download failed: {e} — using built-in list")
         return dict(_OVERRIDES)
-
-
-def _build_icao_iata_map():
-    global _icao_to_iata_map
-    name_to_iata = {name: code for code, name in _db.items() if len(code) == 2}
-    _icao_to_iata_map = {
-        code: name_to_iata[name]
-        for code, name in _db.items()
-        if len(code) == 3 and name in name_to_iata
-    }
 
 
 def _load():
@@ -122,23 +118,14 @@ def _load():
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 _db = json.load(f)
             _loaded = True
-            _build_icao_iata_map()
             return
         except Exception:
             pass
     _db = _download_and_build()
     _loaded = True
-    _build_icao_iata_map()
 
 
-def airline_icao_to_iata(icao3):
-    """Convert 3-letter airline ICAO code to 2-letter IATA code (e.g. DAL → DL)."""
-    if not _icao_to_iata_map:
-        _load()
-    return _icao_to_iata_map.get(icao3.upper(), "")
-
-
-def get_airline_name(icao):
+def get_airline_name(icao, callsign=None):
     """Look up airline display name by ICAO code.
     On a cache miss, re-downloads the database if it hasn't been refreshed
     in the last 24 hours, then retries once."""
@@ -153,7 +140,7 @@ def get_airline_name(icao):
     # Miss — try a refresh if cooldown has elapsed
     import time as _time
     if _time.time() - _last_refresh > _REFRESH_COOLDOWN:
-        print(f"[Airlines] '{icao}' not found — refreshing database...")
+        logger.warning(f"[Airlines] '{icao}' not found — refreshing database...")
         _loaded = False
         if os.path.exists(CACHE_FILE):
             os.remove(CACHE_FILE)
@@ -161,9 +148,14 @@ def get_airline_name(icao):
         _loaded = True
         name = _db.get(icao.upper(), "")
         if name:
-            print(f"[Airlines] '{icao}' found after refresh: {name}")
+            logger.info(f"[Airlines] '{icao}' found after refresh: {name}")
         else:
-            print(f"[Airlines] '{icao}' still not found after refresh")
+            logger.warning(f"[Airlines] '{icao}' still not found after refresh")
+            try:
+                from utilities.unknowns import log_unknown_airline
+                log_unknown_airline(icao, callsign=callsign)
+            except Exception:
+                pass
     return name
 
 
