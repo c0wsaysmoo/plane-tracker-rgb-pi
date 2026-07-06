@@ -46,16 +46,13 @@ except ImportError:  # requests is a hard dep elsewhere; guard anyway
     requests = None
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# State/cache files live alongside the app's other runtime JSON (current_overhead.json,
-# tracked_flight.json, ...) at the project root — overridable for tests/dev hosts.
 _DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", _BASE_DIR)
 _SEED_FILE = os.path.join(_BASE_DIR, "data", "atc_stations_seed.json")
 _STATE_FILE = os.path.join(_DATA_DIR, "atc_audio.json")
 _DISCOVERED_CACHE = os.path.join(_DATA_DIR, "atc_discovered.json")
 _OUTPUT_CACHE = os.path.join(_DATA_DIR, "atc_outputs.json")
 _AIRPLAY_CREDS = os.path.join(_DATA_DIR, "atc_airplay_creds.json")
-# Overhead traffic feed — written by utilities/overhead.py at the project root.
-_OVERHEAD_FILE = os.path.join(_BASE_DIR, "current_overhead.json")
+_OVERHEAD_FILE = os.path.join(_DATA_DIR, "current_overhead.json")
 
 # LiveATC direct stream host. d.liveatc.net 302s to a load-balanced icecast
 # edge (sN-xxx.liveatc.net) serving audio/mpeg. Do NOT use www.liveatc.net's
@@ -164,6 +161,10 @@ class ATCAudioManager:
         # A manual start() during quiet hours sets this; auto mode then keeps
         # playing through the window. Cleared when the window ends or on stop().
         self._quiet_override = bool(st.get("quiet_override", False))
+        # Last-persisted snapshot so _persist() can skip identical writes —
+        # tick() calls it every 5s and an unconditional atomic write wore
+        # the SD card for no reason.
+        self._persisted = None
 
         # Auto-tune bookkeeping.
         self._current_since = 0.0
@@ -171,10 +172,19 @@ class ATCAudioManager:
         # Backend process handles (spawned on demand only).
         self._mpv_proc = None
         self._cast_device = None                       # pychromecast device
+        self._cast_stop = None                         # threading.Event for cast start worker
+        self._cast_thread = None
         self._airplay_stop = None                      # threading.Event for RAOP
         self._airplay_thread = None
         self._airplay_pairing = None                   # active PIN-pairing session
-        self._airplay_needs_pairing = ""               # ident that 470'd (mirror UI hook)
+        # Pairing/failure flags are RESTORED from the state file: without
+        # this, auto-resume relaunched an unpaired AirPlay target on every
+        # boot and re-popped the receiver's code screen (470 loop).
+        self._airplay_needs_pairing = st.get("airplay_needs_pairing", "")  # ident that 470'd
+        self._airplay_failed = st.get("airplay_failed", "")  # ident whose reconnect loop gave up
+        # Throttle for tick()'s backend supervision — a permanently-dead
+        # device must not be re-spawned on every 5s tick.
+        self._backend_retry_ts = 0.0
 
         # Output discovery cache.
         self._outputs_cache = None
@@ -425,7 +435,14 @@ class ATCAudioManager:
 
     def _pick_station_auto(self):
         """Score by AIRPORT (not per-flight) to prevent thrashing. Returns a
-        (feed_code, airport_icao) tuple, or (None, None)."""
+        (feed_code, airport_icao) tuple, or (None, None).
+
+        TODO(lock): probe under lock — this (via _feeds_for_airport/_feed_ok)
+        can fire up to ~15 ranged GETs × 2s while callers (tick auto branch,
+        _ensure_station_locked) hold self._lock, stalling status() and the
+        mirror poll. Restructuring to probe on a snapshot outside the lock
+        touches every caller; the negative discovery cache and the 403
+        cooldown bound the damage for now."""
         flights = self._read_overhead()
         scores = {}   # icao -> score
         prefer_app = {}  # icao -> bool (overhead traffic at altitude)
@@ -530,7 +547,15 @@ class ATCAudioManager:
                     return f"{icao} {self._KIND_LABELS.get(k, k.title())}"
         for cid, c in self._centers.items():
             if st == c.get("code"):
-                return f"{c.get('name', cid)} Center"
+                # Seed center names already read like "Boston Center —
+                # Hampton 31 (eastern LI overflights)": blindly appending
+                # " Center" doubled the word and overflowed the receivers'
+                # now-playing line. Keep the first segment, cap the length,
+                # and only add "Center" when it isn't already in the name.
+                name = c.get("name", cid).split(" — ", 1)[0].strip()
+                if "center" not in name.lower():
+                    name = f"{name} Center"
+                return name[:24]
         for icao, d in self._discovered.items():
             for k, c in d.get("feeds", {}).items():
                 if c == st:
@@ -661,6 +686,7 @@ class ATCAudioManager:
                 "quiet_hours": f"{self._quiet[0]}-{self._quiet[1]}",
                 "in_quiet_hours": self._in_quiet_hours(),
                 "airplay_needs_pairing": self._airplay_needs_pairing,
+                "airplay_failed": self._airplay_failed,
             }
 
     def display_state(self):
@@ -685,16 +711,28 @@ class ATCAudioManager:
                 "output": self._output,
                 "volume": self._volume,
                 "airplay_needs_pairing": self._airplay_needs_pairing,
+                "airplay_failed": self._airplay_failed,
                 "station_label": self._station_label(),
             }
 
     def _persist(self):
-        _atomic_write(_STATE_FILE, {
+        data = {
             "mode": self._mode, "station": self._station, "volume": self._volume,
             "output": self._output, "playing": self._playing,
             "last_mode": self._last_on_mode,
             "quiet_override": self._quiet_override,
-        })
+            # Persisting playing:true WITHOUT these flags meant a restart
+            # auto-resumed an unpaired/failed AirPlay target and re-popped
+            # the receiver's code screen; __init__ restores them.
+            "airplay_needs_pairing": self._airplay_needs_pairing,
+            "airplay_failed": self._airplay_failed,
+        }
+        # Skip identical writes: tick() persists every 5s, and rewriting an
+        # unchanged file forever is pure SD-card wear.
+        if data == self._persisted:
+            return
+        self._persisted = data
+        _atomic_write(_STATE_FILE, dict(data))
 
     # ── Controls ─────────────────────────────────────────────────────────
     def set_mode(self, mode):
@@ -711,15 +749,18 @@ class ATCAudioManager:
 
     def set_station(self, feed_code):
         code = (feed_code or "").strip()
-        with self._lock:
-            # Verify at selection time — a demonstrably dead mount gets a
-            # visible refusal instead of tuning the player to a 404 (stale
-            # UI lists can still offer since-removed mounts).
-            if code and self._probe_feed(code) is False:
+        # Verify at selection time — a demonstrably dead mount gets a
+        # visible refusal instead of tuning the player to a 404 (stale
+        # UI lists can still offer since-removed mounts). Probed OUTSIDE
+        # the lock: the ranged GET can take 2s and status()/display_state()
+        # (and the mirror's 2s poll) must not stall behind it.
+        if code and self._probe_feed(code) is False:
+            with self._lock:
                 self._dead_feeds[code] = _now()
-                st = self.status()
-                st["error"] = f"'{code}' is offline at LiveATC"
-                return st
+            st = self.status()
+            st["error"] = f"'{code}' is offline at LiveATC"
+            return st
+        with self._lock:
             self._station = code
             self._current_since = _now()
             self._mode = "manual" if self._station else self._mode
@@ -739,6 +780,13 @@ class ATCAudioManager:
         return self.status()
 
     def select_output(self, output_id):
+        # Only accept ids we can actually dispatch to — an arbitrary string
+        # persisted here parked the manager on an output no backend matches
+        # (silence until someone re-selects). Checked BEFORE the lock:
+        # list_outputs() may do a blocking mDNS sweep on a cold cache.
+        if output_id not in ("browser", "usb") and \
+                output_id not in {o.get("id") for o in (self.list_outputs() or [])}:
+            return self.status()
         with self._lock:
             if output_id == self._output:
                 return self.status()
@@ -747,6 +795,7 @@ class ATCAudioManager:
             self._stop_backend_locked()
             self._output = output_id
             self._airplay_needs_pairing = ""   # new target — allow a fresh attempt
+            self._airplay_failed = ""
             self._persist()
             # If we were playing, bring up the new backend (unless browser —
             # the browser establishes its own playback from display-state).
@@ -770,6 +819,7 @@ class ATCAudioManager:
             self._ensure_station_locked()
             self._playing = True
             self._airplay_needs_pairing = ""   # explicit gesture — allow a retry
+            self._airplay_failed = ""
             # Playing again during the quiet window is an explicit override:
             # the auto-mode gate honours it until the window ends or stop().
             if self._in_quiet_hours():
@@ -814,30 +864,78 @@ class ATCAudioManager:
         """Advance the auto-tuner and honour deferred resume. Safe to call
         every few seconds from a background thread; never from the LED loop."""
         self._refresh_config()
+        # Re-verify the current station every 10 min — a persisted or
+        # previously-picked mount can be dead (or die mid-listen).
+        # _feed_ok trusts the current station, so this is the only
+        # recovery path. Applies to manual too: when a hand-picked feed
+        # dies we fall back to auto so the radio keeps working instead
+        # of ERRing forever. The probe (a ~2s ranged GET) runs OUTSIDE
+        # the lock — under it, it froze status()/display_state() and the
+        # mirror's 2s poll; the verdict is applied under the lock below,
+        # and only if the station is still the one that was probed.
+        verify_code = ""
+        with self._lock:
+            if self._enabled and self._mode != "off" and self._station \
+                    and (_now() - self._station_checked) > 600:
+                self._station_checked = _now()
+                verify_code = self._station
+        verify_dead = bool(verify_code) and self._probe_feed(verify_code) is False
         with self._lock:
             if self._resume_pending:
                 self._resume_pending = False
                 if self._playing and self._pi_side(self._output):
-                    self._start_backend_locked()
+                    ident = self._output.split(":", 1)[1] if ":" in self._output else ""
+                    if self._output.startswith("airplay") and ident and \
+                            ident in (self._airplay_needs_pairing, self._airplay_failed):
+                        # A restored needs-pairing/failed AirPlay target must
+                        # NOT relaunch on boot — that re-pops the receiver's
+                        # code screen (or resumes hammering a dead feed).
+                        # Stay stopped until an explicit start() or a
+                        # successful pair clears the flag.
+                        self._playing = False
+                    else:
+                        self._start_backend_locked()
 
             if not self._enabled or self._mode == "off":
                 if self._playing:
                     self._stop_locked()
                 return
 
-            # Re-verify the current station every 10 min — a persisted or
-            # previously-picked mount can be dead (or die mid-listen).
-            # _feed_ok trusts the current station, so this is the only
-            # recovery path. Applies to manual too: when a hand-picked feed
-            # dies we fall back to auto so the radio keeps working instead
-            # of ERRing forever.
-            if self._station and (_now() - self._station_checked) > 600:
-                self._station_checked = _now()
-                if self._probe_feed(self._station) is False:
-                    self._dead_feeds[self._station] = _now()
-                    self._station = ""
-                    if self._mode == "manual":
-                        self._mode = "auto"
+            if verify_dead and self._station == verify_code:
+                self._dead_feeds[verify_code] = _now()
+                self._station = ""
+                # Also stop a running Pi-side backend: if auto finds no
+                # replacement below, it would otherwise keep playing and
+                # fetching the dead mount forever.
+                if self._playing and self._pi_side(self._output):
+                    self._stop_backend_locked()
+                if self._mode == "manual":
+                    self._mode = "auto"
+
+            # Supervise Pi-side backends: only AirPlay self-heals (its
+            # reconnect loop); a crashed mpv or a dropped cast session
+            # otherwise stranded playing:True over silence forever. Cheap
+            # process/socket checks only — no network — and throttled so an
+            # unreachable device isn't re-spawned on every 5s tick.
+            if self._playing and self._station and self._pi_side(self._output):
+                dead = False
+                if self._output == "usb":
+                    dead = (self._mpv_proc is not None
+                            and self._mpv_proc.poll() is not None)
+                elif self._output.startswith("chromecast"):
+                    starting = (self._cast_thread is not None
+                                and self._cast_thread.is_alive())
+                    if not starting:
+                        dev = self._cast_device
+                        if dev is None:
+                            dead = True   # start worker ended without a session
+                        else:
+                            sc = getattr(dev, "socket_client", None)
+                            dead = (sc is not None
+                                    and not getattr(sc, "is_connected", True))
+                if dead and (_now() - self._backend_retry_ts) >= 30:
+                    self._backend_retry_ts = _now()
+                    self._start_backend_locked()
 
             if self._mode == "auto":
                 # Quiet hours gate — auto mode must not start audio at 2am.
@@ -941,110 +1039,181 @@ class ATCAudioManager:
             pass
 
     # ── Backend: Chromecast (cast pulls the URL itself) ──────────────────
+    @staticmethod
+    def _cast_teardown(dev):
+        """Stop/quit/disconnect a cast device, each step guarded on its own —
+        one raising (e.g. stop() on a dead socket) must not skip the rest
+        and leak the socket-client threads behind it."""
+        if dev is None:
+            return
+        try:
+            dev.media_controller.stop()
+        except Exception:
+            pass
+        try:
+            dev.quit_app()
+        except Exception:
+            pass
+        try:
+            dev.disconnect()
+        except Exception:
+            pass
+
     def _start_cast_locked(self):
         """Tell the selected cast device to pull the stream itself — from the
         Pi's relay when reachable (browser UA + one upstream connection; cast
         UAs fetching LiveATC from the house IP are ban-bait), falling back to
-        the direct LiveATC URL. No Pi audio pipeline involved (review note 5)."""
+        the direct LiveATC URL. No Pi audio pipeline involved (review note 5).
+        All pychromecast I/O (discovery + wait + quit_app + block_until_active
+        ≈ 20s worst case) runs on a worker thread: doing it inline here held
+        self._lock for the duration, freezing status()/display_state() and
+        the mirror's 2s poll. We hold the lock, so snapshot everything the
+        worker needs NOW; the worker must never touch self._lock — the
+        stopper joins it while holding the lock."""
         url = self._stream_url(self._station)
         uuid = self._output.split(":", 1)[1] if ":" in self._output else ""
         if not url or not uuid:
             return
         try:
-            import pychromecast
+            import pychromecast  # noqa: F401
         except Exception:
             return
-        try:
-            # pychromecast matches UUID objects, not strings — a string uuid
-            # silently finds nothing (casts were never commanded). Try the
-            # UUID object first, then fall back to the friendly name from the
-            # outputs cache.
+        station = self._station
+        volume = self._volume
+        output = self._output
+        label = self._station_label()   # 'now playing' shown on the receiver
+        outputs_cache = list(self._outputs_cache or [])
+        stop_evt = threading.Event()
+        self._cast_stop = stop_evt
+
+        def _run():
+            import pychromecast
             import uuid as _uuid_mod
-            browser = None
+            dev, browser = None, None
             try:
-                casts, browser = pychromecast.get_listed_chromecasts(
-                    uuids=[_uuid_mod.UUID(uuid)])
-            except Exception:
-                casts = []
-            if not casts:
+                # pychromecast matches UUID objects, not strings — a string
+                # uuid silently finds nothing (casts were never commanded).
+                # Try the UUID object first, then fall back to the friendly
+                # name from the outputs cache.
+                try:
+                    casts, browser = pychromecast.get_listed_chromecasts(
+                        uuids=[_uuid_mod.UUID(uuid)])
+                except Exception:
+                    casts = []
+                if not casts:
+                    try:
+                        if browser:
+                            browser.stop_discovery()
+                    except Exception:
+                        pass
+                    browser = None
+                    name = next((o.get("name") for o in outputs_cache
+                                 if o.get("id") == output), None)
+                    if not name:
+                        return
+                    casts, browser = pychromecast.get_listed_chromecasts(
+                        friendly_names=[name])
+                dev = casts[0] if casts else None
+                if dev is None or stop_evt.is_set():
+                    return
+                dev.wait(timeout=5)
+                # If another app owns the device (e.g. Pandora), media commands
+                # land on ITS session instead of launching ours — quit it first.
+                try:
+                    if dev.status and dev.status.display_name and \
+                            dev.status.display_name not in ("Backdrop", None, ""):
+                        dev.quit_app()
+                        if stop_evt.wait(3):   # settle wait, abandonable
+                            return
+                except Exception:
+                    pass
+                if stop_evt.is_set():
+                    return
+                dev.set_volume(volume / 100.0)
+                mc = dev.media_controller
+                # Prefer the relay: UDP-connect toward the cast device to learn
+                # which of OUR addresses is on its LAN (exit nodes make the
+                # default-route trick return the tailnet IP, which casts can't
+                # reach). ?fmt=mp3 = 128 kbps re-encode so the receiver's startup
+                # buffer fills in seconds (the 16 kbps source takes ~a minute).
+                play_url = url
+                try:
+                    import socket as _sock
+                    host = dev.cast_info.host
+                    s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+                    try:
+                        s.connect((host, 9))
+                        my_ip = s.getsockname()[0]
+                    finally:
+                        s.close()
+                    play_url = (f"http://{my_ip}:8080/atc/relay"
+                                f"?code={station}&fmt=mp3")
+                except Exception:
+                    pass   # direct LiveATC URL stays as the fallback
+                # "Now playing" label so the cast device / Google Home shows
+                # what it's tuned to instead of a bare URL. STREAM_TYPE_LIVE
+                # tells the receiver there's no scrubbable timeline.
+                try:
+                    from pychromecast.controllers.media import STREAM_TYPE_LIVE
+                    _stype = STREAM_TYPE_LIVE
+                except Exception:
+                    _stype = "LIVE"
+                # play_media autoplays on load; an extra play() raises
+                # "no session" whenever the load failed — don't call it.
+                mc.play_media(play_url, "audio/mpeg", title=label,
+                              stream_type=_stype,
+                              metadata={"metadataType": 0, "title": label,
+                                        "subtitle": "LiveATC"})
+                mc.block_until_active(timeout=8)
+                if stop_evt.is_set():
+                    # The stopper gave up joining us — nobody else holds this
+                    # handle, so tear down our own session before exiting.
+                    self._cast_teardown(dev)
+                    dev = None
+                    return
+                # Publish the live handle. Plain attribute assignment (atomic
+                # in CPython) instead of taking self._lock: _stop_cast_locked
+                # joins this thread WHILE holding the lock, so acquiring it
+                # here could stall the whole manager for the join timeout.
+                self._cast_device = dev
+                if stop_evt.is_set():
+                    # Raced a stop that ran just before the assignment landed:
+                    # this session is ours to clean up either way (a newer
+                    # worker may already have replaced the slot).
+                    if self._cast_device is dev:
+                        self._cast_device = None
+                    self._cast_teardown(dev)
+            except Exception as e:
+                print(f"ATC cast: start failed: {type(e).__name__}: {e}",
+                      flush=True)
+                self._cast_teardown(dev)
+            finally:
+                # The zeroconf CastBrowser leaked its threads (one per retry)
+                # whenever wait/play_media/block_until_active raised — stop it
+                # on EVERY exit path.
                 try:
                     if browser:
                         browser.stop_discovery()
                 except Exception:
                     pass
-                name = next((o.get("name") for o in (self._outputs_cache or [])
-                             if o.get("id") == self._output), None)
-                if not name:
-                    return
-                casts, browser = pychromecast.get_listed_chromecasts(
-                    friendly_names=[name])
-            dev = casts[0] if casts else None
-            if dev is None:
-                return
-            dev.wait(timeout=5)
-            # If another app owns the device (e.g. Pandora), media commands
-            # land on ITS session instead of launching ours — quit it first.
-            try:
-                if dev.status and dev.status.display_name and \
-                        dev.status.display_name not in ("Backdrop", None, ""):
-                    dev.quit_app()
-                    import time as _t
-                    _t.sleep(3)
-            except Exception:
-                pass
-            dev.set_volume(self._volume / 100.0)
-            mc = dev.media_controller
-            # Prefer the relay: UDP-connect toward the cast device to learn
-            # which of OUR addresses is on its LAN (exit nodes make the
-            # default-route trick return the tailnet IP, which casts can't
-            # reach). ?fmt=mp3 = 128 kbps re-encode so the receiver's startup
-            # buffer fills in seconds (the 16 kbps source takes ~a minute).
-            try:
-                import socket as _sock
-                host = dev.cast_info.host
-                s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
-                try:
-                    s.connect((host, 9))
-                    my_ip = s.getsockname()[0]
-                finally:
-                    s.close()
-                url = (f"http://{my_ip}:8080/atc/relay"
-                       f"?code={self._station}&fmt=mp3")
-            except Exception:
-                pass   # direct LiveATC URL stays as the fallback
-            # "Now playing" label so the cast device / Google Home shows what
-            # it's tuned to instead of a bare URL. STREAM_TYPE_LIVE tells the
-            # receiver there's no scrubbable timeline.
-            label = self._station_label()
-            try:
-                from pychromecast.controllers.media import STREAM_TYPE_LIVE
-                _stype = STREAM_TYPE_LIVE
-            except Exception:
-                _stype = "LIVE"
-            # play_media autoplays on load; an extra play() raises
-            # "no session" whenever the load failed — don't call it.
-            mc.play_media(url, "audio/mpeg", title=label, stream_type=_stype,
-                          metadata={"metadataType": 0, "title": label,
-                                    "subtitle": "LiveATC"})
-            mc.block_until_active(timeout=8)
-            self._cast_device = dev
-            try:
-                if browser:
-                    browser.stop_discovery()
-            except Exception:
-                pass
-        except Exception:
-            self._cast_device = None
+
+        self._cast_thread = threading.Thread(target=_run, daemon=True,
+                                             name="atc-cast-start")
+        self._cast_thread.start()
 
     def _stop_cast_locked(self):
-        if self._cast_device is not None:
-            try:
-                self._cast_device.media_controller.stop()
-                self._cast_device.quit_app()
-                self._cast_device.disconnect()
-            except Exception:
-                pass
-            self._cast_device = None
+        # A still-starting worker checks this event at each checkpoint and
+        # tears down its own session if we give up waiting for it below.
+        if self._cast_stop is not None:
+            self._cast_stop.set()
+        t = self._cast_thread
+        if t is not None:
+            t.join(timeout=5)
+        self._cast_stop = None
+        self._cast_thread = None
+        dev = self._cast_device
+        self._cast_device = None
+        self._cast_teardown(dev)
 
     # ── Backend: AirPlay (pyatv RAOP, on-demand only) ────────────────────
     def _start_airplay_locked(self):
@@ -1061,13 +1230,18 @@ class ATCAudioManager:
         print(f"ATC airplay: begin ident={ident} url_ok={bool(url)}", flush=True)
         if not url or not ident:
             return
-        # This receiver already 470'd unpaired. Don't relaunch — tick() calls
-        # us again on every auto-tune station change, which would re-pop the
-        # device's code screen each time. Only an explicit start()/
+        # This receiver already 470'd unpaired, or its reconnect loop already
+        # gave up (dead feed / unreachable). Don't relaunch — tick() calls us
+        # again on every auto-tune station change, which would re-pop the code
+        # screen or resume hammering LiveATC. Only an explicit start()/
         # select_output() or a successful pair clears the flag for a retry.
         if self._airplay_needs_pairing == ident:
             print(f"ATC airplay: {ident} blocked on pairing — skipping start",
                   flush=True)
+            return
+        if self._airplay_failed == ident:
+            print(f"ATC airplay: {ident} gave up earlier — skipping start "
+                  f"(press play to retry)", flush=True)
             return
         try:
             import pyatv  # noqa: F401
@@ -1128,9 +1302,16 @@ class ATCAudioManager:
                         print(f"ATC airplay stream error: {exc}", flush=True)
                         # Authorization failures mean the receiver needs
                         # pairing — retrying just re-triggers its code screen
-                        # every 3s (a screen-takeover loop on macOS).
+                        # every 3s (a screen-takeover loop on macOS). Match
+                        # the pyatv exception TYPES first (message wording
+                        # varies by version and missed NoCredentialsError);
+                        # 470 is the AirPlay auth-required HTTP status; the
+                        # substring test stays as the fallback.
+                        auth_types = _pyatv_auth_excs()
                         txt = str(exc).lower()
-                        if "authoriz" in txt or "authenticat" in txt:
+                        if (auth_types and isinstance(exc, auth_types)) \
+                                or "authoriz" in txt or "authenticat" in txt \
+                                or "470" in txt:
                             return "auth"
                     if not task.done():
                         task.cancel()
@@ -1146,28 +1327,51 @@ class ATCAudioManager:
 
             # Reconnect loop: RAOP sessions end on their own (receiver-side
             # drops, stream hiccups) — a one-shot stream left 'playing: True'
-            # with silence and no process. Keep re-establishing until an
-            # explicit stop; journald-visible either way.
-            try:
-                attempt = 0
-                while not stop_evt.is_set():
+            # with silence and no process. Reconnect until an explicit stop,
+            # BUT with exponential backoff and a failure cap: every attempt
+            # opens a LiveATC fetch through the relay, and a flat retry against
+            # a dead feed is exactly what got this IP banned (the browser path
+            # already has this policy). A session that actually ran (>=30s)
+            # resets the backoff; repeated short/failed sessions back off and
+            # eventually give up. Each iteration is guarded so a scan/connect
+            # error can't kill the loop and strand playing:True over silence.
+            BASE_DELAY, MAX_DELAY, MAX_FAILS = 3, 300, 12
+            fails = 0
+            attempt = 0
+            while not stop_evt.is_set():
+                t0 = time.monotonic()
+                try:
                     verdict = asyncio.new_event_loop().run_until_complete(_stream())
-                    if verdict == "auth":
-                        print("ATC airplay: receiver requires pairing — not "
-                              "retrying. Use 'pair airplay' on the config page.",
-                              flush=True)
-                        self._airplay_needs_pairing = ident
-                        break
-                    if stop_evt.is_set():
-                        break
-                    attempt += 1
-                    print(f"ATC airplay: stream ended — reconnect #{attempt} in 3s",
+                except Exception as e:
+                    print(f"ATC airplay iteration error: "
+                          f"{type(e).__name__}: {e}", flush=True)
+                    verdict = None
+                ran = time.monotonic() - t0
+                if verdict == "auth":
+                    print("ATC airplay: receiver requires pairing — not "
+                          "retrying. Use 'pair airplay' on the config page.",
                           flush=True)
-                    if stop_evt.wait(3):
+                    self._airplay_needs_pairing = ident
+                    break
+                if stop_evt.is_set():
+                    break
+                if ran >= 30:
+                    fails = 0                       # real session — reset backoff
+                    delay = BASE_DELAY
+                else:
+                    fails += 1
+                    if fails >= MAX_FAILS:
+                        print(f"ATC airplay: {fails} failed/short sessions in a "
+                              f"row — giving up (dead feed or receiver "
+                              f"unreachable). Press play to retry.", flush=True)
+                        self._airplay_failed = ident
                         break
-            except Exception as e:
-                # journald-visible: silent failures cost hours of debugging.
-                print(f"ATC airplay error: {type(e).__name__}: {e}", flush=True)
+                    delay = min(BASE_DELAY * (2 ** (fails - 1)), MAX_DELAY)
+                attempt += 1
+                print(f"ATC airplay: reconnect #{attempt} in {delay}s "
+                      f"(consecutive fails={fails})", flush=True)
+                if stop_evt.wait(delay):
+                    break
 
         self._airplay_thread = threading.Thread(target=_run, daemon=True)
         self._airplay_thread.start()
@@ -1206,7 +1410,10 @@ class ATCAudioManager:
                  "step_event": threading.Event(),  # thread -> caller
                  "pin": None,
                  "done_event": threading.Event()}
-        self._airplay_pairing = state
+        # Swap the session handle under the lock — two concurrent begin()
+        # calls (double-click) otherwise interleave and strand a thread.
+        with self._lock:
+            self._airplay_pairing = state
 
         def _run():
             import asyncio
@@ -1274,6 +1481,14 @@ class ATCAudioManager:
                     stored = _load_json(_AIRPLAY_CREDS, {})
                     stored[ident] = state["creds"]
                     _atomic_write(_AIRPLAY_CREDS, stored)
+                    try:
+                        # _atomic_write chmods 0o666 for the shared-data
+                        # pattern; this file holds pairing SECRETS — clamp
+                        # to owner-only (best-effort: EPERM if another user
+                        # owns a pre-existing file).
+                        os.chmod(_AIRPLAY_CREDS, 0o600)
+                    except OSError:
+                        pass
                     if self._airplay_needs_pairing == ident:
                         self._airplay_needs_pairing = ""
             except Exception as e:
@@ -1296,34 +1511,61 @@ class ATCAudioManager:
         (Apple TV: scan + AirPlay setup) can outlast begin()'s 12s HTTP wait —
         the session keeps going in its thread, and the UI polls this until it
         reaches awaiting_pin/paired/error."""
-        state = getattr(self, "_airplay_pairing", None)
+        with self._lock:
+            state = getattr(self, "_airplay_pairing", None)
         if not state:
             return {"ok": False, "stage": "none", "error": "no pairing session"}
-        return {"ok": state["stage"] != "error", "stage": state["stage"],
+        resp = {"ok": state["stage"] != "error", "stage": state["stage"],
                 "protocol": state["protocol"],
                 "more": state["stage"] == "awaiting_pin",
                 "error": state["error"]}
+        # Session finished and reported: drop the handle so later
+        # {"status": true} polls don't resurrect the old session forever.
+        self._maybe_clear_pairing(state)
+        return resp
+
+    def _maybe_clear_pairing(self, state):
+        """Clear a COMPLETED pairing session (paired or errored, thread done)
+        after its final state has been reported once."""
+        if state["done_event"].is_set() and state["stage"] in ("paired", "error"):
+            with self._lock:
+                if self._airplay_pairing is state:
+                    self._airplay_pairing = None
 
     def airplay_pair_finish(self, pin):
-        state = self._airplay_pairing
+        with self._lock:
+            state = self._airplay_pairing
         if not state or state["stage"] != "awaiting_pin":
             return {"ok": False, "error": "no pairing awaiting a PIN"}
         state["pin"] = str(pin).strip()
         state["step_event"].clear()
         state["pin_event"].set()
         # Wait for the next checkpoint: another protocol's PIN, done, or error.
-        state["step_event"].wait(30)
+        if not state["step_event"].wait(30):
+            # Timed out with the thread still inside pairing.finish(): the
+            # stage still reads "awaiting_pin", but reporting that (with
+            # more:true) makes the UI re-prompt for a PIN nobody asked for.
+            # Return a neutral in-progress verdict; the UI can poll status.
+            return {"ok": False, "stage": "working",
+                    "protocol": state["protocol"], "more": False,
+                    "error": "pairing still in progress"}
         more = state["stage"] == "awaiting_pin"
-        return {"ok": state["stage"] in ("awaiting_pin", "paired"),
+        resp = {"ok": state["stage"] in ("awaiting_pin", "paired"),
                 "stage": state["stage"], "protocol": state["protocol"],
                 "more": more, "error": state["error"]}
+        self._maybe_clear_pairing(state)
+        return resp
 
     def airplay_pair_cancel(self):
-        state = getattr(self, "_airplay_pairing", None)
+        with self._lock:
+            state = getattr(self, "_airplay_pairing", None)
+            self._airplay_pairing = None
         if state:
             state["pin_event"].set()
-            state["done_event"].wait(2)
-        self._airplay_pairing = None
+            # The thread may be mid pairing.finish() network round-trip —
+            # give it a real chance to close the session (2s routinely left
+            # orphaned sessions open on slow receivers like Apple TVs).
+            state["done_event"].wait(10)
         return {"ok": True}
 
     # ── Backend dispatch ─────────────────────────────────────────────────
@@ -1403,6 +1645,23 @@ class ATCAudioManager:
 
 
 # ── Module-level helpers ────────────────────────────────────────────────
+def _pyatv_auth_excs():
+    """Best-effort tuple of pyatv auth-failure exception types. Matching on
+    message substrings alone missed NoCredentialsError (its text says
+    neither 'authoriz' nor 'authenticat'); exception names vary across
+    pyatv versions, so each is looked up defensively."""
+    excs = []
+    try:
+        from pyatv import exceptions as _pex
+        for name in ("AuthenticationError", "NoCredentialsError"):
+            e = getattr(_pex, name, None)
+            if isinstance(e, type) and issubclass(e, BaseException):
+                excs.append(e)
+    except Exception:
+        pass
+    return tuple(excs)
+
+
 def _cfg_bool(v):
     if isinstance(v, bool):
         return v
