@@ -227,6 +227,11 @@ class ATCAudioManager:
             else:
                 self._quiet = night
             self._auto_resume = _cfg_bool(getattr(cfg, "ATC_AUTO_RESUME", True))
+            # USB speaker ALSA device for mpv: explicit override like
+            # "alsa/plughw:CARD=UACDemoV10,DEV=0"; blank = auto-detect the first
+            # USB-audio card at play time. Without a device mpv plays to the
+            # Pi's onboard jack, so "USB output" was silent even with a speaker.
+            self._usb_device = (getattr(cfg, "ATC_USB_DEVICE", "") or "").strip()
             # User-added stations: "ICAO/kind/mount[/lat/lon]" comma list —
             # merged over the seed so extra local feeds (or corrections) need
             # no seed-file edit. kind: twr|app|ctr. Without lat/lon the entry
@@ -984,6 +989,26 @@ class ATCAudioManager:
     # O1 "Audio output — HARDWARE CONSTRAINT".
     _MPV_IPC = os.path.join(_DATA_DIR, "atc_mpv.sock")
 
+    @staticmethod
+    def _detect_usb_alsa_device():
+        """mpv --audio-device string for the first USB-audio card (the ATC
+        speaker), read from /proc/asound/cards — e.g.
+        'alsa/plughw:CARD=UACDemoV10,DEV=0'. Returns '' if there is no USB card
+        (mpv then falls back to its own default). plughw: lets ALSA convert
+        sample-rate/format for cheap USB DACs."""
+        import re as _re
+        try:
+            with open("/proc/asound/cards") as f:
+                text = f.read()
+        except OSError:
+            return ""
+        # " 2 [UACDemoV10     ]: USB-Audio - USB Audio Device"
+        for m in _re.finditer(r"^\s*\d+\s*\[([^\]]+)\]:\s*(.+)$", text, _re.M):
+            name, desc = m.group(1).strip(), m.group(2)
+            if "USB-Audio" in desc or "USB Audio" in desc:
+                return f"alsa/plughw:CARD={name},DEV=0"
+        return ""
+
     def _start_mpv_locked(self):
         url = self._stream_url(self._station)
         if not url:
@@ -993,11 +1018,18 @@ class ATCAudioManager:
                 os.remove(self._MPV_IPC)
             except OSError:
                 pass
+            device = getattr(self, "_usb_device", "") or self._detect_usb_alsa_device()
+            args = ["mpv", "--no-video", "--no-terminal", "--idle=no",
+                    "--user-agent=" + _UA_HEADERS["User-Agent"],
+                    f"--volume={self._volume}",
+                    f"--input-ipc-server={self._MPV_IPC}"]
+            if device:
+                # Target the USB speaker explicitly; otherwise mpv plays to the
+                # ALSA default (the Pi's onboard jack) and the USB output is mute.
+                args.append(f"--audio-device={device}")
+            args.append(url)
             self._mpv_proc = subprocess.Popen(
-                ["mpv", "--no-video", "--no-terminal", "--idle=no",
-                 "--user-agent=" + _UA_HEADERS["User-Agent"],
-                 f"--volume={self._volume}",
-                 f"--input-ipc-server={self._MPV_IPC}", url],
+                args,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             # Pin to core 2 (leave core 3 for the LED display) — best effort.
