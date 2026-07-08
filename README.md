@@ -286,6 +286,30 @@ Make sure you select the correct timezone since that is what is displayed on the
 ### 2. Connect via SSH
 I use **[MobaXterm](https://mobaxterm.mobatek.net/)** on Windows to SSH into the Pi since it allows you to see the folder structure and edit files directly without using the command prompt. After [SSH-ing into the Pi](https://www.fromdev.com/2025/04/how-to-ssh-into-raspberry-pi-a-step-by-step-guide.html), proceed with the following steps.
 
+### 2b. Memory fix for Pi 3A+ and other 512 MB boards
+
+Raspberry Pi OS ships with a GPU video driver (`vc4-kms-v3d`) that reserves **256 MB
+for video compositing** — half the RAM on a 512 MB Pi. A headless LED tracker doesn't
+use the GPU, so this memory is wasted. Without this fix the system swaps within an
+hour and the display freezes. Two quick edits fix it:
+
+```bash
+# 1. Comment out the GPU overlay + reduce GPU memory split:
+sudo sed -i 's/^dtoverlay=vc4-kms-v3d/# dtoverlay=vc4-kms-v3d/' /boot/firmware/config.txt
+echo "gpu_mem=16" | sudo tee -a /boot/firmware/config.txt
+
+# 2. Override the CMA reservation (append to the SINGLE existing line):
+sudo sed -i 's/$/ cma=16M/' /boot/firmware/cmdline.txt
+
+sudo reboot
+```
+
+After reboot, verify: `grep CmaTotal /proc/meminfo` should show ~16384 kB (not 262144).
+HDMI console output still works — only the GPU-accelerated desktop is disabled.
+
+> **Note:** This also affects Pi 3B/3B+ (1 GB) — the same 256 MB reservation wastes 25%
+> of RAM there. The fix is the same on any headless Pi running this tracker.
+
 ### 3. Install prerequisites and build the RGB Matrix library
 
 ```bash
