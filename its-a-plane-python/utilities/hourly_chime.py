@@ -53,6 +53,9 @@ def play(volume: int = 50):
             os.sched_setaffinity(proc.pid, {2})
         except Exception:
             pass
+        # Positive log so a ring is verifiable (playback is fire-and-forget).
+        logger.info(f"Hourly chime: rang (volume {int(volume)}, "
+                    f"device {device or 'default'})")
     except FileNotFoundError:
         logger.warning("Hourly chime: mpv not installed — skipping")
     except Exception as e:
