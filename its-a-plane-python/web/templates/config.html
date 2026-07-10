@@ -409,6 +409,15 @@ function renderForm() {
           </select>
           <div class="hint">Change if colours look wrong — requires app restart</div>
         </div>
+        <div class="field checkbox">
+          <input id="hourly_chime_enabled" type="checkbox" ${disp.hourly_chime_enabled?'checked':''}>
+          <label for="hourly_chime_enabled">Hourly Chime (cabin "ding-dong")</label>
+          <div class="hint">Plays on the hour through a local speaker — needs mpv (save + restart)</div>
+        </div>
+        <div class="field">
+          <label>Chime Volume</label>
+          <input id="hourly_chime_volume" type="number" min="0" max="100" value="${disp.hourly_chime_volume??50}">
+        </div>
         <div class="field">
           <label>Forecast Days</label>
           <input id="forecast_days" type="number" min="1" max="5" value="${disp.forecast_days??3}">
@@ -721,6 +730,8 @@ function collectConfig() {
         gpio_slowdown:     gi('gpio_slowdown'),
         hat_pwm_enabled:   gc('hat_pwm_enabled'),
         led_rgb_sequence:  gv('led_rgb_sequence'),
+        hourly_chime_enabled: gc('hourly_chime_enabled'),
+        hourly_chime_volume:  gi('hourly_chime_volume'),
         forecast_days:          gi('forecast_days'),
         forecast_mode:          gv('forecast_mode'),
         forecast_hourly_start:  gv('forecast_hourly_start'),

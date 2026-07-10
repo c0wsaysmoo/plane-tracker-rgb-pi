@@ -29,6 +29,7 @@ def reload():
     global BRIGHTNESS, BRIGHTNESS_NIGHT, NIGHT_BRIGHTNESS
     global NIGHT_START, NIGHT_END, GPIO_SLOWDOWN, HAT_PWM_ENABLED
     global LED_RGB_SEQUENCE, FORECAST_DAYS
+    global HOURLY_CHIME_ENABLED, HOURLY_CHIME_VOLUME
     global FORECAST_MODE, FORECAST_HOURLY_START, FORECAST_HOURLY_END
     global MIN_ALTITUDE, MAX_FARTHEST, MAX_CLOSEST, EMAIL, BLOCKED_CALLSIGNS
     global AIRPORT_STATUS_LIST, ISS_ALERTS_ENABLED, WEATHER_ALERTS_ENABLED
@@ -74,6 +75,8 @@ def reload():
     GPIO_SLOWDOWN     = _disp.get("gpio_slowdown", 2)
     HAT_PWM_ENABLED   = _disp.get("hat_pwm_enabled", False)
     LED_RGB_SEQUENCE  = _disp.get("led_rgb_sequence", "RGB")
+    HOURLY_CHIME_ENABLED = _disp.get("hourly_chime_enabled", False)
+    HOURLY_CHIME_VOLUME  = _disp.get("hourly_chime_volume", 50)
     FORECAST_DAYS     = _disp.get("forecast_days", 3)
     FORECAST_MODE     = _disp.get("forecast_mode", "daily")
     FORECAST_HOURLY_START = _disp.get("forecast_hourly_start", "05:00")
