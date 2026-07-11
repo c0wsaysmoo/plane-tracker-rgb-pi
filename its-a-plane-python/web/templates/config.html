@@ -419,6 +419,15 @@ function renderForm() {
           <input id="hourly_chime_volume" type="number" min="0" max="100" value="${disp.hourly_chime_volume??50}">
         </div>
         <div class="field">
+          <label>Chime Quiet Start</label>
+          <input id="hourly_chime_quiet_start" type="time" value="${disp.hourly_chime_quiet_start??''}">
+          <div class="hint">Silence starts (blank = chime 24/7)</div>
+        </div>
+        <div class="field">
+          <label>Chime Quiet End</label>
+          <input id="hourly_chime_quiet_end" type="time" value="${disp.hourly_chime_quiet_end??''}">
+        </div>
+        <div class="field">
           <label>Forecast Days</label>
           <input id="forecast_days" type="number" min="1" max="5" value="${disp.forecast_days??3}">
         </div>
@@ -732,6 +741,8 @@ function collectConfig() {
         led_rgb_sequence:  gv('led_rgb_sequence'),
         hourly_chime_enabled: gc('hourly_chime_enabled'),
         hourly_chime_volume:  gi('hourly_chime_volume'),
+        hourly_chime_quiet_start: gv('hourly_chime_quiet_start'),
+        hourly_chime_quiet_end:   gv('hourly_chime_quiet_end'),
         forecast_days:          gi('forecast_days'),
         forecast_mode:          gv('forecast_mode'),
         forecast_hourly_start:  gv('forecast_hourly_start'),

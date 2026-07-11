@@ -41,8 +41,6 @@ try:
         NIGHT_START,
         NIGHT_END,
         NIGHT_BRIGHTNESS,
-        HOURLY_CHIME_ENABLED,
-        HOURLY_CHIME_VOLUME,
     )
     NIGHT_START = datetime.strptime(NIGHT_START, "%H:%M")
     NIGHT_END = datetime.strptime(NIGHT_END, "%H:%M")
@@ -52,8 +50,6 @@ except (ModuleNotFoundError, NameError):
     GPIO_SLOWDOWN = 1
     HAT_PWM_ENABLED = True
     NIGHT_BRIGHTNESS = False
-    HOURLY_CHIME_ENABLED = False
-    HOURLY_CHIME_VOLUME = 50
 
 
 def adjust_brightness(matrix):
@@ -120,9 +116,10 @@ class Display(
         self.overhead = Overhead()
         self.overhead.grab_data()
 
-        # Seed the chime's hour bucket to now so a restart never re-fires the
-        # in-progress hour.
-        self._last_chime_hour = datetime.now().strftime("%Y-%m-%d %H")
+        # Precise on-the-hour chime via a dedicated timer thread (fires at
+        # :00, re-reads config each hour). Checks the enable toggle itself, so
+        # starting it unconditionally is fine.
+        hourly_chime.start_scheduler()
 
         super().__init__()
 
@@ -176,15 +173,6 @@ class Display(
     def sync(self, count):
         _ = self.matrix.SwapOnVSync(self.canvas)
         adjust_brightness(self.matrix)
-
-    @Animator.KeyFrame.add(frames.PER_SECOND * 20)
-    def check_hourly_chime(self, count):
-        if not HOURLY_CHIME_ENABLED:
-            return
-        hour_key = datetime.now().strftime("%Y-%m-%d %H")
-        if hour_key != self._last_chime_hour:
-            self._last_chime_hour = hour_key
-            hourly_chime.play(HOURLY_CHIME_VOLUME)
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 30)
     def grab_new_data(self, count):
