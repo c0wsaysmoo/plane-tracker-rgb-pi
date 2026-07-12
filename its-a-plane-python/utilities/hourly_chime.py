@@ -42,7 +42,7 @@ def _detect_usb_alsa_device():
 
 
 def play(volume: int = 50):
-    """Fire-and-forget local playback of the chime. Never raises.
+    """Play the chime and report whether it was actually audible. Never raises.
 
     :param volume: mpv volume 0-100 (the wav is normalised).
     """
@@ -59,9 +59,24 @@ def play(volume: int = 50):
             os.sched_setaffinity(proc.pid, {2})
         except Exception:
             pass
-        # Positive log so a ring is verifiable (playback is fire-and-forget).
-        logger.info(f"Hourly chime: rang (volume {int(volume)}, "
-                    f"device {device or 'default'})")
+        # VERIFY it actually played — don't claim a ring just because Popen
+        # succeeded. plughw: is an EXCLUSIVE ALSA device: if something else is
+        # already using the card, mpv exits NON-ZERO ("Could not
+        # open/initialize audio device -> no sound") and nothing is audible.
+        # Wait for the (~2s) clip and check the exit code — deterministic,
+        # unlike a fixed-delay poll — so the log reflects the room, not the
+        # spawn.
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        if proc.returncode == 0:
+            logger.info(f"Hourly chime: rang (volume {int(volume)}, "
+                        f"device {device or 'default'})")
+        else:
+            logger.warning(
+                "Hourly chime: NO SOUND — mpv exited rc=%s; the audio device "
+                "is busy or unavailable.", proc.returncode)
     except FileNotFoundError:
         logger.warning("Hourly chime: mpv not installed — skipping")
     except Exception as e:
