@@ -9,6 +9,17 @@ window take effect on the next hour without a restart.
 
 Self-contained: only needs `mpv` installed. Off by default; enable in the web
 config (Display → Hourly Chime) or config.json (display.hourly_chime_enabled).
+
+Playing OVER another stream (optional): a USB speaker's `plughw:` device is
+exclusive, so if something else already holds it (e.g. a live audio stream) the
+chime gets 'Device or resource busy' and logs "NO SOUND" for that hour — it
+never crashes, it just can't share the card. To let them mix, define an ALSA
+dmix PCM named `usbmix` in /etc/asound.conf (or ~/.asoundrc); this module then
+targets that shared mixer automatically. Example:
+
+    pcm.usbmix { type dmix; ipc_key 2048; ipc_perm 0666;
+                 slave { pcm "hw:CARD=<your-usb-card>,DEV=0";
+                         rate 48000; channels 2; } }
 """
 import logging
 import os
@@ -26,19 +37,37 @@ _CHIME_FILE = os.path.join(_BASE_DIR, "data", "ding_dong.wav")
 
 def _detect_usb_alsa_device():
     """mpv --audio-device string for the first USB-audio card, or '' if none
-    (mpv then falls back to its own default). plughw: lets ALSA convert the
-    sample rate/format for cheap USB DACs."""
+    (mpv then falls back to its own default).
+
+    Prefers a shared software-mix PCM ('usbmix', an ALSA dmix defined in
+    /etc/asound.conf or ~/.asoundrc) when one is configured, so the chime can
+    play OVER another stream on the same speaker (e.g. live ATC audio) instead
+    of both fighting over the exclusive hw device — the loser gets 'Device or
+    resource busy' and stays silent. Falls back to plughw: (which also lets
+    ALSA convert the sample rate/format for cheap USB DACs) when no dmix is set
+    up."""
     try:
         with open("/proc/asound/cards") as f:
             text = f.read()
     except OSError:
         return ""
+    card = None
     # e.g. " 1 [UACDemoV10     ]: USB-Audio - USB Audio Device"
     for m in re.finditer(r"^\s*\d+\s*\[([^\]]+)\]:\s*(.+)$", text, re.M):
         name, desc = m.group(1).strip(), m.group(2)
         if "USB-Audio" in desc or "USB Audio" in desc:
-            return f"alsa/plughw:CARD={name},DEV=0"
-    return ""
+            card = name
+            break
+    if not card:
+        return ""
+    for cfg in ("/etc/asound.conf", os.path.expanduser("~/.asoundrc")):
+        try:
+            with open(cfg) as f:
+                if "pcm.usbmix" in f.read():
+                    return "alsa/usbmix"
+        except OSError:
+            continue
+    return f"alsa/plughw:CARD={card},DEV=0"
 
 
 def play(volume: int = 50):
@@ -70,6 +99,9 @@ def play(volume: int = 50):
             proc.wait(timeout=8)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait()  # reap the SIGKILLed mpv — else returncode stays None
+                         # (kill() doesn't set it) and it lingers as a <defunct>
+                         # zombie until the next hour's Popen happens to reap it.
         if proc.returncode == 0:
             logger.info(f"Hourly chime: rang (volume {int(volume)}, "
                         f"device {device or 'default'})")
