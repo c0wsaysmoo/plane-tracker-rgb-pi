@@ -9,7 +9,14 @@
 #   atc-on.sh "chromecast:<uuid>"      # a specific cast target / speaker group
 #   atc-on.sh "airplay:<id>"           # an AirPlay receiver
 if [ -n "$1" ]; then
-  curl -s -m 5 -X POST -H 'Content-Type: application/json' \
-       -d "{\"output\":\"$1\"}" http://localhost:8080/api/atc/select-output >/dev/null
+  # Build the JSON body with python3 (guaranteed present) so an output id
+  # containing a quote/backslash can't produce invalid JSON that silently
+  # no-ops select-output and leaves /start on the wrong (e.g. bedroom) target.
+  body=$(python3 -c 'import json,sys; print(json.dumps({"output": sys.argv[1]}))' "$1")
+  if ! curl -sf -m 5 -X POST -H 'Content-Type: application/json' \
+       -d "$body" http://localhost:8080/api/atc/select-output >/dev/null; then
+    echo "atc-on: select-output failed for '$1' — not starting" >&2
+    exit 1
+  fi
 fi
 curl -s -m 5 -X POST http://localhost:8080/api/atc/start >/dev/null

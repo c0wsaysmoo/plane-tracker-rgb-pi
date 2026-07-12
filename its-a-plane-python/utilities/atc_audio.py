@@ -46,7 +46,7 @@ except ImportError:  # requests is a hard dep elsewhere; guard anyway
     requests = None
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", _BASE_DIR)
+_DATA_DIR = os.environ.get("PLANE_TRACKER_DATA_DIR", "/var/lib/plane-tracker")
 _SEED_FILE = os.path.join(_BASE_DIR, "data", "atc_stations_seed.json")
 _STATE_FILE = os.path.join(_DATA_DIR, "atc_audio.json")
 _DISCOVERED_CACHE = os.path.join(_DATA_DIR, "atc_discovered.json")
@@ -101,17 +101,21 @@ def _load_json(path, default):
         return default
 
 
-def _atomic_write(path, data):
+def _atomic_write(path, data, mode=0o666):
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f)
-        os.replace(tmp, path)
+        # Set perms on the TEMP file before it's renamed into place, so the
+        # final path is never briefly world-readable — important for the
+        # pairing-secrets file (mode=0o600). Default 0o666 keeps the shared
+        # display/web data files writable by both processes.
         try:
-            os.chmod(path, 0o666)
+            os.chmod(tmp, mode)
         except OSError:
             pass
+        os.replace(tmp, path)
     except Exception:
         pass
 
@@ -138,6 +142,13 @@ class ATCAudioManager:
         self._centers_base = _seed_raw.get("centers", {})
         self._centers = dict(self._centers_base)
         self._discovered = _load_json(_DISCOVERED_CACHE, {})  # icao -> {feeds, ts}
+        # Background feed-discovery: _feeds_for_airport enqueues cache-misses
+        # here and a worker probes them OFF-lock, so auto-tune never fires a
+        # ~20s probe sweep while holding self._lock (which stalled status() and
+        # the mirror poll).
+        self._discover_queue = set()          # icaos pending discovery
+        self._discover_lock = threading.Lock()
+        self._discover_thread = None
 
         # Persisted runtime state. First run (no state file yet): seed from
         # the ATC_* config keys so a configured mode/station/output applies
@@ -186,9 +197,13 @@ class ATCAudioManager:
         # device must not be re-spawned on every 5s tick.
         self._backend_retry_ts = 0.0
 
-        # Output discovery cache.
-        self._outputs_cache = None
-        self._outputs_ts = 0.0
+        # Output discovery cache — SEED from the last persisted scan so the
+        # first output-popover after a restart doesn't block ~8s on a cold mDNS
+        # sweep. list_outputs() serves this immediately (even if stale) and
+        # refreshes in the background.
+        _oc = _load_json(_OUTPUT_CACHE, {})
+        self._outputs_cache = _oc.get("outputs") or None
+        self._outputs_ts = _oc.get("ts", 0.0)
 
         # Probe circuit breaker + runtime dead-feed memory (see _probe_feed).
         self._probe_cooldown_until = 0.0
@@ -272,16 +287,30 @@ class ATCAudioManager:
         self._seed = merged
         self._centers = centers
 
+    @staticmethod
+    def _hhmm_to_min(s):
+        """'HH:MM' -> minutes since midnight, or None. Tolerates a missing
+        zero-pad ('6:00'), which broke the old lexicographic compare:
+        '22:00' < '6:00' is true, so a '22:00-6:00' window never wrapped and
+        auto ATC played at 2am."""
+        try:
+            h, m = str(s).strip().split(":")
+            return int(h) * 60 + int(m)
+        except Exception:
+            return None
+
     def _in_quiet_hours(self, when=None):
         try:
-            now = (when or datetime.now()).strftime("%H:%M")
             start, end = self._quiet
-            if start == end:
+            a = self._hhmm_to_min(start)
+            b = self._hhmm_to_min(end)
+            if a is None or b is None or a == b:
                 return False
-            if start < end:
-                return start <= now < end
-            # Wraps midnight (e.g. 22:00-06:00)
-            return now >= start or now < end
+            now = when or datetime.now()
+            cur = now.hour * 60 + now.minute
+            if a < b:
+                return a <= cur < b
+            return cur >= a or cur < b   # wraps midnight
         except Exception:
             return False
 
@@ -343,8 +372,11 @@ class ATCAudioManager:
         return True
 
     def _feeds_for_airport(self, icao):
-        """Return {twr, app, ...} feed dict for an airport: seed first, then
-        cached discovery, then live probing of common suffixes."""
+        """Return {twr, app, ...} for an airport WITHOUT any network probe:
+        seed first, then the discovery cache. A cache miss is handed to the
+        background discovery worker (probing under self._lock previously stalled
+        status()/the mirror ~20s per cache-cold airport) and returns {} for now;
+        the next tick (~5s) picks up the worker's cached result."""
         icao = (icao or "").upper()
         if not icao:
             return {}
@@ -352,20 +384,63 @@ class ATCAudioManager:
             return self._seed[icao].get("feeds", {})
         cached = self._discovered.get(icao)
         if cached is not None:
-            # Empty results are cached too (1 day) — without a negative cache
-            # every tick() re-probes ~10 URLs under the lock for an airport
-            # that has no LiveATC feeds, stalling /api/atc/* for ~20s each time.
+            # Empty results are cached too (1 day) — the negative cache keeps a
+            # feedless airport from being re-queued for probing every tick.
             ttl = 30 * 86400 if cached.get("feeds") else 86400
             if (_now() - cached.get("ts", 0)) < ttl:
                 return cached.get("feeds", {})
-        # During the post-403 cooldown, don't probe and — critically — don't
-        # cache an empty result as "no feeds": we simply can't know right now.
-        if _now() < self._probe_cooldown_until:
-            return {}
-        # Probe common suffixes. LiveATC mounts are usually the lowercase ICAO
-        # (kbos_twr) but sometimes drop the K. Our K-prefix guess from a 3-letter
-        # code is wrong for Alaska/Hawaii (PANC/PHNL, not KANC/KHNL), so a
-        # p-prefixed base is probed too; the negative cache keeps this bounded.
+        # Not cached: queue for OFF-lock discovery (never probe here). Skip
+        # during the post-403 cooldown so we don't queue work we can't do.
+        if _now() >= self._probe_cooldown_until:
+            self._enqueue_discovery(icao)
+        return {}
+
+    def _enqueue_discovery(self, icao):
+        """Queue an airport for background feed discovery and (re)start the
+        worker. Safe to call under self._lock — only touches the small queue."""
+        with self._discover_lock:
+            self._discover_queue.add(icao)
+            if self._discover_thread is None or not self._discover_thread.is_alive():
+                try:
+                    self._discover_thread = threading.Thread(
+                        target=self._discover_worker, daemon=True, name="atc-discover")
+                    self._discover_thread.start()
+                except Exception:
+                    self._discover_thread = None   # OOM — retry on next enqueue
+
+    def _discover_worker(self):
+        """Probe queued airports' feeds OFF-lock, then cache the result. Gentle:
+        one airport at a time with a small pause, and it honours the 403
+        cooldown so a burst of new overhead airports can't hammer LiveATC."""
+        while True:
+            with self._discover_lock:
+                if not self._discover_queue:
+                    self._discover_thread = None
+                    return
+                icao = self._discover_queue.pop()
+            if _now() < self._probe_cooldown_until:
+                with self._discover_lock:      # in cooldown — requeue, back off
+                    self._discover_queue.add(icao)
+                time.sleep(5)
+                continue
+            feeds, complete = self._probe_airport_feeds(icao)
+            if complete:
+                with self._lock:               # brief, no network
+                    self._discovered[icao] = {"feeds": feeds, "ts": _now()}
+                try:
+                    _atomic_write(_DISCOVERED_CACHE, self._discovered)
+                except Exception:
+                    pass
+            time.sleep(1.0)                     # gentle pacing between airports
+
+    def _probe_airport_feeds(self, icao):
+        """The actual suffix-probe sweep for a non-seed airport — runs ONLY in
+        the discovery worker (off-lock). Returns (feeds, complete); complete is
+        False if the 403 cooldown was hit mid-sweep (caller must not cache).
+
+        LiveATC mounts are usually the lowercase ICAO (kbos_twr) but sometimes
+        drop the K; a K-prefix guess is wrong for Alaska/Hawaii (PANC/PHNL), so
+        a p-prefixed base is probed too."""
         found = {}
         base = icao.lower()
         bases = [base]
@@ -380,12 +455,8 @@ class ATCAudioManager:
                     found.setdefault(kind, code)
                     break
                 if v is None:
-                    # Hit the 403 cooldown mid-sweep: results are incomplete —
-                    # return what we have but cache nothing.
-                    return found
-        self._discovered[icao] = {"feeds": found, "ts": _now()}
-        _atomic_write(_DISCOVERED_CACHE, self._discovered)
-        return found
+                    return found, False        # cooldown mid-sweep — incomplete
+        return found, True
 
     def _fallback_station_locked(self):
         """Default station when no overhead traffic drives the choice.
@@ -442,12 +513,12 @@ class ATCAudioManager:
         """Score by AIRPORT (not per-flight) to prevent thrashing. Returns a
         (feed_code, airport_icao) tuple, or (None, None).
 
-        TODO(lock): probe under lock — this (via _feeds_for_airport/_feed_ok)
-        can fire up to ~15 ranged GETs × 2s while callers (tick auto branch,
-        _ensure_station_locked) hold self._lock, stalling status() and the
-        mirror poll. Restructuring to probe on a snapshot outside the lock
-        touches every caller; the negative discovery cache and the 403
-        cooldown bound the damage for now."""
+        Feed DISCOVERY (the ~15-URL sweep for a non-seed airport) now runs in a
+        background worker — _feeds_for_airport only reads the cache or enqueues,
+        so it never probes under self._lock. The single per-candidate
+        _feed_ok() verify-probe (~2s, only on a station CHANGE to a not-yet-seen
+        feed) is the sole remaining under-lock network call; it's dwell-throttled
+        and acceptable."""
         flights = self._read_overhead()
         scores = {}   # icao -> score
         prefer_app = {}  # icao -> bool (overhead traffic at altitude)
@@ -601,8 +672,28 @@ class ATCAudioManager:
                 {"id": "browser", "name": "This browser", "type": "browser"},
                 {"id": "usb", "name": "Pi USB speaker", "type": "usb"},
             ]
-            outputs.extend(self._discover_cast(True))
-            outputs.extend(self._discover_airplay(True))
+            # Cast and AirPlay mDNS sweeps are independent 4s scans — run them
+            # concurrently (~4s total) instead of back-to-back (~8s).
+            _cast, _air = [[]], [[]]
+
+            def _run_cast():
+                try:
+                    _cast[0] = self._discover_cast(True)
+                except Exception:
+                    pass
+
+            def _run_air():
+                try:
+                    _air[0] = self._discover_airplay(True)
+                except Exception:
+                    pass
+
+            tc = threading.Thread(target=_run_cast, name="atc-scan-cast")
+            ta = threading.Thread(target=_run_air, name="atc-scan-airplay")
+            tc.start(); ta.start()
+            tc.join(timeout=10); ta.join(timeout=10)
+            outputs.extend(_cast[0])
+            outputs.extend(_air[0])
             with self._lock:
                 self._outputs_cache = outputs
                 self._outputs_ts = _now()
@@ -779,9 +870,21 @@ class ATCAudioManager:
     def set_volume(self, vol):
         with self._lock:
             self._volume = max(0, min(100, int(vol)))
+            v = self._volume
             if self._mpv_proc:
-                self._mpv_set_volume(self._volume)
+                self._mpv_set_volume(v)
+            cast_dev = self._cast_device
             self._persist()
+        # Propagate live to a running cast session OUTSIDE the lock (it's a
+        # network command). Before, cast/airplay volume was only set once at
+        # session start, so dragging the slider mid-stream did nothing on the
+        # speaker. AirPlay is handled by its worker's 0.25s poll of self._volume
+        # (below) — no cross-thread call needed here.
+        if cast_dev is not None:
+            try:
+                cast_dev.set_volume(v / 100.0)
+            except Exception as e:
+                logger.debug(f"cast set_volume failed: {e}")
         return self.status()
 
     def select_output(self, output_id):
@@ -813,7 +916,14 @@ class ATCAudioManager:
 
     def start(self):
         """Explicit start (HomeKit on.sh / UI play)."""
+        self._refresh_config()
         with self._lock:
+            # Refuse when the feature is disabled — otherwise start() picked a
+            # station (probing), set _playing, and spawned a backend that the
+            # next tick() immediately tore down, so a HomeKit ON while disabled
+            # flapped the tile true->false and burned a probe/spawn cycle.
+            if not self._enabled:
+                return self.status()
             if self._mode == "off":
                 # Restore the mode that was active before the last stop();
                 # fall back to manual-if-station-set, else auto.
@@ -992,22 +1102,37 @@ class ATCAudioManager:
     @staticmethod
     def _detect_usb_alsa_device():
         """mpv --audio-device string for the first USB-audio card (the ATC
-        speaker), read from /proc/asound/cards — e.g.
-        'alsa/plughw:CARD=UACDemoV10,DEV=0'. Returns '' if there is no USB card
-        (mpv then falls back to its own default). plughw: lets ALSA convert
-        sample-rate/format for cheap USB DACs."""
+        speaker), read from /proc/asound/cards.
+
+        Prefers a shared software-mix PCM ('usbmix', a dmix defined in
+        /etc/asound.conf) when configured, so the ATC stream and the hourly
+        chime MIX instead of fighting over the exclusive hw device (the loser
+        got 'Device or resource busy' -> silence). Falls back to plughw for the
+        detected card when no dmix is set up. '' if there is no USB card (mpv
+        then uses its own default)."""
         import re as _re
         try:
             with open("/proc/asound/cards") as f:
                 text = f.read()
         except OSError:
             return ""
+        card = None
         # " 2 [UACDemoV10     ]: USB-Audio - USB Audio Device"
         for m in _re.finditer(r"^\s*\d+\s*\[([^\]]+)\]:\s*(.+)$", text, _re.M):
             name, desc = m.group(1).strip(), m.group(2)
             if "USB-Audio" in desc or "USB Audio" in desc:
-                return f"alsa/plughw:CARD={name},DEV=0"
-        return ""
+                card = name
+                break
+        if not card:
+            return ""
+        for cfg in ("/etc/asound.conf", os.path.expanduser("~/.asoundrc")):
+            try:
+                with open(cfg) as f:
+                    if "pcm.usbmix" in f.read():
+                        return "alsa/usbmix"
+            except OSError:
+                continue
+        return f"alsa/plughw:CARD={card},DEV=0"
 
     def _start_mpv_locked(self):
         url = self._stream_url(self._station)
@@ -1061,7 +1186,14 @@ class ATCAudioManager:
                 try:
                     self._mpv_proc.wait(timeout=3)
                 except Exception:
+                    # terminate() didn't finish — SIGKILL, then wait() to REAP
+                    # it. Without this second wait the killed mpv lingered as a
+                    # <defunct> zombie until the next Popen happened to reap it.
                     self._mpv_proc.kill()
+                    try:
+                        self._mpv_proc.wait(timeout=2)
+                    except Exception:
+                        pass
             except Exception:
                 pass
             self._mpv_proc = None
@@ -1327,7 +1459,18 @@ class ATCAudioManager:
                         md = None
                     task = asyncio.ensure_future(
                         atv.stream.stream_file(url, metadata=md))
+                    # Apply live volume changes: the poll loop already runs
+                    # every 0.25s, so watch self._volume and push it to the
+                    # receiver when the slider moves (was only set once above).
+                    _last_vol = float(self._volume)
                     while not stop_evt.is_set() and not task.done():
+                        cur_vol = float(self._volume)
+                        if cur_vol != _last_vol:
+                            _last_vol = cur_vol
+                            try:
+                                await atv.audio.set_volume(cur_vol)
+                            except Exception:
+                                pass
                         await asyncio.sleep(0.25)
                     if task.done() and task.exception():
                         exc = task.exception()
@@ -1512,15 +1655,9 @@ class ATCAudioManager:
                 if state["stage"] == "paired" and state["creds"]:
                     stored = _load_json(_AIRPLAY_CREDS, {})
                     stored[ident] = state["creds"]
-                    _atomic_write(_AIRPLAY_CREDS, stored)
-                    try:
-                        # _atomic_write chmods 0o666 for the shared-data
-                        # pattern; this file holds pairing SECRETS — clamp
-                        # to owner-only (best-effort: EPERM if another user
-                        # owns a pre-existing file).
-                        os.chmod(_AIRPLAY_CREDS, 0o600)
-                    except OSError:
-                        pass
+                    # Owner-only from the moment the file appears (pairing
+                    # SECRETS) — no world-readable window.
+                    _atomic_write(_AIRPLAY_CREDS, stored, mode=0o600)
                     if self._airplay_needs_pairing == ident:
                         self._airplay_needs_pairing = ""
             except Exception as e:
