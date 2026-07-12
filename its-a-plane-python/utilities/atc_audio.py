@@ -454,8 +454,15 @@ class ATCAudioManager:
                     kind = "app" if "app" in suffix or "dep" in suffix else "twr"
                     found.setdefault(kind, code)
                     break
-                if v is None:
-                    return found, False        # cooldown mid-sweep — incomplete
+                if v is None and _now() < self._probe_cooldown_until:
+                    # The 403 cooldown tripped mid-sweep — we're rate-limited, so
+                    # the sweep is genuinely incomplete: hand back what we found
+                    # but let the caller skip caching (a later un-banned sweep
+                    # completes it). A per-mount timeout/5xx is also None but does
+                    # NOT set the cooldown; that is only THAT mount's problem, so
+                    # keep sweeping — otherwise one flaky probe throws away a live
+                    # feed already found and the airport re-enqueues every tick.
+                    return found, False
         return found, True
 
     def _fallback_station_locked(self):
@@ -884,7 +891,7 @@ class ATCAudioManager:
             try:
                 cast_dev.set_volume(v / 100.0)
             except Exception as e:
-                logger.debug(f"cast set_volume failed: {e}")
+                print(f"ATC cast: set_volume failed: {e}", flush=True)
         return self.status()
 
     def select_output(self, output_id):
