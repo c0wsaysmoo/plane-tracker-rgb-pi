@@ -3,7 +3,6 @@ from datetime import datetime
 from setup import frames
 from utilities.animator import Animator
 from utilities.overhead import Overhead
-from utilities import hourly_chime
 
 from scenes.temperature import TemperatureScene
 from scenes.flightdetails import FlightDetailsScene
@@ -116,10 +115,9 @@ class Display(
         self.overhead = Overhead()
         self.overhead.grab_data()
 
-        # Precise on-the-hour chime via a dedicated timer thread (fires at
-        # :00, re-reads config each hour). Checks the enable toggle itself, so
-        # starting it unconditionally is fine.
-        hourly_chime.start_scheduler()
+        # The hourly chime is fired by a systemd timer (setup/systemd/), NOT from
+        # this process — an mpv fork()ed from the tracker can't open the audio
+        # device. Nothing to start here.
 
         super().__init__()
 
