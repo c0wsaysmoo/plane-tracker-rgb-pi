@@ -1,0 +1,25 @@
+[Unit]
+# Hourly chime, fired by flight-tracker-chime.timer.
+#
+# WHY a separate service instead of the tracker's own scheduler thread: an mpv
+# fork()ed from the long-running tracker process can fail ALSA card enumeration
+# ("cannot get card index for <card>") on every attempt — even when the same
+# command works fine from a shell. Firing the chime as its own systemd service
+# (started by PID 1, not fork()ed from the tracker) sidesteps that entirely.
+# See setup/systemd/README.md.
+#
+# EDIT the paths + User below for your install (this example assumes user "pi").
+Description=Flight Tracker Hourly Chime (fired by timer; clean PID1 context)
+After=sound.target
+
+[Service]
+Type=oneshot
+# Run as the same user as the tracker so both share the audio (dmix) mixer at
+# the same uid. The user must be in the "audio" group.
+User=pi
+Group=audio
+WorkingDirectory=/home/pi/its-a-plane-python
+# Point PYTHONPATH at the project dir and your site-packages (adjust the python
+# version). Needed so `import config` / `from utilities...` resolve.
+Environment=PYTHONPATH=/home/pi/its-a-plane-python:/home/pi/.local/lib/python3.11/site-packages
+ExecStart=/usr/bin/python3 -c "import logging; logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s'); from utilities.hourly_chime import fire_once; fire_once()"

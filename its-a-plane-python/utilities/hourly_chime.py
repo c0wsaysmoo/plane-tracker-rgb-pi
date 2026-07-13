@@ -2,24 +2,17 @@
 Hourly cabin chime — plays a short "ding-dong" wav on the hour through the
 Pi's local speaker (USB audio card if present, else the onboard output).
 
-A dedicated daemon thread sleeps until the top of the next hour and fires
-there (accurate to a fraction of a second — no frame-loop polling). It
-re-reads config each hour, so the enable toggle, volume, and quiet-hours
-window take effect on the next hour without a restart.
+Two ways to drive it:
+  1. A built-in daemon thread that sleeps to the top of each hour (default).
+  2. An external systemd timer that calls fire_once() — recommended if the
+     chime logs "cannot get card index" / never plays even though the wav plays
+     fine from a shell (an mpv fork()ed from the long-running tracker process
+     can fail ALSA card enumeration; a timer-fired chime runs in a clean PID1
+     context). Set CHIME_EXTERNAL_SCHEDULER=1 to disable the built-in thread.
+     See setup/systemd/README.md.
 
 Self-contained: only needs `mpv` installed. Off by default; enable in the web
 config (Display → Hourly Chime) or config.json (display.hourly_chime_enabled).
-
-Playing OVER another stream (optional): a USB speaker's `plughw:` device is
-exclusive, so if something else already holds it (e.g. a live audio stream) the
-chime gets 'Device or resource busy' and logs "NO SOUND" for that hour — it
-never crashes, it just can't share the card. To let them mix, define an ALSA
-dmix PCM named `usbmix` in /etc/asound.conf (or ~/.asoundrc); this module then
-targets that shared mixer automatically. Example:
-
-    pcm.usbmix { type dmix; ipc_key 2048; ipc_perm 0666;
-                 slave { pcm "hw:CARD=<your-usb-card>,DEV=0";
-                         rate 48000; channels 2; } }
 """
 import logging
 import os
@@ -70,45 +63,74 @@ def _detect_usb_alsa_device():
     return f"alsa/plughw:CARD={card},DEV=0"
 
 
+def _usb_card_index():
+    """ALSA card index (int) of the first USB-audio card, or None. Addressing a
+    card by INDEX (hw:1) skips the name→index lookup that can fail transiently
+    ("cannot get card index for <name>"), so it's used as a fallback device."""
+    try:
+        with open("/proc/asound/cards") as f:
+            for line in f:
+                m = re.match(r"\s*(\d+)\s*\[[^\]]*\]:\s*(.+)$", line)
+                if m and ("USB-Audio" in m.group(2) or "USB Audio" in m.group(2)):
+                    return int(m.group(1))
+    except OSError:
+        pass
+    return None
+
+
+def _run_mpv(args):
+    """Play once. Returns (returncode, stderr_text). Waits for the clip, reaps.
+
+    Uses communicate() (not wait()) so a chatty stderr can't fill the pipe and
+    deadlock, and so we capture mpv's actual error on failure.
+    """
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        _, err = proc.communicate(timeout=8)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        _, err = proc.communicate()   # reap + drain the pipe
+    return proc.returncode, (err.decode("utf-8", "replace").strip() if err else "")
+
+
 def play(volume: int = 50):
     """Play the chime and report whether it was actually audible. Never raises.
 
     :param volume: mpv volume 0-100 (the wav is normalised).
     """
     try:
-        args = ["mpv", "--no-video", "--no-terminal", "--really-quiet",
-                f"--volume={int(volume)}"]
-        device = _detect_usb_alsa_device()
-        if device:
-            args.append(f"--audio-device={device}")
-        args.append(_CHIME_FILE)
-        proc = subprocess.Popen(
-            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            os.sched_setaffinity(proc.pid, {2})
-        except Exception:
-            pass
-        # VERIFY it actually played — don't claim a ring just because Popen
-        # succeeded. plughw: is an EXCLUSIVE ALSA device: if something else is
-        # already using the card, mpv exits NON-ZERO ("Could not
-        # open/initialize audio device -> no sound") and nothing is audible.
-        # Wait for the (~2s) clip and check the exit code — deterministic,
-        # unlike a fixed-delay poll — so the log reflects the room, not the
-        # spawn.
-        try:
-            proc.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()  # reap the SIGKILLed mpv — else returncode stays None
-                         # (kill() doesn't set it) and it lingers as a <defunct>
-                         # zombie until the next hour's Popen happens to reap it.
-        if proc.returncode == 0:
-            logger.info(f"Hourly chime: rang (volume {int(volume)}, "
-                        f"device {device or 'default'})")
-        else:
-            logger.warning(
-                "Hourly chime: NO SOUND — mpv exited rc=%s; the audio device "
-                "is busy or unavailable.", proc.returncode)
+        primary = _detect_usb_alsa_device()   # 'alsa/usbmix' / plughw / ''
+        idx = _usb_card_index()
+
+        # Try device candidates best-first, and VERIFY each actually played
+        # (mpv exits non-zero when the device can't open). First that plays wins.
+        #   1. usbmix (dmix) — mixes over another stream (e.g. ATC)
+        #   2. plughw:<index> — bypasses the name→index lookup
+        #   3. default — onboard jack, last resort
+        candidates = []
+        for d in (primary, (f"alsa/plughw:{idx}" if idx is not None else None)):
+            if d and d not in candidates:
+                candidates.append(d)
+        candidates.append(None)   # mpv default (onboard)
+
+        errors = []
+        for device in candidates:
+            # --msg-level=all=error (not --really-quiet) so mpv prints the real
+            # reason to stderr when the device won't open. Quiet on success.
+            args = ["mpv", "--no-video", "--no-terminal", "--msg-level=all=error",
+                    f"--volume={int(volume)}"]
+            if device:
+                args.append(f"--audio-device={device}")
+            args.append(_CHIME_FILE)
+            rc, err = _run_mpv(args)
+            if rc == 0:
+                logger.info("Hourly chime: rang (volume %s, device %s)",
+                            int(volume), device or "default")
+                return
+            errors.append(f"{device or 'default'}: rc={rc} {err or ''}".strip())
+
+        logger.warning("Hourly chime: NO SOUND — every output failed. %s",
+                       " | ".join(errors))
     except FileNotFoundError:
         logger.warning("Hourly chime: mpv not installed — skipping")
     except Exception as e:
@@ -143,35 +165,49 @@ def _seconds_to_next_hour(now=None):
     return max(1.0, (nxt - now).total_seconds())
 
 
+def fire_once():
+    """Play the chime now if enabled and not in quiet hours. Reads config fresh.
+    Never raises. Entry point for the external systemd-timer scheduler (so mpv
+    runs in a clean PID1 service, not a tracker fork) and the in-process one."""
+    try:
+        import config as cfg
+        try:
+            cfg.reload()
+        except Exception:
+            pass
+        if not getattr(cfg, "HOURLY_CHIME_ENABLED", False):
+            return
+        if _in_quiet_hours(getattr(cfg, "HOURLY_CHIME_QUIET_START", ""),
+                           getattr(cfg, "HOURLY_CHIME_QUIET_END", "")):
+            logger.info("Hourly chime: quiet hours — skipped")
+            return
+        play(getattr(cfg, "HOURLY_CHIME_VOLUME", 50))
+    except Exception as e:
+        logger.warning(f"Hourly chime fire error: {e}")
+
+
 def _run_scheduler():
     while True:
-        # +0.5s margin so we always wake just PAST the boundary.
+        # +0.5s margin so we always wake just PAST the boundary (never a hair
+        # before, which could double-fire).
         time.sleep(_seconds_to_next_hour() + 0.5)
-        try:
-            import config as cfg
-            # Re-read config from disk so a web-UI save (which reloads in the
-            # separate web process) is picked up here next hour.
-            try:
-                cfg.reload()
-            except Exception:
-                pass
-            if not getattr(cfg, "HOURLY_CHIME_ENABLED", False):
-                continue
-            if _in_quiet_hours(getattr(cfg, "HOURLY_CHIME_QUIET_START", ""),
-                               getattr(cfg, "HOURLY_CHIME_QUIET_END", "")):
-                logger.info("Hourly chime: quiet hours — skipped")
-                continue
-            play(getattr(cfg, "HOURLY_CHIME_VOLUME", 50))
-        except Exception as e:
-            logger.warning(f"Hourly chime scheduler error: {e}")
+        fire_once()
 
 
 _scheduler_started = False
 
 
 def start_scheduler():
-    """Start the hourly scheduler thread once. Safe to call repeatedly."""
+    """Start the hourly scheduler thread once. Safe to call repeatedly.
+
+    Skipped when CHIME_EXTERNAL_SCHEDULER is set — an external systemd timer
+    calls fire_once() instead (use it if an mpv fork()ed from this process can't
+    open the audio device; see setup/systemd/README.md)."""
     global _scheduler_started
+    if os.environ.get("CHIME_EXTERNAL_SCHEDULER"):
+        logger.info("Hourly chime: internal scheduler disabled "
+                    "(CHIME_EXTERNAL_SCHEDULER set — external timer in use)")
+        return
     if _scheduler_started:
         return
     _scheduler_started = True

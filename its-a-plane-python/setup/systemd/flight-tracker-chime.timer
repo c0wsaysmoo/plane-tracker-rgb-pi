@@ -1,0 +1,13 @@
+[Unit]
+Description=Flight Tracker Hourly Chime — fire on the hour
+
+[Timer]
+# Top of every hour. fire_once() itself honours HOURLY_CHIME_ENABLED and the
+# quiet-hours window, so the timer fires unconditionally and the code decides.
+OnCalendar=*-*-* *:00:00
+AccuracySec=2s
+# Don't replay a missed run on boot — no chime on every power-up.
+Persistent=false
+
+[Install]
+WantedBy=timers.target
