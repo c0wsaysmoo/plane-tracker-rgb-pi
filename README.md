@@ -465,8 +465,10 @@ EOF
 > is a heap that ratchets upward for days. On a 512MB Pi it eventually pushes
 > the tracker into SD-card swap, and because swap is that slow, the scroll
 > visibly freezes for a second or two at a time. Capping the arenas keeps the
-> heap compact enough to actually reclaim. It's a no-op on Pis with more RAM,
-> so it's safe to leave in either way.
+> heap compact enough to actually reclaim. On Pis with more RAM it's effectively
+> free — capping arenas can add a little malloc lock contention in heavily
+> multithreaded native code, but this workload is GIL-bound with one short-lived
+> poll thread — so it's safe to leave in either way.
 
 ---
 
