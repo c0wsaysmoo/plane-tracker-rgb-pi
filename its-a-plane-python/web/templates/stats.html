@@ -695,10 +695,11 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
   if (!valid.length) return;
 
   if (_routeMap) { _routeMap.remove(); _routeMap = null; }
-  const map = L.map(mapId, { zoomControl: true, attributionControl: false });
+  const map = L.map(mapId, { zoomControl: true });
   _routeMap = map;
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 16
+    maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
   }).addTo(map);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 16
