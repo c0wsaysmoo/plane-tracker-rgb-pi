@@ -582,8 +582,11 @@ async function buildRouteMap(mapId, tally, subId, distUnits, homeLat, homeLon, z
   if (_routeMap) { _routeMap.remove(); _routeMap = null; }
   const map = L.map(mapId, { zoomControl: true, attributionControl: false });
   _routeMap = map;
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 18
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16
   }).addTo(map);
 
   const sub = subId && document.getElementById(subId);
