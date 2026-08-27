@@ -97,15 +97,37 @@ _COUNTRY_NAMES = {
 }
 
 
+# Characters that must not be left dangling at a truncation point.
+_TRAILING_JUNK = " -,;:./("
+
+
+def _truncate_name(name):
+    """Trim to MAX_NAME_LEN ending on a whole word.
+
+    A plain name[:MAX_NAME_LEN] slice cuts mid-word: measured against the
+    GeoNames cities5000 set that is 518 of 69,629 names, rendering as
+    "Dubai International Fina" and "Notre-Dame-de-l'Ile-Perr". Prefer the last
+    space or hyphen inside the limit; fall back to the hard slice only when
+    that would leave too little to identify the place.
+    """
+    if len(name) <= MAX_NAME_LEN:
+        return name
+    head = name[:MAX_NAME_LEN]
+    cut = max(head.rfind(" "), head.rfind("-"))
+    if cut >= MAX_NAME_LEN // 2:
+        out = head[:cut].rstrip(_TRAILING_JUNK)
+    else:
+        out = head.rstrip(_TRAILING_JUNK)
+    return out or head          # never return an empty name
+
+
 def _country_name(country_code):
     if not country_code:
         return None
     name = _COUNTRY_NAMES.get(country_code.lower())
     if not name:
         return None
-    if len(name) <= MAX_NAME_LEN:
-        return name
-    return name[:MAX_NAME_LEN].rstrip()
+    return _truncate_name(name)
 
 
 # ---------------------------------------------------------------------------
@@ -115,12 +137,24 @@ def _country_name(country_code):
 
 _OCEAN_REGIONS = [
     # Seas and gulfs (more specific, checked first)
-    ("Caribbean Sea",       (8,  26, -87, -59)),
+    # West edge -84, not -87: at -85..-87 this box claimed the PACIFIC coast of
+    # Costa Rica and Nicaragua. Yucatan waters west of -84 fall to Gulf of Mexico.
+    ("Caribbean Sea",       (8,  26, -84, -59)),
     ("Gulf of Mexico",      (18, 31, -98, -80)),
+    # Biscay and the Channel must precede the Mediterranean, whose -6..37 /
+    # 30..47 rectangle otherwise swallows the whole western approach to France.
+    ("Bay of Biscay",       (43, 49, -12,  -1)),
+    ("English Channel",     (49, 51,  -6,   2)),
     ("Mediterranean Sea",   (30, 47,  -6,  37)),
     ("North Sea",           (51, 62,  -4,  13)),
     ("Baltic Sea",          (53, 66,  10,  30)),
     ("Black Sea",           (41, 47,  28,  42)),
+    # The Caspian is the one large lake that reaches this code: it is
+    # international water with no admin polygon, so Nominatim returns no
+    # country for it and the chain falls through to here. Superior, Baikal,
+    # Victoria and Great Bear all sit inside national polygons and stop at
+    # step 4.
+    ("Caspian Sea",         (36, 47,  46,  55)),
     ("Red Sea",             (12, 30,  32,  44)),
     ("Persian Gulf",        (22, 30,  47,  57)),
     ("Arabian Sea",         (5,  26,  52,  78)),
@@ -145,6 +179,37 @@ _OCEAN_REGIONS = [
     ("South Pacific",       (-55,  0,-180,-100)),
     ("Indian Ocean",        (-55, 30,  20, 120)),
 ]
+
+
+def _ocean_basin(lat, lon):
+    """Coarse basin name for a position already known to be over water.
+
+    TOTAL by construction. The boxes above leave real gaps a rectangle list
+    cannot close: sweeping the globe at 5 degrees found 115 open-water probes
+    with no name at all, including the whole SE Pacific off Chile and the North
+    Pacific west of the dateline (the Tokyo-Hawaii tracks), because the
+    "North Pacific" box only runs -180..-80. Reaching step 5 with no name means
+    no landmark is shown at all.
+
+    The Atlantic/Pacific split cannot be a single meridian -- the Americas are in
+    the way -- so it follows the land: Panama (~-80) in the north, Cape Horn
+    (~-70) in the south. The Indian Ocean likewise reaches further east below the
+    equator, around Australia's south coast (~147).
+    """
+    if lat >= 66:
+        return "Arctic Ocean"
+    if lat <= -55:
+        return "Southern Ocean"
+    if 20 <= lon < (120 if lat >= 0 else 147):
+        return "Indian Ocean"
+    if (-80 if lat >= 0 else -70) <= lon < 20:
+        return "North Atlantic" if lat >= 0 else "South Atlantic"
+    return "North Pacific" if lat >= 0 else "South Pacific"
+
+
+def _water_name(lat, lon):
+    """Named sea if a box matches, else the basin. Never None."""
+    return _get_ocean_name(lat, lon) or _ocean_basin(lat, lon)
 
 
 def _get_ocean_name(lat, lon):
@@ -184,12 +249,12 @@ def _format_city(name, state, country):
         candidate = f"{name}, {state}"
         if len(candidate) <= MAX_NAME_LEN:
             return candidate
-        return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+        return _truncate_name(name)
     # All other countries: append 2-letter country code
     candidate = f"{name}, {country}" if country else name
     if len(candidate) <= MAX_NAME_LEN:
         return candidate
-    return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+    return _truncate_name(name)
 
 
 def _nearest_city_local(lat, lon):
@@ -237,9 +302,12 @@ def _clean_name(name):
         if stripped.endswith(suffix):
             stripped = stripped[: -len(suffix)].rstrip(" ,\u2013-")
             break
-    if len(stripped) > MAX_NAME_LEN:
-        return None
-    return stripped or None
+    # Truncate rather than discard. Returning None here threw away a park the
+    # aircraft is actually over just because its name is long, so the chain fell
+    # through to a city or country instead -- e.g. "Washington-Rochambeau
+    # Revolutionary Route National Historic Trail" is still 65 chars after suffix
+    # stripping and was never displayable.
+    return _truncate_name(stripped) if stripped else None
 
 
 def _get_state_abbr(address):
@@ -272,13 +340,13 @@ def _format_with_state(name, state, country_code=""):
         with_state = f"{name}, {state}"
         if len(with_state) <= MAX_NAME_LEN:
             return with_state
-        return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+        return _truncate_name(name)
     # All other countries: append country code
     suffix = country_code.upper()
     candidate = f"{name}, {suffix}" if suffix else name
     if len(candidate) <= MAX_NAME_LEN:
         return candidate
-    return name if len(name) <= MAX_NAME_LEN else name[:MAX_NAME_LEN].rstrip()
+    return _truncate_name(name)
 
 
 # ---------------------------------------------------------------------------
@@ -347,11 +415,13 @@ def _nominatim_fetch(lat, lon):
             if country:
                 cleaned = country
 
-        # Step 4: ocean/sea name from coordinates
+        # Step 4: ocean/sea name from coordinates.
+        # _water_name rather than _get_ocean_name: we only get here when step 3
+        # found no country_code, which means Nominatim placed us outside every
+        # national polygon -- i.e. over water -- so falling back to the basin is
+        # correct, and leaves no position unnamed.
         if not cleaned:
-            ocean = _get_ocean_name(lat, lon)
-            if ocean:
-                cleaned = ocean
+            cleaned = _water_name(lat, lon)
 
         if not cleaned:
             with _nom_lock:
