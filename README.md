@@ -444,6 +444,7 @@ After=network.target
 [Service]
 User=$(whoami)
 WorkingDirectory=$HOME
+Environment=MALLOC_ARENA_MAX=2
 ExecStart=$(pwd)/its-a-plane.py
 Restart=always
 RestartSec=10
@@ -454,6 +455,20 @@ EOF
 ```
 
 > ⚠️ **Important:** Run the `cd` command first or the paths will be wrong!
+
+> 💡 **`MALLOC_ARENA_MAX=2`** keeps memory from creeping up on small Pis. The
+> overhead poll starts a fresh thread each cycle (`utilities/overhead.py`) that
+> does an HTTP fetch and exits. glibc gives every new thread its own malloc
+> arena (default ceiling `8 × nproc`), so those per-poll allocations get spread
+> across arenas — freed blocks end up interleaved with live ones, and the
+> allocator can only hand memory back to the OS in fully-free pages. The result
+> is a heap that ratchets upward for days. On a 512MB Pi it eventually pushes
+> the tracker into SD-card swap, and because swap is that slow, the scroll
+> visibly freezes for a second or two at a time. Capping the arenas keeps the
+> heap compact enough to actually reclaim. On Pis with more RAM it's effectively
+> free — capping arenas can add a little malloc lock contention in heavily
+> multithreaded native code, but this workload is GIL-bound with one short-lived
+> poll thread — so it's safe to leave in either way.
 
 ---
 
