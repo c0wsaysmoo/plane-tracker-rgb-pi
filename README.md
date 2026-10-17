@@ -349,7 +349,7 @@ You can solder a bridge between GPIO 4 and 18 to enable PWM for less screen flic
 After the script completes, copy the rgbmatrix module to system Python so it works without a venv:
 
 ```bash
-sudo cp -r ~/env/lib/python3.13/site-packages/rgbmatrix /usr/lib/python3/dist-packages/
+sudo cp -r /home/flight/rpi-rgb-led-matrix/env/lib/python3.13/site-packages/rgbmatrix /usr/lib/python3/dist-packages/
 python3 -c "import rgbmatrix; print('ok')"
 ```
 
